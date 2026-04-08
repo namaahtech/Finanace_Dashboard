@@ -45,120 +45,130 @@ export default function PayrollPage() {
 
   return (
     <DashboardShell
-      title="Payroll"
-      subtitle="Manage monthly payroll for all employees"
+      title="Disbursement Engine"
+      subtitle="Comprehensive financial reconciliation and salary distribution for Namaah Personnel"
       actions={
-        <div className="flex gap-2">
-          <select
-            value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
-            className="field text-xs py-1.5 px-3 w-32"
-          >
-            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
-          <select
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="field text-xs py-1.5 px-3 w-24"
-          >
-            {YEARS.map((y) => <option key={y}>{y}</option>)}
-          </select>
-          <button className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 transition-colors">
-            <Play size={12} /> Run Payroll
+        <div className="flex gap-3">
+          <div className="relative group">
+            <select
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className="w-40 appearance-none rounded-xl border border-default bg-[hsl(var(--surface-raised))] pl-10 pr-10 py-3 text-xs font-black uppercase tracking-widest text-foreground outline-none focus:border-emerald-500 transition-all cursor-pointer shadow-sm"
+            >
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-600 group-hover:scale-110 transition-transform">
+               <Clock size={16} strokeWidth={3} />
+            </div>
+          </div>
+          <button className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-black text-white hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20">
+            <Play size={18} strokeWidth={3} /> Trigger Payroll
           </button>
-          <button className="flex items-center gap-1.5 rounded-lg border border-default bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-[hsl(var(--surface-raised))] transition-colors">
-            <Download size={12} /> Export
+          <button className="hidden md:flex items-center justify-center w-12 h-12 rounded-xl border border-default bg-[hsl(var(--surface-raised))] text-muted hover:text-foreground transition-all">
+            <Download size={18} strokeWidth={2.5} />
           </button>
         </div>
       }
     >
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: "Total Gross",      value: `₹${(totalGross/100000).toFixed(2)}L`, color: "text-sky-600" },
-          { label: "Total Net Pay",    value: `₹${(totalNet/100000).toFixed(2)}L`,   color: "text-emerald-600" },
-          { label: "Total Deductions", value: `₹${(totalDeductions/1000).toFixed(0)}K`, color: "text-red-500" },
-          { label: "Employees",        value: filtered.length,                        color: "text-purple-600" },
-        ].map((s) => (
-          <div key={s.label} className="stat-card">
-            <p className="text-xs text-muted">{s.label}</p>
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="page-card">
-        {/* Filter tabs */}
-        <div className="flex gap-2 mb-4 border-b border-default pb-3">
-          {["all", "draft", "processed", "paid"].map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                filter === s ? "bg-sky-600 text-white" : "text-muted hover:text-foreground hover:bg-[hsl(var(--surface-raised))]"
-              }`}
-            >
-              {s === "all" ? "All Employees" : s}
-            </button>
+      <div className="flex flex-col gap-10">
+        {/* Payroll Analytics */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[
+            { label: "Aggregate Disbursement", value: `₹${(totalGross/100000).toFixed(2)}L`, color: "sky", trend: "GROSS" },
+            { label: "Realized Net Liquidity", value: `₹${(totalNet/100000).toFixed(2)}L`, color: "emerald", trend: "NET" },
+            { label: "Regulatory Retentions", value: `₹${(totalDeductions/1000).toFixed(0)}K`, color: "rose", trend: "TAX/PF" },
+            { label: "Active Personnel", value: filtered.length, color: "purple", trend: "COUNT" },
+          ].map((s) => (
+            <div key={s.label} className="page-card !mb-0 p-6 flex flex-col justify-between group hover:border-emerald-500/30 transition-all border-b-4" style={{ borderBottomColor: `var(--${s.color}-500)` }}>
+              <div className="flex justify-between items-start mb-4">
+                 <p className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">{s.label}</p>
+                 <span className="text-[10px] font-black text-muted bg-[hsl(var(--surface-raised))] px-2 py-0.5 rounded-full border border-default">{s.trend}</span>
+              </div>
+              <p className={`text-4xl font-black text-foreground group-hover:text-emerald-600 transition-colors tracking-tighter`}>{s.value}</p>
+            </div>
           ))}
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Department</th>
-                <th>Base Salary</th>
-                <th>Incentives</th>
-                <th>Deductions</th>
-                <th>Gross Pay</th>
-                <th>Net Pay</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((row) => {
-                const Icon = STATUS_ICONS[row.status];
-                return (
-                  <tr key={row.id}>
-                    <td>
-                      <div>
-                        <p className="font-medium text-foreground text-sm">{row.emp}</p>
-                        <p className="text-xs text-muted">{row.empId}</p>
-                      </div>
-                    </td>
-                    <td className="text-muted text-sm">{row.dept}</td>
-                    <td className="font-medium">₹{row.base.toLocaleString()}</td>
-                    <td className="text-emerald-600 font-medium">+₹{row.incentive.toLocaleString()}</td>
-                    <td className="text-red-500 font-medium">-₹{row.deductions.toLocaleString()}</td>
-                    <td className="font-semibold">₹{row.gross.toLocaleString()}</td>
-                    <td className="font-bold text-sky-600">₹{row.net.toLocaleString()}</td>
-                    <td>
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium capitalize ${STATUS_STYLES[row.status]}`}>
-                        <Icon size={10} />
-                        {row.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex gap-1">
-                        <button className="rounded-md px-2.5 py-1 text-[11px] font-medium border border-default text-muted hover:text-foreground hover:bg-[hsl(var(--surface-raised))] transition-colors">
-                          Payslip
-                        </button>
-                        {row.status === "processed" && (
-                          <button className="rounded-md px-2.5 py-1 text-[11px] font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
-                            Mark Paid
+        <div className="page-card !mb-0 shadow-2xl overflow-hidden">
+          {/* State Navigation */}
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12 border-b border-default pb-8">
+            <div className="flex flex-wrap gap-2.5 p-1.5 bg-[hsl(var(--surface-raised))] rounded-2xl border border-default">
+              {["all", "draft", "processed", "paid"].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setFilter(s)}
+                  className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    filter === s 
+                      ? "bg-white dark:bg-zinc-800 text-emerald-600 shadow-xl border border-default" 
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  {s === "all" ? "Organization Wide" : s}
+                </button>
+              ))}
+            </div>
+            <div className="text-right">
+               <span className="text-[10px] font-black text-muted uppercase tracking-widest block mb-1">Current Fiscal Cycle</span>
+               <span className="text-xl font-black text-foreground uppercase tracking-tight">{MONTHS[month-1]} {year}</span>
+            </div>
+          </div>
+
+          <div className="data-table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Talent Identity</th>
+                  <th>Functional Unit</th>
+                  <th>Base Yield</th>
+                  <th>Incentives (+)</th>
+                  <th>Retentions (-)</th>
+                  <th>Total Provision</th>
+                  <th>Net Yield</th>
+                  <th>Lifecycle State</th>
+                  <th className="text-right pr-4">Execution</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((row) => {
+                  const Icon = STATUS_ICONS[row.status];
+                  return (
+                    <tr key={row.id} className="group hover:bg-[hsl(var(--surface-raised))] transition-colors border-l-4 border-l-transparent hover:border-l-emerald-500">
+                      <td className="py-6">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-foreground group-hover:text-emerald-600 transition-colors uppercase tracking-tight">{row.emp}</span>
+                          <span className="text-[10px] text-muted font-black tracking-widest uppercase">ID: {row.empId}</span>
+                        </div>
+                      </td>
+                      <td className="text-[11px] font-black text-muted uppercase">{row.dept}</td>
+                      <td className="text-sm font-bold opacity-60">₹{row.base.toLocaleString()}</td>
+                      <td><span className="text-sm font-black text-emerald-600">+₹{row.incentive.toLocaleString()}</span></td>
+                      <td><span className="text-sm font-black text-rose-500">-₹{row.deductions.toLocaleString()}</span></td>
+                      <td className="text-sm font-bold">₹{row.gross.toLocaleString()}</td>
+                      <td><span className="text-base font-black text-foreground">₹{row.net.toLocaleString()}</span></td>
+                      <td>
+                        <div className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest border-2 ${STATUS_STYLES[row.status]} bg-opacity-10 border-opacity-20`}>
+                          <Icon size={14} strokeWidth={3} />
+                          {row.status}
+                        </div>
+                      </td>
+                      <td className="text-right pr-4">
+                        <div className="flex justify-end gap-2">
+                          <button className="px-4 py-2 rounded-lg bg-[hsl(var(--surface-raised))] border border-default text-[10px] font-black text-muted uppercase tracking-widest hover:text-emerald-600 transition-all">
+                            Payslip
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          {row.status === "processed" && (
+                            <button className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20">
+                              Authorize
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </DashboardShell>

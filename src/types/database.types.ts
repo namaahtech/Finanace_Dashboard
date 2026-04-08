@@ -256,6 +256,36 @@ export type Database = {
         Insert: Omit<Database["public"]["Tables"]["system_config"]["Row"], "id" | "updated_at">;
         Update: Partial<Database["public"]["Tables"]["system_config"]["Insert"]>;
       };
+      wallets: {
+        Row: {
+          id: string;
+          employee_id: string;
+          earned_total: number;
+          locked_amount: number;
+          claimable_amount: number;
+          held_amount: number;
+          claimed_amount: number;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["wallets"]["Row"], "id" | "updated_at">;
+        Update: Partial<Database["public"]["Tables"]["wallets"]["Insert"]>;
+      };
+      wallet_transactions: {
+        Row: {
+          id: string;
+          employee_id: string;
+          type: string;
+          amount: number;
+          balance_after: number;
+          reference_id: string | null;
+          reference_model: string | null;
+          description: string | null;
+          meta: Record<string, unknown> | null;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["wallet_transactions"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["wallet_transactions"]["Insert"]>;
+      };
       audit_logs: {
         Row: {
           id: string;

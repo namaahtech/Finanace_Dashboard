@@ -16,6 +16,16 @@ import {
   type KpiEntryInput,
   type KraMetricsInput,
 } from "@/lib/kpiMath";
+import { 
+  Award, 
+  ChevronDown, 
+  CircleAlert, 
+  Gauge, 
+  TrendingUp, 
+  Building2, 
+  Clock3, 
+  IndianRupee 
+} from "lucide-react";
 
 interface User {
   _id: string;
@@ -246,344 +256,369 @@ export default function AdminKpiPage() {
   }
 
   return (
-    <DashboardShell title="KPI / KRA Entry">
-      <div className="rounded-[28px] border border-[#1d2940] bg-[radial-gradient(circle_at_top,#16263a,transparent_45%),linear-gradient(180deg,#111827,#1c2433)] p-6 text-white shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-        <div className="mb-8 border-b border-white/10 pb-5">
-          <h1 className="text-4xl font-semibold tracking-tight">KPI / KRA Entry</h1>
+    <DashboardShell 
+      title="Performance Engineering" 
+      subtitle="Executive assessment interface for individual talent scoring and organizational alignment"
+      actions={
+        <div className="flex gap-3">
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || !canEdit || !selectedUser}
+            className="flex items-center gap-2 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-6 py-3 text-xs font-black uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-xl disabled:opacity-50"
+          >
+            {submitting ? "Synchronizing..." : "Authorize Score"}
+          </button>
         </div>
-
+      }
+    >
+      <div className="flex flex-col gap-10">
         {!canEdit && (
-          <div className="mb-6 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-            This page is read-only for your role. Only admin and lead can update KPI / KRA entries.
+          <div className="rounded-2xl border-2 border-amber-500/20 bg-amber-500/5 p-6 flex items-center gap-4 text-amber-600 dark:text-amber-400">
+             <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
+                <CircleAlert size={20} strokeWidth={3} />
+             </div>
+             <div>
+                <p className="text-xs font-black uppercase tracking-widest mb-1">Observation Mode Active</p>
+                <p className="text-sm font-medium opacity-80">Regulatory restrictions prevent modification of performance data for your current authentication level.</p>
+             </div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="rounded-[28px] border border-white/10 bg-white/[0.04] p-6">
-          <h2 className="text-3xl font-semibold">Enter Scores</h2>
-
-          <div className="mt-8">
-            <label className="mb-2 block text-sm text-slate-300">Employee</label>
-            <select
-              value={selectedUser}
-              onChange={(e) => {
-                setSelectedUser(e.target.value);
-                setForm(createDefaultForm(form.month, form.year));
-              }}
-              className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-xl text-white outline-none"
-              required
-            >
-              <option value="" className="bg-slate-900">-- Select Employee --</option>
-              {users.map((employee) => (
-                <option key={employee._id} value={employee._id} className="bg-slate-900">
-                  {employee.name} ({employee.employeeId}) — {employee.department}
-                </option>
-              ))}
-            </select>
-            {loadingUsers && <p className="mt-2 text-sm text-slate-400">Loading employees...</p>}
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Month</label>
-              <select
-                value={form.month}
-                onChange={(e) => {
-                  const nextMonth = parseInt(e.target.value, 10);
-                  resetForPeriod(nextMonth, form.year);
-                }}
-                className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-xl text-white outline-none"
-              >
-                {monthOptions.map((month) => (
-                  <option key={month.value} value={month.value} className="bg-slate-900">
-                    {month.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Year</label>
-              <select
-                value={form.year}
-                onChange={(e) => {
-                  const nextYear = parseInt(e.target.value, 10);
-                  resetForPeriod(form.month, nextYear);
-                }}
-                className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-xl text-white outline-none"
-              >
-                {getYearRange().map((year) => (
-                  <option key={year} value={year} className="bg-slate-900">
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {currentRecord && (
-            <div className="mt-4 rounded-2xl border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
-              Editing existing entry for {monthOptions.find((month) => month.value === form.month)?.label} {form.year}
-              {currentRecord.enteredBy?.name ? ` · last saved by ${currentRecord.enteredBy.name}` : ""}
-            </div>
-          )}
-
-          <div className="mt-8">
-            <div className="mb-3 flex items-center justify-between text-2xl">
-              <span>KPI Score ({String(Math.round(kpiScore)).padStart(2, "0")}%)</span>
-              <span className="font-semibold text-sky-300">{Math.round(kpiScore)}</span>
-            </div>
-            <ProgressBar value={kpiScore} colorClass="bg-sky-400" />
-
-            <div className="mt-5 space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              {form.kpiEntries.map((entry, index) => (
-                <div key={entry.label} className="grid gap-3 border-b border-white/10 pb-4 last:border-b-0 last:pb-0 md:grid-cols-[1.2fr_220px_1fr_90px] md:items-center">
-                  <span className="text-2xl text-slate-100">{entry.label}</span>
-                  <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                    <span className="text-slate-400">Weight:</span>
+        {/* Evaluation Identity */}
+        <div className="page-card !mb-0 p-8 shadow-xl border border-default border-t-8 border-t-sky-600">
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+              <div className="space-y-2">
+                 <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Personnel Identity</label>
+                 <div className="relative group">
                     <select
-                      value={entry.weight}
-                      onChange={(e) => updateKpiEntry(index, "weight", parseInt(e.target.value, 10))}
-                      className="w-full bg-transparent text-xl text-white outline-none"
-                      disabled={!canEdit}
+                        value={selectedUser}
+                        onChange={(e) => {
+                          setSelectedUser(e.target.value);
+                          setForm(createDefaultForm(form.month, form.year));
+                        }}
+                        className="w-full appearance-none rounded-xl border border-default bg-[hsl(var(--surface-raised))] pl-4 pr-10 py-3 text-sm font-bold text-foreground outline-none focus:border-sky-500 transition-all cursor-pointer"
+                        required
                     >
-                      {[10, 20, 25, 30, 35, 40, 50, 60].map((weight) => (
-                        <option key={weight} value={weight} className="bg-slate-900">
-                          {weight}%
-                        </option>
-                      ))}
+                        <option value="">Select Personnel...</option>
+                        {users.map((employee) => (
+                          <option key={employee._id} value={employee._id}>
+                             {employee.name} — {employee.employeeId}
+                          </option>
+                        ))}
                     </select>
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none group-hover:text-sky-600 transition-colors">
+                       <ChevronDown size={18} strokeWidth={3} />
+                    </div>
+                 </div>
+              </div>
+
+              <div className="space-y-2">
+                 <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Fiscal Cycle</label>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="relative group">
+                       <select
+                          value={form.month}
+                          onChange={(e) => resetForPeriod(parseInt(e.target.value, 10), form.year)}
+                          className="w-full appearance-none rounded-xl border border-default bg-[hsl(var(--surface-raised))] px-4 py-3 text-sm font-bold text-foreground outline-none focus:border-sky-500 transition-all cursor-pointer"
+                       >
+                          {monthOptions.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                       </select>
+                    </div>
+                    <div className="relative group">
+                       <select
+                          value={form.year}
+                          onChange={(e) => resetForPeriod(form.month, parseInt(e.target.value, 10))}
+                          className="w-full appearance-none rounded-xl border border-default bg-[hsl(var(--surface-raised))] px-4 py-3 text-sm font-bold text-foreground outline-none focus:border-sky-500 transition-all cursor-pointer"
+                       >
+                          {getYearRange().map((y) => <option key={y} value={y}>{y}</option>)}
+                       </select>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="flex flex-col justify-end">
+                 {currentRecord ? (
+                    <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-sky-500/5 border border-sky-500/20 text-sky-600 transition-all animate-in fade-in slide-in-from-right-4">
+                       <div className="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse shadow-[0_0_10px_rgba(14,165,233,0.5)]" />
+                       <span className="text-[10px] font-black uppercase tracking-widest text-sky-600">Revising Active Registry Record</span>
+                    </div>
+                 ) : (
+                    <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-default border border-default text-muted opacity-50">
+                       <div className="w-2.5 h-2.5 rounded-full bg-muted" />
+                       <span className="text-[10px] font-black uppercase tracking-widest">Awaiting Identity Definition</span>
+                    </div>
+                 )}
+              </div>
+           </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-10">
+          {/* Scoring Configuration */}
+          <div className="xl:col-span-3 space-y-10">
+            {/* KPI Section */}
+            <div className="page-card !mb-0 p-8 shadow-xl border border-default relative overflow-hidden group">
+               <div className="flex justify-between items-center mb-10">
+                  <div>
+                     <h3 className="text-sm font-black text-foreground uppercase tracking-[0.3em] mb-1">Key Performance Metrics</h3>
+                     <p className="text-[10px] font-black text-muted uppercase tracking-widest opacity-60">Section Weighting: 40%</p>
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={entry.score}
-                    onChange={(e) => updateKpiEntry(index, "score", parseInt(e.target.value, 10))}
-                    className="w-full accent-sky-400"
-                    disabled={!canEdit}
-                  />
-                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xl">
-                    <span>{entry.score}</span>
-                    <span className="text-slate-400">%</span>
+                  <div className="w-16 h-16 rounded-full bg-sky-500/10 border-2 border-sky-500/20 flex items-center justify-center">
+                    <span className="text-xl font-black text-sky-600">{Math.round(kpiScore)}</span>
                   </div>
-                </div>
-              ))}
+               </div>
+               
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {form.kpiEntries.map((entry, index) => (
+                    <div key={index} className="space-y-6 p-6 rounded-2xl bg-[hsl(var(--surface-raised))] border border-default group/item hover:border-sky-500/30 transition-all shadow-sm">
+                       <div className="flex justify-between items-start">
+                          <span className="text-[10px] font-black text-foreground uppercase tracking-widest">{entry.label}</span>
+                          <span className="text-[9px] font-black text-muted uppercase tracking-widest px-1.5 py-0.5 rounded bg-default border border-default">WT: {entry.weight}%</span>
+                       </div>
+                       <div className="space-y-4">
+                          <div className="relative h-2 w-full bg-default rounded-full overflow-hidden">
+                             <div className="h-full bg-sky-600 shadow-[0_0_10px_rgba(2,132,199,0.3)] transition-all duration-500" style={{ width: `${entry.score}%` }} />
+                          </div>
+                          <div className="flex items-center gap-4">
+                             <input
+                               type="range"
+                               min={0}
+                               max={100}
+                               value={entry.score}
+                               onChange={(e) => updateKpiEntry(index, "score", parseInt(e.target.value, 10))}
+                               className="flex-1 h-3 bg-transparent rounded-lg appearance-none cursor-pointer accent-sky-600"
+                               disabled={!canEdit}
+                             />
+                             <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-background border border-default font-black text-sm text-foreground shadow-inner">
+                                {entry.score}
+                             </div>
+                          </div>
+                       </div>
+                    </div>
+                  ))}
+               </div>
             </div>
 
-            <div className="mt-5">
-              <div className="mb-3 flex items-center justify-between text-2xl">
-                <span>KPI Score (auto)</span>
-                <span className="font-semibold">{Math.round(kpiScore)} %</span>
-              </div>
-              <ProgressBar value={kpiScore} colorClass="bg-sky-400" />
+            {/* KRA Section */}
+            <div className="page-card !mb-0 p-8 shadow-xl border border-default border-t-8 border-t-emerald-500 group">
+               <div className="flex justify-between items-center mb-10">
+                  <div>
+                     <h3 className="text-sm font-black text-foreground uppercase tracking-[0.3em] mb-1">Functional Output Units</h3>
+                     <p className="text-[10px] font-black text-muted uppercase tracking-widest opacity-60">Section Weighting: 40%</p>
+                  </div>
+                  <div className="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/20 flex items-center justify-center">
+                    <span className="text-xl font-black text-emerald-600">{Math.round(kraScore)}</span>
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {[
+                    { key: "ownership" as const, label: "Ownership / Agency" },
+                    { key: "quality" as const, label: "Execution Quality" },
+                    { key: "initiative" as const, label: "Strategic Initiative" },
+                  ].map((m) => (
+                    <div key={m.key} className="space-y-4">
+                       <label className="text-[10px] font-black text-muted uppercase tracking-widest block">{m.label}</label>
+                       <div className="flex gap-2">
+                          {[1, 2, 3, 4, 5].map((r) => (
+                             <button
+                                key={r}
+                                onClick={() => updateKraMetric(m.key, r)}
+                                disabled={!canEdit}
+                                className={`flex-1 h-12 rounded-xl border-2 font-black transition-all ${
+                                   form.kraMetrics[m.key] === r 
+                                      ? "bg-emerald-500 border-emerald-600 text-white shadow-lg shadow-emerald-500/20 scale-105" 
+                                      : "border-default bg-[hsl(var(--surface-raised))] text-muted hover:border-emerald-500/50 hover:text-foreground"
+                                }`}
+                             >
+                                {r}
+                             </button>
+                          ))}
+                       </div>
+                    </div>
+                  ))}
+               </div>
+            </div>
+
+            {/* Behavioral Section */}
+            <div className="page-card !mb-0 p-8 shadow-xl border border-default border-t-8 border-t-purple-600">
+               <div className="flex justify-between items-center mb-10">
+                  <div>
+                     <h3 className="text-sm font-black text-foreground uppercase tracking-[0.3em] mb-1">Behavioral Integrity</h3>
+                     <p className="text-[10px] font-black text-muted uppercase tracking-widest opacity-60">Section Weighting: 20%</p>
+                  </div>
+                  <div className="w-16 h-16 rounded-full bg-purple-500/10 border-2 border-purple-500/20 flex items-center justify-center">
+                    <span className="text-xl font-black text-purple-600">{Math.round(behavioralScore)}</span>
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                  <div className="space-y-4">
+                     <label className="text-[10px] font-black text-muted uppercase tracking-widest block">Cycle Attendance Reality</label>
+                     <div className="grid grid-cols-4 gap-2">
+                        {[100, 95, 90, 85, 80, 75, 70, 60].map(a => (
+                           <button
+                              key={a}
+                              onClick={() => updateBehaviorMetric("attendance", a)}
+                              disabled={!canEdit}
+                              className={`py-2 px-1 rounded-lg border-2 text-[11px] font-black transition-all ${
+                                 form.behavioralMetrics.attendance === a 
+                                    ? "bg-purple-600 border-purple-700 text-white shadow-lg shadow-purple-600/20" 
+                                    : "border-default bg-[hsl(var(--surface-raised))] text-muted hover:border-purple-500/30"
+                              }`}
+                           >
+                              {a}%
+                           </button>
+                        ))}
+                     </div>
+                  </div>
+                  
+                  {[
+                    { key: "discipline" as const, label: "Operational Discipline" },
+                    { key: "communication" as const, label: "Stakeholder Comms" },
+                  ].map((m) => (
+                    <div key={m.key} className="space-y-4">
+                       <label className="text-[10px] font-black text-muted uppercase tracking-widest block">{m.label}</label>
+                       <div className="flex gap-2">
+                          {[1, 2, 3, 4, 5].map((r) => (
+                             <button
+                                key={r}
+                                onClick={() => updateBehaviorMetric(m.key, r)}
+                                disabled={!canEdit}
+                                className={`flex-1 h-12 rounded-xl border-2 font-black transition-all ${
+                                   form.behavioralMetrics[m.key] === r 
+                                      ? "bg-purple-600 border-purple-700 text-white shadow-lg shadow-purple-600/20 scale-105" 
+                                      : "border-default bg-[hsl(var(--surface-raised))] text-muted hover:border-purple-500/50 hover:text-foreground"
+                                }`}
+                             >
+                                {r}
+                             </button>
+                          ))}
+                       </div>
+                    </div>
+                  ))}
+               </div>
+            </div>
+
+            <div className="page-card !mb-0 p-8 shadow-xl border border-default">
+               <label className="text-[10px] font-black text-muted uppercase tracking-[0.3em] mb-4 block">Executive Evaluation Narrative</label>
+               <textarea
+                 value={form.remarks}
+                 onChange={(e) => setForm(c => ({ ...c, remarks: e.target.value }))}
+                 className="w-full min-h-[140px] rounded-2xl border-2 border-default bg-[hsl(var(--surface-raised))] p-6 text-sm font-medium text-foreground outline-none focus:border-sky-500 transition-all placeholder:italic placeholder:opacity-30"
+                 placeholder="Document critical highlights, performance bottlenecks, and trajectory improvements..."
+                 disabled={!canEdit}
+               />
             </div>
           </div>
 
-          <div className="mt-8 grid gap-8 xl:grid-cols-[1fr_0.95fr]">
-            <div>
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-2xl font-semibold">KRA Score (Quality of Work) (40%)</h3>
-                <span className="text-lg text-slate-300">100%</span>
-              </div>
-
-              <div className="space-y-4">
-                {[
-                  { key: "ownership" as const, label: "Ownership (1–5)" },
-                  { key: "quality" as const, label: "Quality (1–5)" },
-                  { key: "initiative" as const, label: "Initiative (1–5)" },
-                ].map((metric) => (
-                  <div key={metric.key} className="grid gap-4 md:grid-cols-[1fr_260px] md:items-center">
-                    <label className="text-2xl text-slate-100">{metric.label}</label>
-                    <select
-                      value={form.kraMetrics[metric.key]}
-                      onChange={(e) => updateKraMetric(metric.key, parseInt(e.target.value, 10))}
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xl text-white outline-none"
-                      disabled={!canEdit}
-                    >
-                      <option value={0} className="bg-slate-900">-- Select Rating --</option>
-                      {ratingOptions.map((ratingValue) => (
-                        <option key={ratingValue} value={ratingValue} className="bg-slate-900">
-                          {ratingValue}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5">
-                <div className="mb-3 flex items-center justify-between text-2xl">
-                  <span>KRA Score (auto)</span>
-                  <span className="font-semibold">{Math.round(kraScore)} %</span>
-                </div>
-                <ProgressBar value={kraScore} colorClass="bg-cyan-400" />
-              </div>
-
-              <div className="mt-8 mb-4 flex items-center justify-between">
-                <h3 className="text-2xl font-semibold">Behavioral / Compliance Score (20%)</h3>
-                <span className="text-lg text-slate-300">100%</span>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-[1fr_260px] md:items-center">
-                  <label className="text-2xl text-slate-100">Attendance (%)</label>
-                  <select
-                    value={form.behavioralMetrics.attendance}
-                    onChange={(e) => updateBehaviorMetric("attendance", parseInt(e.target.value, 10))}
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xl text-white outline-none"
-                    disabled={!canEdit}
-                  >
-                    {attendanceOptions.map((attendance) => (
-                      <option key={attendance} value={attendance} className="bg-slate-900">
-                        {attendance}%
-                      </option>
-                    ))}
-                  </select>
+          {/* Real-time Assessment Sidebar */}
+          <div className="space-y-8">
+             <div className="page-card !mb-0 p-8 shadow-2xl border border-default border-t-8 border-t-slate-900 dark:border-t-slate-100 sticky top-8">
+                <h3 className="text-[10px] font-black text-muted uppercase tracking-[0.2em] mb-10">Aggregate Evaluation</h3>
+                
+                <div className="flex flex-col items-center mb-10">
+                   <div className="relative group/gauge flex items-center justify-center h-48 w-48">
+                      <div className="absolute inset-0 bg-sky-500/5 blur-3xl rounded-full" />
+                      <svg className="h-full w-full -rotate-90">
+                         <circle cx="96" cy="96" r="84" fill="none" stroke="currentColor" strokeWidth="12" className="text-default" />
+                         <circle cx="96" cy="96" r="84" fill="none" stroke="url(#result-gradient)" strokeWidth="12" 
+                            strokeDasharray="528" strokeDashoffset={528 - (528 * finalScore) / 100}
+                            strokeLinecap="round"
+                            className="transition-all duration-1000" />
+                         <defs>
+                            <linearGradient id="result-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                               <stop offset="0%" stopColor="var(--sky-500)" />
+                               <stop offset="100%" stopColor="var(--indigo-600)" />
+                            </linearGradient>
+                         </defs>
+                      </svg>
+                      <div className="absolute flex flex-col items-center">
+                         <span className="text-5xl font-black text-foreground tracking-tighter">{Math.round(finalScore)}</span>
+                         <span className="text-[10px] font-black text-sky-600 uppercase tracking-widest">{rating.label}</span>
+                      </div>
+                   </div>
                 </div>
 
-                {[
-                  { key: "discipline" as const, label: "Discipline (1–5)" },
-                  { key: "communication" as const, label: "Communication (1–5)" },
-                ].map((metric) => (
-                  <div key={metric.key} className="grid gap-4 md:grid-cols-[1fr_260px] md:items-center">
-                    <label className="text-2xl text-slate-100">{metric.label}</label>
-                    <select
-                      value={form.behavioralMetrics[metric.key]}
-                      onChange={(e) => updateBehaviorMetric(metric.key, parseInt(e.target.value, 10))}
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xl text-white outline-none"
-                      disabled={!canEdit}
-                    >
-                      <option value={0} className="bg-slate-900">-- Select Rating --</option>
-                      {ratingOptions.map((ratingValue) => (
-                        <option key={ratingValue} value={ratingValue} className="bg-slate-900">
-                          {ratingValue}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 border-t border-white/10 pt-4">
-                <div className="mb-3 flex items-center justify-between text-2xl">
-                  <span>Behavioral Score (auto)</span>
-                  <span className="font-semibold">{Math.round(behavioralScore)} %</span>
+                <div className="space-y-6">
+                   {[
+                      { label: "Core KPI Yield", value: Math.round(kpiScore), color: "sky" },
+                      { label: "KRA Metric", value: Math.round(kraScore), color: "emerald" },
+                      { label: "Integrity Index", value: Math.round(behavioralScore), color: "purple" },
+                   ].map(stat => (
+                      <div key={stat.label} className="space-y-2">
+                         <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                            <span className="text-muted">{stat.label}</span>
+                            <span className={`text-${stat.color}-600`}>{stat.value}%</span>
+                         </div>
+                         <div className="h-1.5 w-full bg-default rounded-full overflow-hidden">
+                            <div className={`h-full bg-${stat.color}-500 transition-all duration-1000`} style={{ width: `${stat.value}%` }} />
+                         </div>
+                      </div>
+                   ))}
+                   
+                   <div className="pt-8 border-t border-default">
+                      <p className="text-[10px] text-muted font-bold text-center leading-relaxed italic opacity-60">
+                         Initialing this score will permanently record it in the cycle ledger and affect incentive distribution.
+                      </p>
+                   </div>
                 </div>
-                <ProgressBar value={behavioralScore} colorClass="bg-emerald-400" />
-              </div>
+             </div>
 
-              <div className="mt-6">
-                <label className="mb-2 block text-2xl text-slate-100">Remarks (optional)</label>
-                <input
-                  type="text"
-                  value={form.remarks}
-                  onChange={(e) => setForm((current) => ({ ...current, remarks: e.target.value }))}
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-xl text-white outline-none"
-                  placeholder="Any comments..."
-                  disabled={!canEdit}
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(59,130,246,0.18),rgba(15,23,42,0.18))] p-5">
-                <div className="flex flex-wrap items-center gap-3 text-3xl font-semibold">
-                  <span>Final Score</span>
-                  <span className="text-lg font-normal text-slate-300">(KPI×40%) + (KRA×40%) + (Behavioral×20%)</span>
-                  <span className="ml-auto text-4xl font-bold text-sky-300">{Math.round(finalScore)}/100</span>
+             {/* Evaluation Registry History */}
+             <div className="page-card !mb-0 p-8 shadow-xl border border-default">
+                <h3 className="text-[10px] font-black text-muted uppercase tracking-[0.2em] mb-6">Evaluation Registry History</h3>
+                <div className="space-y-4">
+                   {!selectedUser ? (
+                      <div className="text-center py-12 px-4 border-2 border-dashed border-default rounded-3xl opacity-30 flex flex-col items-center gap-4">
+                         <Gauge size={40} strokeWidth={1} />
+                         <p className="text-[10px] font-black uppercase tracking-widest leading-relaxed">Identity definition required to retrieve registry logs</p>
+                      </div>
+                   ) : loadingScores ? (
+                      <div className="animate-pulse space-y-4">
+                         {[1, 2, 3].map(i => <div key={i} className="h-20 bg-[hsl(var(--surface-raised))] rounded-2xl border border-default" />)}
+                      </div>
+                   ) : scores.length === 0 ? (
+                      <div className="text-center py-12 opacity-30 flex flex-col items-center gap-4 border border-default rounded-3xl">
+                         <CircleAlert size={32} strokeWidth={1} />
+                         <p className="text-[10px] font-black uppercase tracking-widest">No historical evaluation data found</p>
+                      </div>
+                   ) : (
+                      scores.slice(0, 5).map((score) => (
+                        <button
+                          key={score._id}
+                          onClick={() => setForm(createFormFromScore(score))}
+                          className="w-full group text-left p-5 rounded-2xl border border-default bg-[hsl(var(--surface-raised))] hover:border-sky-500/50 hover:bg-surface transition-all shadow-sm"
+                        >
+                           <div className="flex justify-between items-center mb-3">
+                              <span className="text-[11px] font-black text-foreground uppercase tracking-widest">
+                                {new Date(score.year, score.month - 1).toLocaleString("en-IN", { month: "short", year: "numeric" })}
+                              </span>
+                              <div className="px-2 py-0.5 rounded-lg bg-sky-600/10 text-sky-600 text-[10px] font-black group-hover:scale-110 transition-transform">
+                                 {score.final_score}%
+                              </div>
+                           </div>
+                           <div className="grid grid-cols-3 gap-2 opacity-60">
+                              <div className="text-[9px] font-black uppercase tracking-tighter">KPI: {score.kpi_score}</div>
+                              <div className="text-[9px] font-black uppercase tracking-tighter">KRA: {score.kra_score}</div>
+                              <div className="text-[9px] font-black uppercase tracking-tighter text-right">BEH: {score.behavioral_score ?? 0}</div>
+                           </div>
+                        </button>
+                      ))
+                   )}
                 </div>
-                <div className="mt-5 grid gap-3 text-lg text-slate-200 md:grid-cols-2">
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                    <p className="text-slate-400">KPI Score</p>
-                    <p className="mt-1 text-3xl font-semibold">{Math.round(kpiScore)}%</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                    <p className="text-slate-400">KRA Score</p>
-                    <p className="mt-1 text-3xl font-semibold">{Math.round(kraScore)}%</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                    <p className="text-slate-400">Behavioral Score</p>
-                    <p className="mt-1 text-3xl font-semibold">{Math.round(behavioralScore)}%</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                    <p className="text-slate-400">Rating</p>
-                    <p className="mt-1 text-3xl font-semibold">{rating.label}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <div className="grid grid-cols-[1fr_1fr_1fr] gap-4 border-b border-white/10 pb-3 text-lg text-slate-300">
-                  <span>Score Range</span>
-                  <span>Rating</span>
-                  <span>Incentive</span>
-                </div>
-                {[
-                  ["90–100", "Outstanding", "100% × incentive"],
-                  ["75–89", "Exceeds", "80–90% × incentive"],
-                  ["60–74", "Meets", "60–70% × incentive"],
-                  ["40–59", "Needs Improvement", "30–50% × incentive"],
-                  ["Below 40", "Poor", "0%"],
-                ].map(([range, label, incentive]) => (
-                  <div key={range} className="grid grid-cols-[1fr_1fr_1fr] gap-4 border-b border-white/10 py-3 text-lg last:border-b-0">
-                    <span>{range}</span>
-                    <span>{label}</span>
-                    <span>{incentive}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <h3 className="text-2xl font-semibold">Recent Entries</h3>
-                {!selectedUser ? (
-                  <p className="mt-4 text-slate-400">Select an employee to view score history.</p>
-                ) : loadingScores ? (
-                  <p className="mt-4 text-slate-400">Loading scores...</p>
-                ) : scores.length === 0 ? (
-                  <p className="mt-4 text-slate-400">No scores saved yet.</p>
-                ) : (
-                  <div className="mt-4 space-y-3">
-                    {scores.slice(0, 4).map((score) => (
-                      <button
-                        key={score._id}
-                        type="button"
-                        onClick={() => setForm(createFormFromScore(score))}
-                        className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition hover:bg-white/[0.06]"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-lg font-medium">
-                            {new Date(score.year, score.month - 1).toLocaleString("en-IN", {
-                              month: "long",
-                              year: "numeric",
-                            })}
-                          </span>
-                          <span className="text-xl font-semibold text-sky-300">{score.final_score}/100</span>
-                        </div>
-                        <p className="mt-1 text-sm text-slate-400">
-                          KPI {score.kpi_score} · KRA {score.kra_score} · Behavioral {score.behavioral_score ?? 0}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+             </div>
           </div>
-
-          <Button
-            type="submit"
-            loading={submitting}
-            disabled={!canEdit}
-            className="mt-8 w-full bg-sky-600 py-4 text-xl text-white hover:bg-sky-500"
-          >
-            Save Score
-          </Button>
-        </form>
+        </div>
 
         {selectedEmployee && (
-          <div className="mt-5 text-sm text-slate-400">
-            Working on: {selectedEmployee.name} ({selectedEmployee.employeeId}) · {selectedEmployee.department}
-          </div>
+           <div className="flex justify-center border-t border-default pt-8 opacity-40">
+              <div className="flex items-center gap-2">
+                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                 <span className="text-[10px] font-black text-muted uppercase tracking-[0.3em]">
+                    Synchronized Context: {selectedEmployee.name} // {selectedEmployee.department} // {selectedEmployee.employeeId}
+                 </span>
+              </div>
+           </div>
         )}
       </div>
     </DashboardShell>

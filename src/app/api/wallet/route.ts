@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
 import { authenticate } from "@/middleware/auth";
 import { getWalletSummary } from "@/services/walletService";
 
@@ -7,7 +6,6 @@ import { getWalletSummary } from "@/services/walletService";
 export async function GET(req: NextRequest) {
   try {
     const authUser = await authenticate();
-    await connectDB();
 
     const { searchParams } = new URL(req.url);
     const employeeId =

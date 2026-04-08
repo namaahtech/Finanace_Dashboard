@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { formatCurrency } from "@/lib/utils";
 import axios from "axios";
-import { Info, Settings } from "lucide-react";
+import { Info, Settings, TrendingUp, IndianRupee, ChevronDown } from "lucide-react";
 
 interface Config {
   company_revenue: number;
@@ -75,273 +75,283 @@ export default function AdminConfigPage() {
   const expenseAmount = ((n("company_revenue") || 0) * (n("expense_percentage") || 0)) / 100;
 
   return (
-    <DashboardShell title="System Configuration">
-      <div className="mb-6 flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-5 py-4 dark:border-sky-800 dark:bg-sky-900/20">
-        <Info size={18} className="mt-0.5 text-sky-600 shrink-0" />
-        <p className="text-sm text-sky-700 dark:text-sky-400">
-          All system parameters are controlled here. Changes apply immediately to new incentives and claims.
-          <strong className="block mt-1">Only Super Admin can access this page.</strong>
-        </p>
-      </div>
-
-      {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-sky-600 border-t-transparent" />
+    <DashboardShell 
+      title="System Archetype" 
+      subtitle="Calibrate global financial parameters and authorize operational yield logic"
+      actions={
+        <div className="flex gap-3">
+          <button 
+             onClick={handleSave}
+             disabled={saving}
+             className="flex items-center gap-2 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-6 py-3 text-xs font-black uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-xl disabled:opacity-50"
+          >
+             {saving ? "Synchronizing..." : "Authorize Archetype"}
+          </button>
         </div>
-      ) : (
-        <form onSubmit={handleSave}>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle><span className="flex items-center gap-2"><Settings size={15} /> Company Snapshot</span></CardTitle>
-              </CardHeader>
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.3fr_0.9fr]">
-                <div className="rounded-2xl bg-gradient-to-br from-slate-950 via-sky-950 to-cyan-900 p-5 text-white">
-                  <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/80">Shared dashboard metric</p>
-                  <div className="mt-3">
-                    <p className="text-sm text-cyan-100/80">Company Revenue</p>
-                    <p className="mt-1 text-3xl font-bold">{formatCurrency(n("company_revenue") || 0)}</p>
-                  </div>
-                  <div className="mt-6 space-y-3">
-                    <div>
-                      <div className="mb-1 flex items-center justify-between text-sm">
-                        <span className="text-emerald-100">Profit</span>
-                        <span className="font-semibold">{n("profit_percentage") || 0}%</span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-white/15">
-                        <div
-                          className="h-full rounded-full bg-emerald-400"
-                          style={{ width: `${n("profit_percentage") || 0}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="mb-1 flex items-center justify-between text-sm">
-                        <span className="text-amber-100">Expense</span>
-                        <span className="font-semibold">{n("expense_percentage") || 0}%</span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-white/15">
-                        <div
-                          className="h-full rounded-full bg-amber-300"
-                          style={{ width: `${n("expense_percentage") || 0}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+      }
+    >
+      <div className="flex flex-col gap-10">
+        <div className="flex items-center gap-4 rounded-2xl border border-sky-500/20 bg-sky-500/5 px-6 py-5 shadow-sm">
+          <div className="w-10 h-10 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-600">
+             <Info size={20} strokeWidth={2.5} />
+          </div>
+          <div className="text-sm">
+             <p className="font-black text-foreground uppercase tracking-[0.2em] text-[10px] mb-0.5">Terminal Authority: SUPER_ADMIN</p>
+             <p className="text-muted font-bold text-xs">Modifications to these parameters override organizational logic and affect all financial yields immediately.</p>
+          </div>
+        </div>
 
-                <div className="space-y-5">
+        {loading ? (
+          <div className="flex h-96 items-center justify-center">
+            <div className="relative flex items-center justify-center">
+               <div className="h-16 w-16 animate-spin rounded-full border-4 border-default border-t-sky-600" />
+               <Settings size={20} className="absolute text-sky-600 animate-pulse" />
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-12">
+            {/* Main Financial Architecture */}
+            <div className="page-card !mb-0 p-10 shadow-2xl border border-default border-t-8 border-t-sky-600 relative overflow-hidden group">
+               <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
+                  <TrendingUp size={160} strokeWidth={1} />
+               </div>
+
+               <div className="flex justify-between items-end mb-12 relative z-10">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-                      Revenue Amount (₹)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={n("company_revenue")}
-                      onChange={(e) => setForm({ ...form, company_revenue: parseFloat(e.target.value) || 0 })}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-                    />
+                     <h3 className="text-sm font-black text-foreground uppercase tracking-[0.4em] mb-2">Core Financial Architecture</h3>
+                     <p className="text-[10px] font-black text-muted uppercase tracking-[0.2em] opacity-60">High-Level yield & capitalization targets</p>
                   </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-                      Startup Stage
-                    </label>
-                    <input
-                      type="text"
-                      value={form.company_stage ?? ""}
-                      onChange={(e) => setForm({ ...form, company_stage: e.target.value })}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-                    />
+                  <div className="hidden md:flex gap-4">
+                     <div className="px-4 py-2 rounded-xl bg-[hsl(var(--surface-raised))] border border-default text-[10px] font-black uppercase tracking-widest text-muted">
+                        State: <span className="text-sky-600">{form.company_stage}</span>
+                     </div>
                   </div>
-                  <div>
-                    <label className="mb-1 flex justify-between text-xs font-medium text-gray-700 dark:text-gray-300">
-                      <span>Profit Ratio</span>
-                      <span className="font-bold text-emerald-600">{n("profit_percentage") || 0}%</span>
-                    </label>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={n("profit_percentage")}
-                      onChange={(e) => {
-                        const profit = parseInt(e.target.value);
-                        setForm({ ...form, profit_percentage: profit, expense_percentage: 100 - profit });
-                      }}
-                      className="w-full accent-emerald-500"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Equity Min (%)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.1"
-                        value={form.equity_min_percentage ?? 0}
-                        onChange={(e) => setForm({ ...form, equity_min_percentage: parseFloat(e.target.value) || 0 })}
-                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Equity Max (%)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.1"
-                        value={form.equity_max_percentage ?? 0}
-                        onChange={(e) => setForm({ ...form, equity_max_percentage: parseFloat(e.target.value) || 0 })}
-                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl bg-emerald-50 p-4 dark:bg-emerald-900/20">
-                      <p className="text-xs text-emerald-700 dark:text-emerald-400">Profit</p>
-                      <p className="mt-1 font-semibold text-emerald-900 dark:text-emerald-100">{formatCurrency(profitAmount)}</p>
-                    </div>
-                    <div className="rounded-xl bg-amber-50 p-4 dark:bg-amber-900/20">
-                      <p className="text-xs text-amber-700 dark:text-amber-400">Expense</p>
-                      <p className="mt-1 font-semibold text-amber-900 dark:text-amber-100">{formatCurrency(expenseAmount)}</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-400">
-                    Expense ratio is auto-balanced to keep the total at 100%. Any save here will reflect on employee dashboards, including the startup finance snapshot.
-                  </p>
-                </div>
-              </div>
-            </Card>
+               </div>
 
-            {/* Vesting & Bonus */}
-            <Card>
-              <CardHeader>
-                <CardTitle><span className="flex items-center gap-2"><Settings size={15} /> Vesting & Hold Bonus</span></CardTitle>
-              </CardHeader>
-              <div className="space-y-5">
-                <div>
-                  <label className="mb-1 flex justify-between text-xs font-medium text-gray-700 dark:text-gray-300">
-                    <span>Vesting Period (days)</span>
-                    <span className="font-bold text-sky-600">{n("vesting_days")} days</span>
-                  </label>
-                  <input
-                    type="range" min={1} max={365}
-                    value={n("vesting_days")}
-                    onChange={(e) => setForm({ ...form, vesting_days: parseInt(e.target.value) })}
-                    className="w-full accent-sky-500"
-                  />
-                  <p className="text-xs text-gray-400 mt-0.5">Default: 30 days. Incentives lock for this duration after award.</p>
-                </div>
-                <div>
-                  <label className="mb-1 flex justify-between text-xs font-medium text-gray-700 dark:text-gray-300">
-                    <span>1-Month Hold Bonus (%)</span>
-                    <span className="font-bold text-emerald-600">+{n("bonus_percentage_1m")}%</span>
-                  </label>
-                  <input
-                    type="range" min={0} max={50}
-                    value={n("bonus_percentage_1m")}
-                    onChange={(e) => setForm({ ...form, bonus_percentage_1m: parseInt(e.target.value) })}
-                    className="w-full accent-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 flex justify-between text-xs font-medium text-gray-700 dark:text-gray-300">
-                    <span>2-Month Hold Bonus (% max cap)</span>
-                    <span className="font-bold text-emerald-600">+{n("bonus_percentage_2m")}%</span>
-                  </label>
-                  <input
-                    type="range" min={0} max={50}
-                    value={n("bonus_percentage_2m")}
-                    onChange={(e) => setForm({ ...form, bonus_percentage_2m: parseInt(e.target.value) })}
-                    className="w-full accent-emerald-500"
-                  />
-                </div>
-              </div>
-            </Card>
+               <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 relative z-10">
+                  <div className="lg:col-span-3 space-y-10">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Annual Yield Target (₹)</label>
+                           <div className="relative group">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted font-black text-xs">₹</span>
+                              <input
+                                 type="number"
+                                 min={0}
+                                 value={n("company_revenue")}
+                                 onChange={(e) => setForm({ ...form, company_revenue: parseFloat(e.target.value) || 0 })}
+                                 className="w-full rounded-2xl border border-default bg-[hsl(var(--surface-raised))] pl-10 pr-4 py-4 text-base font-black text-foreground outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all"
+                              />
+                           </div>
+                        </div>
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Operational Epoch</label>
+                           <input
+                              type="text"
+                              value={form.company_stage ?? ""}
+                              onChange={(e) => setForm({ ...form, company_stage: e.target.value })}
+                              className="w-full rounded-2xl border border-default bg-[hsl(var(--surface-raised))] px-6 py-4 text-base font-black text-foreground outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all uppercase tracking-widest"
+                           />
+                        </div>
+                     </div>
 
-            {/* Payout Pool */}
-            <Card>
-              <CardHeader>
-                <CardTitle><span className="flex items-center gap-2"><Settings size={15} /> Payout Pool & Claims</span></CardTitle>
-              </CardHeader>
-              <div className="space-y-5">
-                <div>
-                  <label className="mb-1 flex justify-between text-xs font-medium text-gray-700 dark:text-gray-300">
-                    <span>Claim Limit per Cycle</span>
-                    <span className="font-bold text-sky-600">{n("claim_limit")} users</span>
-                  </label>
-                  <input
-                    type="range" min={1} max={200}
-                    value={n("claim_limit")}
-                    onChange={(e) => setForm({ ...form, claim_limit: parseInt(e.target.value) })}
-                    className="w-full accent-sky-500"
-                  />
-                  <p className="text-xs text-gray-400 mt-0.5">Only first {n("claim_limit")} users per cycle get approved.</p>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-                    Payout Pool Amount (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={n("payout_pool_amount")}
-                    onChange={(e) => setForm({ ...form, payout_pool_amount: parseFloat(e.target.value) })}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-                  />
-                  <p className="text-xs text-gray-400 mt-0.5">Current: {formatCurrency(n("payout_pool_amount"))}</p>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-                    Payout Capacity
-                  </label>
-                  <select
-                    value={form.payout_capacity}
-                    onChange={(e) => setForm({ ...form, payout_capacity: e.target.value as Config["payout_capacity"] })}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-                  >
-                    <option value="HIGH">HIGH — Normal operations</option>
-                    <option value="MODERATE">MODERATE — Slight delays possible</option>
-                    <option value="LOW">LOW — Show delay warning to employees</option>
-                  </select>
-                </div>
-              </div>
-            </Card>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Equity Baseline (%)</label>
+                           <div className="relative">
+                              <input
+                                 type="number"
+                                 step="0.1"
+                                 value={form.equity_min_percentage ?? 0}
+                                 onChange={(e) => setForm({ ...form, equity_min_percentage: parseFloat(e.target.value) || 0 })}
+                                 className="w-full rounded-2xl border border-default bg-[hsl(var(--surface-raised))] px-6 py-4 text-base font-black text-foreground outline-none focus:border-sky-500 transition-all"
+                              />
+                              <span className="absolute right-6 top-1/2 -translate-y-1/2 text-muted font-black text-xs">%</span>
+                           </div>
+                        </div>
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Equity Ceiling (%)</label>
+                           <div className="relative">
+                              <input
+                                 type="number"
+                                 step="0.1"
+                                 value={form.equity_max_percentage ?? 0}
+                                 onChange={(e) => setForm({ ...form, equity_max_percentage: parseFloat(e.target.value) || 0 })}
+                                 className="w-full rounded-2xl border border-default bg-[hsl(var(--surface-raised))] px-6 py-4 text-base font-black text-foreground outline-none focus:border-sky-500 transition-all"
+                              />
+                              <span className="absolute right-6 top-1/2 -translate-y-1/2 text-muted font-black text-xs">%</span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
 
-            {/* Read-only status */}
+                  <div className="lg:col-span-2 p-10 rounded-3xl bg-[hsl(var(--surface-raised))] border border-default shadow-inner relative overflow-hidden group/pl">
+                     <div className="absolute top-0 right-0 p-6 opacity-5 group-hover/pl:rotate-12 transition-transform">
+                        <IndianRupee size={100} strokeWidth={1} />
+                     </div>
+                     <h4 className="text-[10px] font-black text-muted uppercase tracking-[0.3em] mb-10 text-center">Liquidity Projection Filter</h4>
+                     
+                     <div className="space-y-10 relative z-10">
+                        <div className="space-y-5">
+                           <div className="flex justify-between items-center px-2">
+                              <span className="text-[11px] font-black text-foreground uppercase tracking-widest">Yield Captured</span>
+                              <span className="text-xl font-black text-emerald-600 tracking-tighter">{n("profit_percentage")}%</span>
+                           </div>
+                           <div className="relative pt-2">
+                              <input
+                                 type="range"
+                                 min={0}
+                                 max={100}
+                                 value={n("profit_percentage")}
+                                 onChange={(e) => {
+                                    const profit = parseInt(e.target.value);
+                                    setForm({ ...form, profit_percentage: profit, expense_percentage: 100 - profit });
+                                 }}
+                                 className="w-full h-3 bg-default rounded-full appearance-none cursor-pointer accent-emerald-500"
+                              />
+                              <div className="flex justify-between text-[8px] font-black text-muted uppercase tracking-widest mt-3 px-1">
+                                 <span>Conservative</span>
+                                 <span>Aggressive</span>
+                              </div>
+                           </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6 pt-6 border-t border-default/50">
+                           <div className="space-y-1">
+                              <p className="text-[9px] font-black text-muted uppercase tracking-widest">Projected Alpha</p>
+                              <p className="text-lg font-black text-emerald-600 tracking-tight">{formatCurrency(profitAmount)}</p>
+                           </div>
+                           <div className="space-y-1 text-right">
+                              <p className="text-[9px] font-black text-muted uppercase tracking-widest">OpEx Threshold</p>
+                              <p className="text-lg font-black text-rose-600 tracking-tight">{formatCurrency(expenseAmount)}</p>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+               {/* Growth & Retention */}
+               <div className="page-card !mb-0 p-10 shadow-xl border border-default hover:border-sky-500/30 transition-all flex flex-col">
+                  <div className="flex items-center gap-4 mb-12">
+                     <div className="w-12 h-12 rounded-2xl bg-sky-500/10 flex items-center justify-center text-sky-600">
+                        <TrendingUp size={24} strokeWidth={2.5} />
+                     </div>
+                     <div>
+                        <h3 className="text-sm font-black text-foreground uppercase tracking-[0.3em]">Yield Velocity</h3>
+                        <p className="text-[10px] font-black text-muted uppercase tracking-widest opacity-60">Retention & Vesting Parameters</p>
+                     </div>
+                  </div>
+                  
+                  <div className="space-y-10 flex-grow">
+                     <div className="space-y-5">
+                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                           <span className="text-muted">Capacitation Duration</span>
+                           <span className="text-sky-600 bg-sky-500/10 px-3 py-1 rounded-full">{n("vesting_days")} Cycles</span>
+                        </div>
+                        <input type="range" min={1} max={365} value={n("vesting_days")} onChange={(e) => setForm({ ...form, vesting_days: parseInt(e.target.value) })} className="w-full h-2 bg-default rounded-full appearance-none cursor-pointer accent-sky-600" />
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-10">
+                        <div className="space-y-5">
+                           <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                              <span className="text-muted">B1 (30D)</span>
+                              <span className="text-emerald-600">+{n("bonus_percentage_1m")}%</span>
+                           </div>
+                           <input type="range" min={0} max={50} value={n("bonus_percentage_1m")} onChange={(e) => setForm({ ...form, bonus_percentage_1m: parseInt(e.target.value) })} className="w-full h-1.5 bg-default rounded-full appearance-none cursor-pointer accent-emerald-500" />
+                        </div>
+                        <div className="space-y-5">
+                           <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                              <span className="text-muted">B2 (60D)</span>
+                              <span className="text-emerald-600">+{n("bonus_percentage_2m")}%</span>
+                           </div>
+                           <input type="range" min={0} max={50} value={n("bonus_percentage_2m")} onChange={(e) => setForm({ ...form, bonus_percentage_2m: parseInt(e.target.value) })} className="w-full h-1.5 bg-default rounded-full appearance-none cursor-pointer accent-emerald-500" />
+                        </div>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Payout Engine */}
+               <div className="page-card !mb-0 p-10 shadow-xl border border-default hover:border-purple-500/30 transition-all flex flex-col">
+                  <div className="flex items-center gap-4 mb-12">
+                     <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-600">
+                        <Settings size={24} strokeWidth={2.5} />
+                     </div>
+                     <div>
+                        <h3 className="text-sm font-black text-foreground uppercase tracking-[0.3em]">Payout Reactor</h3>
+                        <p className="text-[10px] font-black text-muted uppercase tracking-widest opacity-60">Liquidity & Concurrency Control</p>
+                     </div>
+                  </div>
+
+                  <div className="space-y-10 flex-grow">
+                     <div className="space-y-5">
+                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                           <span className="text-muted">Parallel Authorization Limit</span>
+                           <span className="text-purple-600 bg-purple-500/10 px-3 py-1 rounded-full">{n("claim_limit")} Units</span>
+                        </div>
+                        <input type="range" min={1} max={200} value={n("claim_limit")} onChange={(e) => setForm({ ...form, claim_limit: parseInt(e.target.value) })} className="w-full h-2 bg-default rounded-full appearance-none cursor-pointer accent-purple-600" />
+                     </div>
+
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Live Payout Pool (₹)</label>
+                           <input type="number" value={n("payout_pool_amount")} onChange={(e) => setForm({ ...form, payout_pool_amount: parseFloat(e.target.value) })} className="w-full rounded-2xl border border-default bg-[hsl(var(--surface-raised))] px-6 py-4 text-base font-black text-foreground outline-none focus:border-purple-500 transition-all tracking-tighter" />
+                        </div>
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Reactor Health Mode</label>
+                           <div className="relative">
+                              <select
+                                 value={form.payout_capacity}
+                                 onChange={(e) => setForm({ ...form, payout_capacity: e.target.value as Config["payout_capacity"] })}
+                                 className="w-full appearance-none rounded-2xl border border-default bg-[hsl(var(--surface-raised))] px-6 py-4 text-[11px] font-black text-foreground outline-none focus:border-purple-500 transition-all cursor-pointer uppercase tracking-widest"
+                              >
+                                 <option value="HIGH">Optimal Flow — High</option>
+                                 <option value="MODERATE">Standard State — Mid</option>
+                                 <option value="LOW">Throttled — Critical</option>
+                              </select>
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-muted pointer-events-none">
+                                <ChevronDown size={14} strokeWidth={3} />
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            {/* Global Live State Footer */}
             {config && (
-              <Card className="lg:col-span-2">
-                <CardHeader><CardTitle>Current System State (Read-only)</CardTitle></CardHeader>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-center">
-                  {[
-                    { label: "Revenue", value: formatCurrency(config.company_revenue) },
-                    { label: "Startup Stage", value: config.company_stage },
-                    { label: "Equity Range", value: `${config.equity_min_percentage}% - ${config.equity_max_percentage}%` },
-                    { label: "Profit Ratio", value: `${config.profit_percentage}%` },
-                    { label: "Expense Ratio", value: `${config.expense_percentage}%` },
-                    { label: "Claim Cycle", value: `#${config.current_claim_cycle}` },
-                    { label: "Pool Remaining", value: formatCurrency(config.payout_pool_amount) },
-                    { label: "Payout Capacity", value: config.payout_capacity },
-                    { label: "Vesting", value: `${config.vesting_days} days` },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
-                      <p className="text-xs text-gray-500 mb-1">{label}</p>
-                      <p className="font-bold text-gray-800 dark:text-white">{value}</p>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-          </div>
+              <div className="page-card !mb-0 p-10 bg-slate-900 dark:bg-slate-100 border-none shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] relative overflow-hidden group">
+                 <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:scale-110 transition-transform">
+                    <Settings size={120} strokeWidth={1} className="text-white dark:text-slate-900" />
+                 </div>
+                 
+                 <div className="flex items-center gap-3 mb-10 relative z-10">
+                    <div className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
+                    <h3 className="text-[10px] font-black text-white dark:text-slate-900 uppercase tracking-[0.4em]">Aggregated Manifest — Live System State</h3>
+                 </div>
 
-          <div className="mt-6 flex justify-end">
-            <Button type="submit" loading={saving} size="lg">
-              Save Configuration
-            </Button>
-          </div>
-        </form>
-      )}
+                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-10 relative z-10">
+                    {[
+                      { l: "Revenue Target", v: formatCurrency(config.company_revenue), c: "text-sky-400 dark:text-sky-600" },
+                      { l: "Reactor Pool", v: formatCurrency(config.payout_pool_amount), c: "text-purple-400 dark:text-purple-600" },
+                      { l: "Archetype Stage", v: config.company_stage, c: "text-white dark:text-slate-900" },
+                      { l: "Yield Factor", v: `${config.profit_percentage}%`, c: "text-emerald-400 dark:text-emerald-600" },
+                      { l: "Cycle Registry", v: `#${config.current_claim_cycle}`, c: "text-white dark:text-slate-900" },
+                      { l: "Lockdown Epoch", v: `${config.vesting_days} Days`, c: "text-amber-400 dark:text-amber-600" },
+                    ].map(st => (
+                      <div key={st.l} className="space-y-2">
+                         <p className="text-[8px] font-black text-white/40 dark:text-slate-900/40 uppercase tracking-[0.2em]">{st.l}</p>
+                         <p className={`text-sm font-black tracking-widest ${st.c}`}>{st.v}</p>
+                      </div>
+                    ))}
+                 </div>
+              </div>
+            )}
+          </form>
+        )}
+      </div>
     </DashboardShell>
   );
 }

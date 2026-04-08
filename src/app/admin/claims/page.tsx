@@ -67,78 +67,104 @@ export default function AdminClaimsPage() {
   }
 
   return (
-    <DashboardShell title="Claims Management">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex gap-2">
-          {["pending", "approved", "paid", "queued", ""].map((s) => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={`rounded-lg px-4 py-2 text-xs font-medium transition-colors ${
-                statusFilter === s ? "bg-sky-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400"
-              }`}
-            >
-              {s === "" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
-            </button>
-          ))}
-        </div>
-        <Button variant="secondary" size="sm" onClick={advanceCycle}>
-          Advance Cycle
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle>Claims ({claims.length})</CardTitle></CardHeader>
-        {loading ? (
-          <div className="py-12 text-center text-sm text-gray-400">Loading...</div>
-        ) : claims.length === 0 ? (
-          <div className="py-12 text-center text-sm text-gray-400">No claims found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-700 text-left text-xs text-gray-500">
-                  <th className="pb-3 pr-4">Employee</th>
-                  <th className="pb-3 pr-4">Amount</th>
-                  <th className="pb-3 pr-4">Cycle</th>
-                  <th className="pb-3 pr-4">Position</th>
-                  <th className="pb-3 pr-4">Status</th>
-                  <th className="pb-3 pr-4">Requested</th>
-                  <th className="pb-3">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
-                {claims.map((c) => (
-                  <tr key={c._id}>
-                    <td className="py-3 pr-4">
-                      <p className="font-medium">{c.employee?.name}</p>
-                      <p className="text-xs text-gray-500">{c.employee?.employeeId}</p>
-                    </td>
-                    <td className="py-3 pr-4 font-semibold">{formatCurrency(c.amount)}</td>
-                    <td className="py-3 pr-4 text-gray-500">#{c.cycle}</td>
-                    <td className="py-3 pr-4 text-gray-500">{c.queue_position ?? "—"}</td>
-                    <td className="py-3 pr-4">
-                      <Badge variant={statusBadgeVariant(c.status)}>{c.status}</Badge>
-                    </td>
-                    <td className="py-3 pr-4 text-gray-500">{formatDate(c.requested_at)}</td>
-                    <td className="py-3">
-                      {c.status === "approved" && (
-                        <Button
-                          size="sm"
-                          loading={processing === c._id}
-                          onClick={() => processClaim(c._id)}
-                        >
-                          Mark Paid
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    <DashboardShell title="Liquidity Management" subtitle="Approve, queue, and process employee incentive claims">
+      <div className="flex flex-col gap-8">
+        {/* Statistics and Cycle Controls */}
+        <div className="page-card !mb-0 flex flex-col md:flex-row justify-between items-center gap-6 border-t-8 border-t-purple-600">
+          <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 no-scrollbar">
+            {["pending", "approved", "paid", "queued", ""].map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                  statusFilter === s 
+                    ? "bg-purple-600 text-white shadow-lg shadow-purple-600/20" 
+                    : "bg-[hsl(var(--surface-raised))] text-muted border border-default hover:text-foreground hover:bg-surface"
+                }`}
+              >
+                {s === "" ? "Global Data" : s}
+              </button>
+            ))}
           </div>
-        )}
-      </Card>
+          <button 
+             onClick={advanceCycle}
+             className="w-full md:w-auto px-8 py-3 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-black text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-xl"
+          >
+            Trigger New Cycle
+          </button>
+        </div>
+
+        {/* Claims Directory */}
+        <div className="page-card !mb-0">
+          <div className="mb-8">
+             <h3 className="text-xl font-black text-foreground uppercase tracking-widest">Active Claims Registry</h3>
+             <p className="text-xs text-muted font-bold mt-1">Personnel requests awaiting financial clearance</p>
+          </div>
+
+          {loading ? (
+            <div className="space-y-4 animate-pulse">
+               {[1,2,3,4,5].map(i => <div key={i} className="h-20 bg-[hsl(var(--surface-raised))] rounded-2xl" />)}
+            </div>
+          ) : claims.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 bg-[hsl(var(--surface-raised))] rounded-22xl border border-default border-dashed">
+               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted mb-4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+               <p className="text-sm font-bold text-muted">No records found for current filter</p>
+            </div>
+          ) : (
+            <div className="data-table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Requester</th>
+                    <th>Grant Valuation</th>
+                    <th>Cycle</th>
+                    <th>Queue Pos</th>
+                    <th>Current State</th>
+                    <th>Request Date</th>
+                    <th className="text-right pr-4">Execution</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {claims.map((c) => (
+                    <tr key={c._id} className="group cursor-default hover:bg-[hsl(var(--surface-raised))] transition-colors">
+                      <td className="py-5">
+                        <div className="flex flex-col">
+                           <span className="font-bold text-foreground group-hover:text-purple-600 transition-colors uppercase tracking-tight">{c.employee?.name}</span>
+                           <span className="text-[10px] text-muted font-black uppercase">{c.employee?.employeeId}</span>
+                        </div>
+                      </td>
+                      <td><span className="text-sm font-black text-emerald-600">{formatCurrency(c.amount)}</span></td>
+                      <td className="text-xs font-bold text-muted">CYCLE #{c.cycle}</td>
+                      <td>
+                         {c.queue_position ? (
+                            <div className="w-8 h-8 rounded-lg bg-[hsl(var(--surface-raised))] border border-default flex items-center justify-center text-xs font-black text-purple-600 shadow-sm">
+                               {c.queue_position}
+                            </div>
+                         ) : <span className="text-muted">—</span>}
+                      </td>
+                      <td>
+                        <Badge variant={statusBadgeVariant(c.status)}>{c.status}</Badge>
+                      </td>
+                      <td className="text-xs font-bold text-muted">{formatDate(c.requested_at)}</td>
+                      <td className="text-right pr-4">
+                        {c.status === "approved" && (
+                          <button
+                            onClick={() => processClaim(c._id)}
+                            disabled={processing === c._id}
+                            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50"
+                          >
+                            {processing === c._id ? "Processing..." : "Authorize Payout"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </DashboardShell>
   );
 }

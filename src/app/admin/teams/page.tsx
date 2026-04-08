@@ -3,30 +3,7 @@
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Building2, Users, Plus, Search, MoreHorizontal, Crown } from "lucide-react";
 import { useState } from "react";
-
-const TEAMS = [
-  { id: 1, name: "Product Design", department: "Product", lead: "Priya Sharma", members: 6, budget: 85000, active: true },
-  { id: 2, name: "Frontend Dev", department: "Engineering", lead: "Rahul Mehta", members: 8, budget: 120000, active: true },
-  { id: 3, name: "Backend Dev", department: "Engineering", lead: "Arjun Singh", members: 7, budget: 130000, active: true },
-  { id: 4, name: "DevOps", department: "Engineering", lead: "Sneha Patel", members: 3, budget: 70000, active: true },
-  { id: 5, name: "Sales North", department: "Sales", lead: "Amit Verma", members: 5, budget: 60000, active: true },
-  { id: 6, name: "Sales South", department: "Sales", lead: "Deepa Nair", members: 4, budget: 55000, active: true },
-  { id: 7, name: "Marketing", department: "Marketing", lead: "Rohan Gupta", members: 5, budget: 90000, active: true },
-  { id: 8, name: "Content", department: "Marketing", lead: "Neha Kapoor", members: 4, budget: 50000, active: true },
-  { id: 9, name: "Customer Success", department: "Operations", lead: "Kiran Reddy", members: 6, budget: 65000, active: true },
-  { id: 10, name: "Support", department: "Operations", lead: "Vikram Joshi", members: 5, budget: 45000, active: true },
-  { id: 11, name: "Finance", department: "Finance", lead: "Anita Kumar", members: 3, budget: 40000, active: true },
-  { id: 12, name: "HR", department: "People", lead: "Pooja Sharma", members: 3, budget: 35000, active: true },
-  { id: 13, name: "Legal", department: "Legal", lead: "Rajesh Iyer", members: 2, budget: 30000, active: true },
-  { id: 14, name: "Data Science", department: "Engineering", lead: "Siddharth Roy", members: 4, budget: 100000, active: true },
-  { id: 15, name: "QA", department: "Engineering", lead: "Meera Shah", members: 3, budget: 50000, active: true },
-  { id: 16, name: "Mobile Dev", department: "Engineering", lead: "Arun Nair", members: 4, budget: 95000, active: true },
-  { id: 17, name: "Business Dev", department: "Sales", lead: "Suresh Pillai", members: 3, budget: 55000, active: true },
-  { id: 18, name: "Research", department: "Product", lead: "Divya Menon", members: 3, budget: 45000, active: true },
-  { id: 19, name: "Security", department: "Engineering", lead: "Naveen Rao", members: 2, budget: 60000, active: true },
-  { id: 20, name: "Infrastructure", department: "Engineering", lead: "Lakshmi Devi", members: 3, budget: 75000, active: true },
-  { id: 21, name: "Analytics", department: "Product", lead: "Kartik Verma", members: 4, budget: 70000, active: true },
-];
+import { CORPORATE_TEAMS as TEAMS } from "@/constants/teams";
 
 const DEPT_COLORS: Record<string, string> = {
   Engineering: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
