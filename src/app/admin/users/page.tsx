@@ -21,6 +21,14 @@ import {
   Zap,
   Clock
 } from "lucide-react";
+import { 
+  Select, 
+  SelectContent, 
+  SelectGroup, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/Select";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { CORPORATE_TEAMS } from "@/constants/teams";
 
@@ -170,43 +178,57 @@ export default function AdminUsersPage() {
                            </div>
                         ))}
 
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 overflow-visible">
                            <div className="flex items-center gap-2 mb-1">
                               <Building size={14} className="text-slate-300" />
                               <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Functional Unit / Team</label>
                            </div>
-                           <select
-                              required
+                           <Select 
+                              onValueChange={(val) => setForm({ ...form, department: val })}
                               value={form.department}
-                              onChange={(e) => setForm({ ...form, department: e.target.value })}
-                              className="w-full rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-900 outline-none focus:bg-white focus:border-slate-900 transition-all font-bold appearance-none cursor-pointer"
+                              required
                            >
-                              <option value="">SELECT ASSIGNED TEAM</option>
-                              {CORPORATE_TEAMS.map(team => (
-                                 <option key={team.id} value={team.name}>{team.name.toUpperCase()}</option>
-                              ))}
-                           </select>
+                              <SelectTrigger>
+                                 <SelectValue placeholder="SELECT ASSIGNED TEAM" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                 <SelectGroup>
+                                    {CORPORATE_TEAMS.map(team => (
+                                       <SelectItem key={team.id} value={team.name}>{team.name.toUpperCase()}</SelectItem>
+                                    ))}
+                                 </SelectGroup>
+                              </SelectContent>
+                           </Select>
                         </div>
+
                         <DatePicker 
                            label="Company Onboarding Date" 
                            value={form.joiningDate}
                            onChange={(date) => setForm({ ...form, joiningDate: date })} 
                         />
-                        <div className="space-y-1.5">
+
+                        <div className="space-y-1.5 overflow-visible">
                            <div className="flex items-center gap-2 mb-1">
                               <ShieldCheck size={14} className="text-slate-300" />
                               <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Clearance Level</label>
                            </div>
-                           <select
+                           <Select 
+                              onValueChange={(val) => setForm({ ...form, role: val })}
                               value={form.role}
-                              onChange={(e) => setForm({ ...form, role: e.target.value })}
-                              className="w-full rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-900 outline-none focus:bg-white focus:border-slate-900 transition-all font-bold appearance-none"
+                              required
                            >
-                              <option value="employee">STANDARD MEMBER</option>
-                              <option value="hr">HUMAN RESOURCES (HR)</option>
-                              <option value="lead">FUNCTIONAL LEAD</option>
-                              <option value="super_admin">SYSTEM ARCHITECT</option>
-                           </select>
+                              <SelectTrigger>
+                                 <SelectValue placeholder="SET CLEARANCE LEVEL" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                 <SelectGroup>
+                                    <SelectItem value="employee">STANDARD MEMBER</SelectItem>
+                                    <SelectItem value="hr">HUMAN RESOURCES (HR)</SelectItem>
+                                    <SelectItem value="lead">FUNCTIONAL LEAD</SelectItem>
+                                    <SelectItem value="super_admin">SYSTEM ARCHITECT</SelectItem>
+                                 </SelectGroup>
+                              </SelectContent>
+                           </Select>
                         </div>
                      </div>
                      

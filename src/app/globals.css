@@ -101,6 +101,13 @@
 }
 
 @layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
   .page-card {
     background-color: hsl(var(--surface));
     border: 1px solid hsl(var(--border));

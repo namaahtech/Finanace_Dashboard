@@ -39,7 +39,7 @@ const EMPLOYEES = [
   { id: "6", name: "Rohan Gupta", role: "HR", clockIn: "09:05 AM", clockOut: "06:00 PM", hours: "8.9", compliance: 94, status: "Present" },
 ];
 
-export default function AttendancePage() {
+export default function AdminAttendancePage() {
   const [selectedRole, setSelectedRole] = useState("Executive");
   const stats = ROLE_STATS[selectedRole as keyof typeof ROLE_STATS];
 
