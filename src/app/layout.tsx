@@ -7,18 +7,18 @@ import { AuthProvider } from "@/components/layout/AuthProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Namaah Pulse",
-  description: "Performance, Incentive & Payout Management System",
+ title: "Namaah Pulse",
+ description: "Performance, Incentive & Payout Management System",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <AuthProvider>{children}</AuthProvider>
-        </ThemeProvider>
-      </body>
-    </html>
-  );
+ return (
+ <html lang="en" suppressHydrationWarning>
+ <body className={inter.className}>
+ <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+ <AuthProvider>{children}</AuthProvider>
+ </ThemeProvider>
+ </body>
+ </html>
+ );
 }

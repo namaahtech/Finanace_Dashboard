@@ -1,70 +1,168 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────
+   CSS DESIGN TOKENS — light & dark
+   All colours reference these vars so toggling .dark
+   on <html> switches the entire UI automatically.
+───────────────────────────────────────────────────────── */
 @layer base {
   :root {
-    /* Premium Modern Enterprise - Linear & Stripe Inspired */
-    --background: 210 20% 98%; 
-    --surface: 0 0% 100%;
-    --surface-raised: 210 20% 96%;
-    --surface-overlay: 210 20% 94%;
-
-    /* Sophisticated Slate Typography */
-    --foreground: 222 47% 11%;
-    --foreground-muted: 215 16% 47%;
-    --foreground-subtle: 214 14% 65%;
-
-    /* Soft Precision Borders */
-    --border: 214 32% 91%;
-    --border-strong: 222 47% 11%;
-
-    /* Primary - Slate 900 (Formal & High-End) */
-    --primary: 222 47% 11%;
-    --primary-foreground: 210 40% 98%;
-    --primary-hover: 0 0% 0%;
-
-    --radius: 0.5rem; 
-    --radius-sm: 0.25rem;
+    /* Page background */
+    --bg:               210 20% 98%;        /* slate-50ish */
+    /* Card / panel surfaces */
+    --surface:          0 0% 100%;          /* white */
+    --surface-raised:   210 17% 95%;        /* hover rows, filter pills */
+    --surface-overlay:  210 14% 91%;        /* deepest inset */
+    /* Text */
+    --fg:               222 47% 11%;        /* slate-900 */
+    --fg-muted:         215 16% 47%;        /* slate-500 */
+    --fg-subtle:        214 14% 65%;        /* slate-400 */
+    /* Borders */
+    --border:           214 32% 91%;        /* slate-200 */
+    --border-strong:    215 20% 78%;        /* slate-300 */
+    /* Brand */
+    --primary:          222 47% 11%;        /* slate-900 */
+    --primary-fg:       210 40% 98%;
+    --primary-hover:    0 0% 0%;
+    /* Sidebar */
+    --sidebar-bg:       210 17% 97%;        /* slightly off-white */
+    --sidebar-border:   214 32% 91%;
+    --sidebar-active-bg: 222 47% 11%;       /* slate-900 */
+    --sidebar-active-fg: 0 0% 100%;
+    --sidebar-hover-bg: 210 20% 93%;
+    /* Semantic */
+    --success:          160 84% 39%;
+    --success-bg:       152 81% 96%;
+    --success-fg:       158 64% 25%;
+    --warning:          38 92% 50%;
+    --warning-bg:       48 100% 95%;
+    --warning-fg:       32 81% 29%;
+    --danger:           0 84% 60%;
+    --danger-bg:        0 86% 97%;
+    --danger-fg:        0 72% 40%;
+    --info:             199 89% 48%;
+    --info-bg:          204 100% 97%;
+    --info-fg:          200 98% 25%;
+    --purple:           262 83% 58%;
+    --purple-bg:        270 100% 98%;
+    --purple-fg:        263 70% 40%;
+    /* Input */
+    --input-bg:         0 0% 100%;
+    --input-border:     214 32% 88%;
+    --ring:             222 47% 11%;
+    --radius:           0.5rem;
   }
 
   .dark {
-    --background: 222 47% 4%;
-    --surface: 222 47% 7%;
-    --surface-raised: 222 47% 10%;
-    --foreground: 210 40% 98%;
-    --border: 217 33% 15%;
-    --border-strong: 210 40% 98%;
+    --bg:               222 47% 5%;
+    --surface:          222 47% 8%;
+    --surface-raised:   222 40% 12%;
+    --surface-overlay:  222 35% 16%;
+    --fg:               210 40% 96%;
+    --fg-muted:         215 20% 58%;
+    --fg-subtle:        215 15% 42%;
+    --border:           217 33% 16%;
+    --border-strong:    217 25% 24%;
+    --primary:          210 40% 96%;        /* inverted in dark — light text */
+    --primary-fg:       222 47% 8%;
+    --primary-hover:    210 40% 88%;
+    --sidebar-bg:       222 47% 6%;
+    --sidebar-border:   217 33% 13%;
+    --sidebar-active-bg: 210 40% 96%;
+    --sidebar-active-fg: 222 47% 8%;
+    --sidebar-hover-bg: 222 40% 12%;
+    --success:          160 60% 45%;
+    --success-bg:       160 40% 10%;
+    --success-fg:       160 60% 65%;
+    --warning:          38 85% 55%;
+    --warning-bg:       38 40% 10%;
+    --warning-fg:       38 85% 70%;
+    --danger:           0 75% 62%;
+    --danger-bg:        0 40% 10%;
+    --danger-fg:        0 75% 75%;
+    --info:             199 89% 55%;
+    --info-bg:          199 40% 10%;
+    --info-fg:          199 89% 70%;
+    --purple:           262 75% 65%;
+    --purple-bg:        262 40% 12%;
+    --purple-fg:        262 75% 80%;
+    --input-bg:         222 40% 10%;
+    --input-border:     217 33% 20%;
+    --ring:             210 40% 70%;
   }
 }
 
+/* ─────────────────────────────────────────────────────────
+   BASE RESETS
+───────────────────────────────────────────────────────── */
 @layer base {
-  * {
-    border-color: hsl(var(--border));
-  }
+  *, *::before, *::after { border-color: hsl(var(--border)); }
+
+  html { color-scheme: light; }
+  html.dark { color-scheme: dark; }
+
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-    /* Switching to Plus Jakarta Sans for maximum legibility and premium feel */
-    font-family: 'Plus Jakarta Sans', sans-serif;
+    background-color: hsl(var(--bg));
+    color: hsl(var(--fg));
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     letter-spacing: -0.01em;
   }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border-strong));
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--fg-subtle)); }
+  .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
 }
 
+/* ─────────────────────────────────────────────────────────
+   COMPONENT CLASSES
+   Use these everywhere instead of raw Tailwind bg-white etc.
+───────────────────────────────────────────────────────── */
 @layer components {
-  /* Modern Enterprise Card */
+
+  /* Main page content card */
+  .page-card {
+    background-color: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04);
+  }
+
+  /* Stat / metric card */
+  .stat-card {
+    background-color: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  /* Enterprise card (alias) */
   .enterprise-card {
     background-color: hsl(var(--surface));
     border: 1px solid hsl(var(--border));
     border-radius: var(--radius);
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Formal Data Table */
+  /* Table wrapper */
   .data-table-container {
     width: 100%;
     overflow: hidden;
@@ -73,68 +171,110 @@
     border-radius: var(--radius);
   }
 
+  /* Table */
   .data-table {
     width: 100%;
     text-align: left;
     font-size: 0.75rem;
     border-collapse: collapse;
   }
-  
   .data-table thead {
     background-color: hsl(var(--surface-raised));
     border-bottom: 1px solid hsl(var(--border));
   }
-
   .data-table th {
-    padding: 1rem;
-    font-weight: 700; /* Increased weight for visibility */
-    color: hsl(var(--foreground));
+    padding: 0.875rem 1rem;
+    font-weight: 700;
+    color: hsl(var(--fg-muted));
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    font-size: 0.65rem;
+    white-space: nowrap;
   }
-  
   .data-table td {
-    padding: 1rem;
-    border-bottom: 1px solid hsl(var(--surface-raised));
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid hsl(var(--border));
     vertical-align: middle;
+    color: hsl(var(--fg));
   }
-}
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tbody tr:hover td { background-color: hsl(var(--surface-raised)); }
 
-@layer utilities {
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  /* Input / Select / Textarea */
+  .field {
+    width: 100%;
+    border-radius: 0.5rem;
+    border: 1px solid hsl(var(--input-border));
+    background-color: hsl(var(--input-bg));
+    color: hsl(var(--fg));
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  .field:focus {
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12);
   }
-  .page-card {
-    background-color: hsl(var(--surface));
-    border: 1px solid hsl(var(--border));
-    padding: 1.5rem;
-    border-radius: var(--radius);
-  }
+  .field::placeholder { color: hsl(var(--fg-subtle)); }
+  select.field { cursor: pointer; }
+  textarea.field { resize: vertical; }
 
-  .stat-card {
-    @apply enterprise-card;
-    padding: 1.25rem;
-  }
-
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.25rem 0.625rem;
-    border-radius: 0.375rem;
-    font-size: 10px;
-    font-weight: 800; /* Increased weight */
+  /* Section divider label */
+  .section-label {
+    font-size: 0.625rem;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.15em;
+    color: hsl(var(--fg-subtle));
+    padding: 0 0.25rem;
+    margin-bottom: 0.375rem;
   }
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { 
-  background: hsl(var(--foreground-subtle)); 
-  border-radius: 9999px;
+/* ─────────────────────────────────────────────────────────
+   UTILITY OVERRIDES
+   These make bg-white / bg-slate-* / text-slate-* etc.
+   all respond to dark mode automatically via CSS vars.
+───────────────────────────────────────────────────────── */
+@layer utilities {
+  /* Surfaces */
+  .bg-page      { background-color: hsl(var(--bg)); }
+  .bg-surface   { background-color: hsl(var(--surface)); }
+  .bg-raised    { background-color: hsl(var(--surface-raised)); }
+  .bg-overlay   { background-color: hsl(var(--surface-overlay)); }
+
+  /* Text */
+  .text-default { color: hsl(var(--fg)); }
+  .text-muted   { color: hsl(var(--fg-muted)); }
+  .text-subtle  { color: hsl(var(--fg-subtle)); }
+
+  /* Borders */
+  .border-default { border-color: hsl(var(--border)); }
+  .border-strong  { border-color: hsl(var(--border-strong)); }
+
+  /* Semantic */
+  .bg-success-subtle { background-color: hsl(var(--success-bg)); }
+  .text-success      { color: hsl(var(--success-fg)); }
+  .bg-warning-subtle { background-color: hsl(var(--warning-bg)); }
+  .text-warning      { color: hsl(var(--warning-fg)); }
+  .bg-danger-subtle  { background-color: hsl(var(--danger-bg)); }
+  .text-danger       { color: hsl(var(--danger-fg)); }
+  .bg-info-subtle    { background-color: hsl(var(--info-bg)); }
+  .text-info         { color: hsl(var(--info-fg)); }
+  .bg-purple-subtle  { background-color: hsl(var(--purple-bg)); }
+  .text-purple       { color: hsl(var(--purple-fg)); }
+
+  /* Sidebar */
+  .bg-sidebar        { background-color: hsl(var(--sidebar-bg)); }
+  .border-sidebar    { border-color: hsl(var(--sidebar-border)); }
+}
+
+/* ─────────────────────────────────────────────────────────
+   PRINT
+───────────────────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+  .page-card, .enterprise-card, .stat-card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
 }
