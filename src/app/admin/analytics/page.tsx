@@ -10,8 +10,9 @@ import {
 } from "lucide-react";
 
 // ─── Color Tokens ────────────────────────────────────────────────────────────
-const B = "#0F1117";   // background
-const S = "#1A1D2E";   // surface
+// Switched to Paper Slate Light Theme
+const B = "#FBFBFA";   // background
+const S = "white";     // surface
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 const formatRupee = (n: number, compact = false) => {
@@ -93,18 +94,18 @@ const EMP = {
 // ─── Sub-Components ───────────────────────────────────────────────────────────
 function KPICard({ label, value, delta, positive, icon: Icon, accent }: any) {
   return (
-    <div className="rounded-xl p-5 flex flex-col gap-3 border transition-all hover:border-white/10 hover:-translate-y-0.5" style={{ background: S, borderColor: "rgba(255,255,255,0.05)" }}>
+    <div className="rounded-lg p-5 flex flex-col gap-3 border transition-shadow bg-white shadow-[0_1px_6px_rgba(0,0,0,0.03)] border-black/5 hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
       <div className="flex items-center justify-between">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${accent}20` }}>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center p-1" style={{ background: `${accent}15` }}>
           <Icon size={16} style={{ color: accent }} />
         </div>
-        <div className={cn("flex items-center gap-0.5 text-[10px] font-black px-2 py-0.5 rounded uppercase", positive ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400")}>
+        <div className={cn("flex items-center gap-0.5 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wide", positive ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600")}>
           {positive ? <ChevronUp size={10} strokeWidth={3}/> : <ChevronDown size={10} strokeWidth={3}/>}{delta}
         </div>
       </div>
       <div>
-        <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">{label}</p>
-        <p className="text-2xl font-black text-white tracking-tight">{value}</p>
+        <p className="text-[10px] font-black text-black/30 uppercase tracking-widest mb-1">{label}</p>
+        <p className="text-2xl font-black text-black/80 tracking-tight">{value}</p>
       </div>
     </div>
   );
@@ -112,10 +113,10 @@ function KPICard({ label, value, delta, positive, icon: Icon, accent }: any) {
 
 function ChartCard({ title, subtitle, children, className = "" }: any) {
   return (
-    <div className={cn("rounded-xl p-5 border", className)} style={{ background: S, borderColor: "rgba(255,255,255,0.05)" }}>
+    <div className={cn("rounded-lg p-5 border bg-white shadow-[0_1px_6px_rgba(0,0,0,0.03)] border-black/5", className)}>
       <div className="mb-4">
-        <h3 className="text-[11px] font-black text-white uppercase tracking-widest">{title}</h3>
-        {subtitle && <p className="text-[10px] font-bold text-white/30 mt-0.5">{subtitle}</p>}
+        <h3 className="text-[11px] font-black text-black/70 uppercase tracking-widest">{title}</h3>
+        {subtitle && <p className="text-[10px] font-bold text-black/30 mt-0.5">{subtitle}</p>}
       </div>
       {children}
     </div>
@@ -127,10 +128,12 @@ function BarChart({ data, color = "#38BDF8", height = 120, showLabels = true }: 
   return (
     <div className="flex items-end gap-1.5 w-full" style={{ height }}>
       {data.map((d, i) => (
-        <div key={i} className="flex flex-col items-center gap-1 flex-grow">
-          <span className="text-[8px] font-black text-white/40">{typeof d.v === "number" && d.v > 100000 ? formatRupee(d.v, true) : `${d.v}${d.v <= 100 ? "%" : ""}`}</span>
-          <div className="w-full rounded-t-md transition-all hover:opacity-90 cursor-pointer" style={{ height: `${(d.v / max) * (height - 24)}px`, background: `linear-gradient(180deg, ${color}CC, ${color}66)` }} />
-          {showLabels && <span className="text-[7px] font-black text-white/30 uppercase">{d.label}</span>}
+        <div key={i} className="flex flex-col items-center gap-1 flex-grow group">
+          <span className="text-[8px] font-black text-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+            {typeof d.v === "number" && d.v > 100000 ? formatRupee(d.v, true) : `${d.v}${d.v <= 100 ? "%" : ""}`}
+          </span>
+          <div className="w-full rounded-t-md transition-all hover:opacity-90 cursor-pointer" style={{ height: `${(d.v / max) * (height - 24)}px`, background: color }} />
+          {showLabels && <span className="text-[7px] font-black text-black/30 uppercase">{d.label}</span>}
         </div>
       ))}
     </div>
@@ -149,27 +152,27 @@ function DualAreaChart({ revenue, expenses, labels }: { revenue: number[]; expen
     <div className="w-full">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 180 }} preserveAspectRatio="none">
         <defs>
-          <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.02" />
+          <linearGradient id="revGradLight" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.0" />
           </linearGradient>
-          <linearGradient id="expGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#F87171" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#F87171" stopOpacity="0.02" />
+          <linearGradient id="expGradLight" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#F87171" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="#F87171" stopOpacity="0.0" />
           </linearGradient>
         </defs>
-        <path d={area(revenue)} fill="url(#revGrad)" />
-        <path d={area(expenses)} fill="url(#expGrad)" />
-        <polyline points={pts(revenue)} fill="none" stroke="#38BDF8" strokeWidth="0.8" />
-        <polyline points={pts(expenses)} fill="none" stroke="#F87171" strokeWidth="0.8" />
+        <path d={area(revenue)} fill="url(#revGradLight)" />
+        <path d={area(expenses)} fill="url(#expGradLight)" />
+        <polyline points={pts(revenue)} fill="none" stroke="#38BDF8" strokeWidth="1" />
+        <polyline points={pts(expenses)} fill="none" stroke="#F87171" strokeWidth="1" />
         {revenue.map((v, i) => {
           const x = pad + (i / (revenue.length - 1 || 1)) * (W - 2 * pad);
           const y = H - pad - ((v / max) * (H - 2 * pad));
-          return <circle key={i} cx={x} cy={y} r="1" fill="#38BDF8" />;
+          return <circle key={i} cx={x} cy={y} r="1.5" fill="#38BDF8" stroke="white" strokeWidth="0.5" />;
         })}
       </svg>
       <div className="flex justify-between mt-1">
-        {labels.map((l, i) => <span key={i} className="text-[7px] font-black text-white/25">{l}</span>)}
+        {labels.map((l, i) => <span key={i} className="text-[7px] font-black text-black/25">{l}</span>)}
       </div>
     </div>
   );
@@ -197,15 +200,15 @@ function DonutChart({ data }: { data: { label: string; v: number; color: string 
   };
   return (
     <div className="flex items-center gap-4">
-      <svg viewBox="0 0 100 100" className="w-32 h-32 flex-shrink-0">
-        {data.map((d) => <path key={d.label} d={arc((d.v / total) * 100)} fill={d.color} opacity="0.85" />)}
+      <svg viewBox="0 0 100 100" className="w-32 h-32 flex-shrink-0 drop-shadow-sm">
+        {data.map((d) => <path key={d.label} d={arc((d.v / total) * 100)} fill={d.color} opacity="1" />)}
       </svg>
       <div className="space-y-2">
         {data.map(d => (
           <div key={d.label} className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: d.color }} />
-            <span className="text-[10px] font-bold text-white/50">{d.label}</span>
-            <span className="text-[10px] font-black text-white/80 ml-auto">{d.v}%</span>
+            <span className="text-[10px] font-bold text-black/50">{d.label}</span>
+            <span className="text-[10px] font-black text-black/80 ml-auto">{d.v}%</span>
           </div>
         ))}
       </div>
@@ -217,11 +220,11 @@ function ProgressBar({ label, v, color }: { label: string; v: number; color: str
   return (
     <div className="space-y-1">
       <div className="flex justify-between items-center">
-        <span className="text-[10px] font-bold text-white/50">{label}</span>
+        <span className="text-[10px] font-bold text-black/50">{label}</span>
         <span className="text-[10px] font-black" style={{ color }}>{v}%</span>
       </div>
-      <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${v}%`, background: `linear-gradient(90deg, ${color}99, ${color})` }} />
+      <div className="h-1.5 rounded-full bg-black/5 overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${v}%`, background: color }} />
       </div>
     </div>
   );
@@ -235,7 +238,7 @@ function SparkLine({ data, color = "#38BDF8", height = 60 }: { data: number[]; c
     <svg viewBox={`0 0 100 ${height}`} className="w-full" style={{ height }} preserveAspectRatio="none">
       <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" />
       {data.map((v, i) => (
-        <circle key={i} cx={(i / (data.length - 1 || 1)) * 100} cy={height - ((v - min) / range) * height} r="2" fill={color} />
+        <circle key={i} cx={(i / (data.length - 1 || 1)) * 100} cy={height - ((v - min) / range) * height} r="1.5" fill={color} />
       ))}
     </svg>
   );
@@ -254,19 +257,19 @@ function CompanyView({ period }: { period: string }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-5 gap-3">
-        <KPICard label="Total Revenue"       value={formatRupee(COMPANY.kpi.revenue, true)}  delta="18.4%" positive icon={TrendingUp}    accent="#38BDF8" />
-        <KPICard label="Total Expenses"      value={formatRupee(COMPANY.kpi.expenses, true)} delta="4.2%"  positive={false} icon={TrendingDown} accent="#F87171" />
-        <KPICard label="Net Profit"          value={formatRupee(COMPANY.kpi.profit, true)}   delta="22.1%" positive icon={IndianRupee}   accent="#34D399" />
-        <KPICard label="Active Projects"     value="24"                             delta="3 new" positive icon={Briefcase}     accent="#818CF8" />
-        <KPICard label="Budget Utilization"  value="78.3%"                          delta="On Track" positive icon={Target}     accent="#FBBF24" />
+        <KPICard label="Total Revenue"       value={formatRupee(COMPANY.kpi.revenue, true)}  delta="18.4%" positive icon={TrendingUp}    accent="#0ea5e9" />
+        <KPICard label="Total Expenses"      value={formatRupee(COMPANY.kpi.expenses, true)} delta="4.2%"  positive={false} icon={TrendingDown} accent="#ef4444" />
+        <KPICard label="Net Profit"          value={formatRupee(COMPANY.kpi.profit, true)}   delta="22.1%" positive icon={IndianRupee}   accent="#10b981" />
+        <KPICard label="Active Projects"     value="24"                             delta="3 new" positive icon={Briefcase}     accent="#6366f1" />
+        <KPICard label="Budget Utilization"  value="78.3%"                          delta="On Track" positive icon={Target}     accent="#f59e0b" />
       </div>
 
       <div className="grid grid-cols-3 gap-3">
         <ChartCard title="Revenue vs Expense Trend" subtitle="Monthly cash flow comparison" className="col-span-2">
           <div className="flex items-center gap-4 mb-3">
-            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-sky-400" /><span className="text-[9px] font-black text-white/40 uppercase">Revenue</span></div>
-            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-400" /><span className="text-[9px] font-black text-white/40 uppercase">Expenses</span></div>
-            <div className="ml-auto text-[9px] font-black text-white/30 uppercase">YTD Peak: {formatRupee(Math.max(...COMPANY.revenue), true)}</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-sky-500" /><span className="text-[9px] font-black text-black/40 uppercase">Revenue</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-500" /><span className="text-[9px] font-black text-black/40 uppercase">Expenses</span></div>
+            <div className="ml-auto text-[9px] font-black text-black/30 uppercase">YTD Peak: {formatRupee(Math.max(...COMPANY.revenue), true)}</div>
           </div>
           <DualAreaChart revenue={revSlice} expenses={expSlice} labels={MONTHS.slice(-revSlice.length)} />
         </ChartCard>
@@ -282,14 +285,14 @@ function CompanyView({ period }: { period: string }) {
         <ChartCard title="Project Health Matrix" subtitle="Delivery score by project">
           <div className="space-y-2.5 mt-1">
             {COMPANY.projects.map(p => {
-              const color = p.health >= 80 ? "#34D399" : p.health >= 65 ? "#FBBF24" : "#F87171";
+              const color = p.health >= 80 ? "#10b981" : p.health >= 65 ? "#f59e0b" : "#ef4444";
               return (
                 <div key={p.name} className="space-y-1">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-white/60">{p.name}</span>
+                    <span className="text-[10px] font-bold text-black/60">{p.name}</span>
                     <span className="text-[10px] font-black" style={{ color }}>{p.health}%</span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                  <div className="h-1.5 rounded-full bg-black/5 overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${p.health}%`, background: color }} />
                   </div>
                 </div>
@@ -316,9 +319,9 @@ function CompanyView({ period }: { period: string }) {
       <ChartCard title="Monthly Profit & Loss Ledger" subtitle="Last 6 months financial summary">
         <table className="w-full mt-2">
           <thead>
-            <tr className="border-b border-white/5">
+            <tr className="border-b border-black/5">
               {["Month", "Revenue", "Expenses", "Gross Profit", "Expense Ratio", "Trend"].map(h => (
-                <th key={h} className="text-left pb-2 text-[9px] font-black text-white/25 uppercase tracking-widest pr-4">{h}</th>
+                <th key={h} className="text-left pb-2 text-[9px] font-black text-black/30 uppercase tracking-widest pr-4">{h}</th>
               ))}
             </tr>
           </thead>
@@ -328,16 +331,16 @@ function CompanyView({ period }: { period: string }) {
               const ratioValue = ((row.expenses / row.revenue) * 100).toFixed(1);
               const isHighRatio = parseFloat(ratioValue) > 35;
               return (
-                <tr key={i} className={cn("border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors", i % 2 === 1 && "bg-white/[0.01]")}>
-                  <td className="py-3 text-[11px] font-black text-white/60 pr-4">{row.month}</td>
-                  <td className="py-3 text-[11px] font-bold text-sky-400 pr-4">{formatRupee(row.revenue, true)}</td>
-                  <td className="py-3 text-[11px] font-bold text-rose-400 pr-4">{formatRupee(row.expenses, true)}</td>
-                  <td className="py-3 text-[11px] font-black text-emerald-400 pr-4">{formatRupee(profitValue, true)}</td>
+                <tr key={i} className={cn("border-b border-black/[0.04] hover:bg-black/[0.02] transition-colors", i % 2 === 1 && "bg-black/[0.01]")}>
+                  <td className="py-3 text-[11px] font-black text-black/60 pr-4">{row.month}</td>
+                  <td className="py-3 text-[11px] font-bold text-sky-600 pr-4">{formatRupee(row.revenue, true)}</td>
+                  <td className="py-3 text-[11px] font-bold text-rose-600 pr-4">{formatRupee(row.expenses, true)}</td>
+                  <td className="py-3 text-[11px] font-black text-emerald-600 pr-4">{formatRupee(profitValue, true)}</td>
                   <td className="py-3 pr-4">
-                    <span className={cn("px-2 py-0.5 rounded text-[9px] font-black", isHighRatio ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400")}>{ratioValue}%</span>
+                    <span className={cn("px-2 py-0.5 rounded text-[9px] font-black", isHighRatio ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600")}>{ratioValue}%</span>
                   </td>
                   <td className="py-3">
-                    {profitValue > 0 ? <TrendingUp size={12} className="text-emerald-400" /> : <TrendingDown size={12} className="text-rose-400" />}
+                    {profitValue > 0 ? <TrendingUp size={12} className="text-emerald-500" /> : <TrendingDown size={12} className="text-rose-500" />}
                   </td>
                 </tr>
               );
@@ -357,23 +360,23 @@ function EmployeeView({ period }: { period: string }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-4 gap-3">
-        <KPICard label="Avg KPI Score"     value={`${EMP.kpi.avgKpi.toFixed(1)}%`}  delta="3.2%"  positive icon={Activity}  accent="#818CF8" />
-        <KPICard label="Total Revenue Gen" value={formatRupee(EMP.kpi.totalRevenue, true)}    delta="14.8%" positive icon={TrendingUp} accent="#38BDF8" />
-        <KPICard label="Avg Attendance"    value={`${EMP.kpi.avgAttendance}%`}       delta="1.1%"  positive icon={CheckCircle} accent="#34D399" />
-        <KPICard label="Incentives Paid"   value={formatRupee(EMP.kpi.totalIncentive, true)}  delta="8.3%"  positive icon={Award}      accent="#FBBF24" />
+        <KPICard label="Avg KPI Score"     value={`${EMP.kpi.avgKpi.toFixed(1)}%`}  delta="3.2%"  positive icon={Activity}  accent="#6366f1" />
+        <KPICard label="Total Revenue Gen" value={formatRupee(EMP.kpi.totalRevenue, true)}    delta="14.8%" positive icon={TrendingUp} accent="#0ea5e9" />
+        <KPICard label="Avg Attendance"    value={`${EMP.kpi.avgAttendance}%`}       delta="1.1%"  positive icon={CheckCircle} accent="#10b981" />
+        <KPICard label="Incentives Paid"   value={formatRupee(EMP.kpi.totalIncentive, true)}  delta="8.3%"  positive icon={Award}      accent="#f59e0b" />
       </div>
 
       <div className="grid grid-cols-3 gap-3">
         <ChartCard title="Employee Roster" subtitle="Click to explore individual analytics">
           <div className="space-y-2 mt-1">
             {EMPLOYEES_DATA.map(e => (
-              <button key={e.id} onClick={() => setSelectedEmp(e.id)} className={cn("w-full flex items-center gap-3 p-2.5 rounded-lg transition-all text-left", selectedEmp === e.id ? "bg-white/10 border border-white/10" : "hover:bg-white/5")}>
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[10px] font-black text-white flex-shrink-0">{e.name[0]}</div>
+              <button key={e.id} onClick={() => setSelectedEmp(e.id)} className={cn("w-full flex items-center gap-3 p-2.5 rounded-lg transition-all text-left", selectedEmp === e.id ? "bg-black/5 shadow-inner" : "hover:bg-black/[0.02]")}>
+                <div className="w-8 h-8 rounded-lg bg-white border border-black/5 shadow-sm flex items-center justify-center text-[10px] font-black text-black/60 flex-shrink-0">{e.name[0]}</div>
                 <div className="flex-grow min-w-0">
-                  <p className="text-[11px] font-black text-white truncate">{e.name}</p>
-                  <p className="text-[9px] font-bold text-white/30">{e.role}</p>
+                  <p className="text-[11px] font-black text-black/80 truncate">{e.name}</p>
+                  <p className="text-[9px] font-bold text-black/40">{e.role}</p>
                 </div>
-                <div className={cn("text-[10px] font-black px-1.5 py-0.5 rounded", e.kpi >= 90 ? "bg-emerald-500/15 text-emerald-400" : e.kpi >= 80 ? "bg-sky-500/15 text-sky-400" : "bg-amber-500/15 text-amber-400")}>{e.kpi}%</div>
+                <div className={cn("text-[10px] font-black px-1.5 py-0.5 rounded", e.kpi >= 90 ? "bg-emerald-50 text-emerald-600" : e.kpi >= 80 ? "bg-sky-50 text-sky-600" : "bg-amber-50 text-amber-600")}>{e.kpi}%</div>
               </button>
             ))}
           </div>
@@ -381,36 +384,36 @@ function EmployeeView({ period }: { period: string }) {
 
         <ChartCard title={`${emp.name} — Performance Trend`} subtitle="KPI score over 6 months" className="col-span-2">
           <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="rounded-lg p-3 bg-white/5 text-center">
-              <p className="text-[8px] font-black text-white/30 uppercase mb-1">Leads</p>
-              <p className="text-lg font-black text-white">{emp.leads}</p>
+            <div className="rounded-lg p-3 bg-black/[0.02] text-center border border-black/5">
+              <p className="text-[8px] font-black text-black/40 uppercase mb-1">Leads</p>
+              <p className="text-lg font-black text-black/70">{emp.leads}</p>
             </div>
-            <div className="rounded-lg p-3 bg-white/5 text-center">
-              <p className="text-[8px] font-black text-white/30 uppercase mb-1">Converted</p>
-              <p className="text-lg font-black text-emerald-400">{emp.converted}</p>
+            <div className="rounded-lg p-3 bg-emerald-50/50 text-center border border-emerald-500/10">
+              <p className="text-[8px] font-black text-black/40 uppercase mb-1">Converted</p>
+              <p className="text-lg font-black text-emerald-600">{emp.converted}</p>
             </div>
-            <div className="rounded-lg p-3 bg-white/5 text-center">
-              <p className="text-[8px] font-black text-white/30 uppercase mb-1">Revenue</p>
-              <p className="text-lg font-black text-sky-400">{formatRupee(emp.revenue, true)}</p>
+            <div className="rounded-lg p-3 bg-sky-50/50 text-center border border-sky-500/10">
+              <p className="text-[8px] font-black text-black/40 uppercase mb-1">Revenue</p>
+              <p className="text-lg font-black text-sky-600">{formatRupee(emp.revenue, true)}</p>
             </div>
           </div>
-          <SparkLine data={EMP.performanceTrend[emp.id]} color="#818CF8" height={80} />
-          <div className="flex justify-between mt-1">{["M1","M2","M3","M4","M5","M6"].map(m => <span key={m} className="text-[8px] font-black text-white/20">{m}</span>)}</div>
+          <SparkLine data={EMP.performanceTrend[emp.id]} color="#6366f1" height={80} />
+          <div className="flex justify-between mt-1">{["M1","M2","M3","M4","M5","M6"].map(m => <span key={m} className="text-[8px] font-black text-black/30">{m}</span>)}</div>
         </ChartCard>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
         <ChartCard title="Revenue by Employee" subtitle="Individual contribution">
-          <BarChart data={EMP.revenueByEmp.map(e => ({ label: e.name, v: e.v }))} color="#38BDF8" height={150} />
+          <BarChart data={EMP.revenueByEmp.map(e => ({ label: e.name, v: e.v }))} color="#0ea5e9" height={150} />
         </ChartCard>
         <ChartCard title="Attendance Score" subtitle="Monthly attendance %" >
-          <BarChart data={EMP.attendanceMonths.map(e => ({ label: e.name, v: e.v }))} color="#34D399" height={150} />
+          <BarChart data={EMP.attendanceMonths.map(e => ({ label: e.name, v: e.v }))} color="#10b981" height={150} />
         </ChartCard>
         <ChartCard title="Team Distribution" subtitle="Headcount by department">
           <DonutChart data={EMP.teamDist} />
           <div className="mt-4 space-y-2">
             {EMP.teamDist.map(t => (
-              <div key={t.label} className="flex justify-between text-[10px] font-bold text-white/50">
+              <div key={t.label} className="flex justify-between text-[10px] font-bold text-black/60">
                 <span>{t.label}</span><span style={{ color: t.color }}>{t.v} members</span>
               </div>
             ))}
@@ -420,19 +423,19 @@ function EmployeeView({ period }: { period: string }) {
 
       <div className="grid grid-cols-2 gap-3">
         <ChartCard title="Incentive Distribution" subtitle="Total incentives paid per employee">
-          <BarChart data={EMP.incentiveByEmp.map(e => ({ label: e.name, v: e.v }))} color="#FBBF24" height={150} />
+          <BarChart data={EMP.incentiveByEmp.map(e => ({ label: e.name, v: e.v }))} color="#f59e0b" height={150} />
         </ChartCard>
         <ChartCard title="Lead Conversion Funnel" subtitle="Leads → Conversion pipeline">
           <div className="space-y-3 mt-2">
             {EMPLOYEES_DATA.map(e => (
               <div key={e.id} className="space-y-1">
                 <div className="flex justify-between text-[10px]">
-                  <span className="font-bold text-white/50">{e.name.split(" ")[0]}</span>
-                  <span className="font-black text-white/70">{e.converted}/{e.leads} — {Math.round((e.converted/e.leads)*100)}% CR</span>
+                  <span className="font-bold text-black/60">{e.name.split(" ")[0]}</span>
+                  <span className="font-black text-black/80">{e.converted}/{e.leads} — {Math.round((e.converted/e.leads)*100)}% CR</span>
                 </div>
-                <div className="relative h-2 rounded-full bg-white/5 overflow-hidden">
-                  <div className="absolute left-0 top-0 h-full rounded-full bg-sky-400/30" style={{ width: "100%" }} />
-                  <div className="absolute left-0 top-0 h-full rounded-full bg-sky-400" style={{ width: `${(e.converted/e.leads)*100}%` }} />
+                <div className="relative h-2 rounded-full bg-black/5 overflow-hidden">
+                  <div className="absolute left-0 top-0 h-full rounded-full bg-sky-200" style={{ width: "100%" }} />
+                  <div className="absolute left-0 top-0 h-full rounded-full bg-sky-500" style={{ width: `${(e.converted/e.leads)*100}%` }} />
                 </div>
               </div>
             ))}
@@ -443,32 +446,32 @@ function EmployeeView({ period }: { period: string }) {
       <ChartCard title="Employee Performance Ledger" subtitle="Full individual metrics across all KPI dimensions">
         <table className="w-full mt-2">
           <thead>
-            <tr className="border-b border-white/5">
+            <tr className="border-b border-black/5">
               {["Employee", "ID", "Team", "KPI Score", "Revenue", "Leads", "Converted", "Attendance", "Incentive", "Rating", "Trend"].map(h => (
-                <th key={h} className="text-left pb-2 text-[9px] font-black text-white/25 uppercase tracking-widest pr-3">{h}</th>
+                <th key={h} className="text-left pb-2 text-[9px] font-black text-black/30 uppercase tracking-widest pr-3">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {EMPLOYEES_DATA.map((e, i) => (
-              <tr key={e.id} className={cn("border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors cursor-pointer", i % 2 === 1 && "bg-white/[0.01]")} onClick={() => setSelectedEmp(e.id)}>
-                <td className="py-3 pr-3"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-md bg-white/10 flex items-center justify-center text-[8px] font-black text-white">{e.name[0]}</div><span className="text-[11px] font-bold text-white/70">{e.name}</span></div></td>
-                <td className="py-3 pr-3 text-[10px] font-black text-white/30">{e.id}</td>
-                <td className="py-3 pr-3"><span className="px-2 py-0.5 rounded text-[9px] font-black bg-white/5 text-white/50">{e.team}</span></td>
+              <tr key={e.id} className={cn("border-b border-black/[0.04] hover:bg-black/[0.02] transition-colors cursor-pointer", i % 2 === 1 && "bg-black/[0.01]")} onClick={() => setSelectedEmp(e.id)}>
+                <td className="py-3 pr-3"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-md bg-white border border-black/10 flex items-center justify-center text-[8px] font-black text-black/60">{e.name[0]}</div><span className="text-[11px] font-bold text-black/80">{e.name}</span></div></td>
+                <td className="py-3 pr-3 text-[10px] font-black text-black/40">{e.id}</td>
+                <td className="py-3 pr-3"><span className="px-2 py-0.5 rounded text-[9px] font-black bg-black/5 text-black/60">{e.team}</span></td>
                 <td className="py-3 pr-3">
                   <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-16 rounded-full bg-white/5 overflow-hidden"><div className="h-full rounded-full bg-violet-400" style={{ width: `${e.kpi}%` }} /></div>
-                    <span className={cn("text-[10px] font-black", e.kpi >= 90 ? "text-emerald-400" : e.kpi >= 80 ? "text-sky-400" : "text-amber-400")}>{e.kpi}%</span>
+                    <div className="h-1.5 w-16 rounded-full bg-black/5 overflow-hidden"><div className="h-full rounded-full bg-indigo-500" style={{ width: `${e.kpi}%` }} /></div>
+                    <span className={cn("text-[10px] font-black", e.kpi >= 90 ? "text-emerald-600" : e.kpi >= 80 ? "text-sky-600" : "text-amber-600")}>{e.kpi}%</span>
                   </div>
                 </td>
-                <td className="py-3 pr-3 text-[11px] font-bold text-sky-400">{formatRupee(e.revenue, true)}</td>
-                <td className="py-3 pr-3 text-[11px] font-bold text-white/60">{e.leads}</td>
-                <td className="py-3 pr-3 text-[11px] font-bold text-emerald-400">{e.converted}</td>
-                <td className="py-3 pr-3"><span className={cn("text-[10px] font-black", e.attendance >= 95 ? "text-emerald-400" : "text-amber-400")}>{e.attendance}%</span></td>
-                <td className="py-3 pr-3 text-[11px] font-bold text-amber-400">{formatRupee(e.incentive, true)}</td>
-                <td className="py-3 pr-3"><div className="flex items-center gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} size={8} className={s <= Math.floor(e.rating) ? "text-amber-400 fill-amber-400" : "text-white/10"} />)}<span className="text-[9px] font-black text-white/40 ml-1">{e.rating}</span></div></td>
+                <td className="py-3 pr-3 text-[11px] font-bold text-sky-600">{formatRupee(e.revenue, true)}</td>
+                <td className="py-3 pr-3 text-[11px] font-bold text-black/60">{e.leads}</td>
+                <td className="py-3 pr-3 text-[11px] font-bold text-emerald-600">{e.converted}</td>
+                <td className="py-3 pr-3"><span className={cn("text-[10px] font-black", e.attendance >= 95 ? "text-emerald-600" : "text-amber-600")}>{e.attendance}%</span></td>
+                <td className="py-3 pr-3 text-[11px] font-bold text-amber-600">{formatRupee(e.incentive, true)}</td>
+                <td className="py-3 pr-3"><div className="flex items-center gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} size={8} className={s <= Math.floor(e.rating) ? "text-amber-400 fill-amber-400" : "text-black/10"} />)}<span className="text-[9px] font-black text-black/40 ml-1">{e.rating}</span></div></td>
                 <td className="py-3">
-                  <div className={cn("flex items-center gap-0.5 text-[10px] font-black", e.trend > 0 ? "text-emerald-400" : "text-rose-400")}>
+                  <div className={cn("flex items-center gap-0.5 text-[10px] font-black", e.trend > 0 ? "text-emerald-600" : "text-rose-600")}>
                     {e.trend > 0 ? <ChevronUp size={10} /> : <ChevronDown size={10} />}{Math.abs(e.trend)}%
                   </div>
                 </td>
@@ -487,22 +490,22 @@ export default function AnalyticsPage() {
   const [period, setPeriod] = useState("1Y");
 
   return (
-    <DashboardShell title="Analytics Command Center" subtitle="Power BI-grade visualization for company and employee performance intelligence">
+    <DashboardShell title="Analytics Command Center" subtitle="Enterprise-grade visualization for company and employee performance intelligence">
       <div className="min-h-full -m-8" style={{ background: B, padding: "32px" }}>
         
         <div className="flex items-center gap-3 mb-6 flex-wrap">
-          <div className="flex items-center rounded-lg p-1 gap-1" style={{ background: S }}>
-            <button onClick={() => setTab("company")} className={cn("flex items-center gap-2 px-4 py-2 rounded-md text-[11px] font-black uppercase tracking-widest transition-all", tab === "company" ? "bg-white text-black shadow-sm" : "text-white/40 hover:text-white")}>
+          <div className="flex items-center rounded-lg p-1 gap-1" style={{ background: S, border: "1px solid rgba(0,0,0,0.05)" }}>
+            <button onClick={() => setTab("company")} className={cn("flex items-center gap-2 px-4 py-2 rounded-md text-[11px] font-black uppercase tracking-widest transition-all", tab === "company" ? "bg-black text-white shadow-sm" : "text-black/40 hover:text-black hover:bg-black/5")}>
               <Building2 size={13} /> Company
             </button>
-            <button onClick={() => setTab("employee")} className={cn("flex items-center gap-2 px-4 py-2 rounded-md text-[11px] font-black uppercase tracking-widest transition-all", tab === "employee" ? "bg-white text-black shadow-sm" : "text-white/40 hover:text-white")}>
+            <button onClick={() => setTab("employee")} className={cn("flex items-center gap-2 px-4 py-2 rounded-md text-[11px] font-black uppercase tracking-widest transition-all", tab === "employee" ? "bg-black text-white shadow-sm" : "text-black/40 hover:text-black hover:bg-black/5")}>
               <Users size={13} /> Employee
             </button>
           </div>
 
-          <div className="flex items-center rounded-lg p-1 gap-0.5" style={{ background: S }}>
+          <div className="flex items-center rounded-lg p-1 gap-0.5" style={{ background: S, border: "1px solid rgba(0,0,0,0.05)" }}>
             {["7D","1M","3M","6M","1Y","ALL"].map(p => (
-              <button key={p} onClick={() => setPeriod(p)} className={cn("px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-widest transition-all", period === p ? "bg-sky-500 text-white shadow-md" : "text-white/30 hover:text-white")}>
+              <button key={p} onClick={() => setPeriod(p)} className={cn("px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-widest transition-all", period === p ? "bg-black text-white shadow-md" : "text-black/30 hover:text-black hover:bg-black/5")}>
                 {p}
               </button>
             ))}
@@ -510,7 +513,7 @@ export default function AnalyticsPage() {
 
           <div className="flex-grow" />
 
-          <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/50 hover:text-white px-4 py-2 rounded-lg border border-white/10 hover:border-white/20 transition-all">
+          <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-black/50 hover:text-black px-4 py-2 rounded-lg border border-black/10 hover:border-black/20 hover:bg-white transition-all">
             <Download size={13} /> Export
           </button>
         </div>
