@@ -1,265 +1,262 @@
 "use client";
 
 import React, { useState } from "react";
-import { 
- Users, 
- Clock, 
- FileText, 
- ChevronRight, 
- Calendar, 
- Search, 
- Filter,
- ArrowUpRight,
- ShieldCheck,
- Building2,
- PieChart,
- HardDrive
+import {
+  Users,
+  Clock,
+  CalendarDays,
+  Search,
+  Filter,
+  Download,
+  UserCheck,
+  UserX,
+  TrendingUp,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 
-// --- Mock Data: Attendance & Log Sheets ---
-const ROLES = ["Executive", "Operations", "Finance", "Sales", "Product", "HR"];
+// --- Mock Data ---
+const DEPARTMENTS = ["All", "Executive", "Operations", "Finance", "Sales", "Product", "HR"];
 
-const ROLE_STATS = {
- Executive: { attendance: 98, logProgress: 100, employees: 8, active: 8 },
- Operations: { attendance: 92, logProgress: 85, employees: 42, active: 38 },
- Finance: { attendance: 95, logProgress: 92, employees: 15, active: 14 },
- Sales: { attendance: 88, logProgress: 78, employees: 56, active: 49 },
- Product: { attendance: 94, logProgress: 94, employees: 28, active: 27 },
- HR: { attendance: 99, logProgress: 98, employees: 12, active: 12 },
-};
-
-const EMPLOYEES = [
- { id: "1", name: "Priya Sharma", role: "Product", clockIn: "08:55 AM", clockOut: "06:05 PM", hours: "9.1", compliance: 98, status: "Present" },
- { id: "2", name: "Amit Verma", role: "Sales", clockIn: "09:15 AM", clockOut: "06:30 PM", hours: "9.2", compliance: 85, status: "Late" },
- { id: "3", name: "Divya Menon", role: "Executive", clockIn: "08:30 AM", clockOut: "05:45 PM", hours: "9.2", compliance: 100, status: "Present" },
- { id: "4", name: "Kartik Verma", role: "Operations", clockIn: "09:00 AM", clockOut: "06:15 PM", hours: "9.2", compliance: 92, status: "Present" },
- { id: "5", name: "Neha Kapoor", role: "Finance", clockIn: "09:45 AM", clockOut: "06:30 PM", hours: "8.7", compliance: 78, status: "Late" },
- { id: "6", name: "Rohan Gupta", role: "HR", clockIn: "09:05 AM", clockOut: "06:00 PM", hours: "8.9", compliance: 94, status: "Present" },
+const ATTENDANCE_RECORDS = [
+  { id: "1", name: "Priya Sharma", dept: "Product", clockIn: "08:55 AM", clockOut: "06:05 PM", hours: 9.1, compliance: 98, status: "present" },
+  { id: "2", name: "Amit Verma", dept: "Sales", clockIn: "09:15 AM", clockOut: "06:30 PM", hours: 9.2, compliance: 85, status: "late" },
+  { id: "3", name: "Divya Menon", dept: "Executive", clockIn: "08:30 AM", clockOut: "05:45 PM", hours: 9.2, compliance: 100, status: "present" },
+  { id: "4", name: "Kartik Verma", dept: "Operations", clockIn: "09:00 AM", clockOut: "06:15 PM", hours: 9.2, compliance: 92, status: "present" },
+  { id: "5", name: "Neha Kapoor", dept: "Finance", clockIn: "09:45 AM", clockOut: "06:30 PM", hours: 8.7, compliance: 78, status: "late" },
+  { id: "6", name: "Rohan Gupta", dept: "HR", clockIn: "09:05 AM", clockOut: "06:00 PM", hours: 8.9, compliance: 94, status: "present" },
+  { id: "7", name: "Sanya Iyer", dept: "Product", clockIn: "—", clockOut: "—", hours: 0, compliance: 0, status: "absent" },
+  { id: "8", name: "Dev Mehta", dept: "Sales", clockIn: "10:10 AM", clockOut: "06:00 PM", hours: 7.8, compliance: 72, status: "late" },
+  { id: "9", name: "Ananya Pillai", dept: "Engineering", clockIn: "08:45 AM", clockOut: "06:20 PM", hours: 9.5, compliance: 97, status: "present" },
+  { id: "10", name: "Manish Rao", dept: "Finance", clockIn: "08:58 AM", clockOut: "05:50 PM", hours: 8.8, compliance: 95, status: "present" },
 ];
 
+const statusBadge: Record<string, "success" | "warning" | "danger"> = {
+  present: "success",
+  late: "warning",
+  absent: "danger",
+};
+
 export default function AdminAttendancePage() {
- const [selectedRole, setSelectedRole] = useState("Executive");
- const stats = ROLE_STATS[selectedRole as keyof typeof ROLE_STATS];
+  const [search, setSearch] = useState("");
+  const [deptFilter, setDeptFilter] = useState("All");
 
- return (
- <DashboardShell
- title="Attendance Command Center"
- subtitle="Universal workforce monitoring and log-sheet telemetry."
- actions={
- <div className="flex gap-3">
- <div className="flex bg-theme-primary rounded-xl p-1 shadow-lg border border-theme-strong">
- <button className="px-4 py-2 bg-theme-primary text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all">
- Live Feed
- </button>
- <button className="px-4 py-2 text-theme-subtle hover:text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all">
- History
- </button>
- </div>
- <button className="flex items-center gap-2 px-6 py-2.5 bg-theme-surface text-theme-fg text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-theme-raised transition-all shadow-xl">
- <Calendar size={12} />
- Export Report
- </button>
- </div>
- }
- >
- <div className="flex flex-col gap-6">
- 
- {/* Role Navigation Switcher */}
- <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
- {ROLES.map((role) => (
- <button
- key={role}
- onClick={() => setSelectedRole(role)}
- className={cn(
- "group relative px-6 py-8 rounded-2xl transition-all duration-500 overflow-hidden flex flex-col items-center text-center",
- selectedRole === role 
- ? "bg-theme-primary text-white shadow-2xl scale-105 z-10" 
- : "bg-theme-surface text-theme-subtle hover:bg-theme-page hover:text-theme-fg"
- )}
- >
- {/* Background Glow */}
- {selectedRole === role && (
- <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-transparent animate-pulse" />
- )}
- 
- <div className={cn(
- "p-3 rounded-xl mb-4 transition-transform duration-500 group-hover:scale-110",
- selectedRole === role ? "bg-theme-surface/80" : "bg-theme-raised"
- )}>
- {role === "Executive" && <ShieldCheck size={20} />}
- {role === "Operations" && <HardDrive size={20} />}
- {role === "Finance" && <Building2 size={20} />}
- {role === "Sales" && <Users size={20} />}
- {role === "Product" && <PieChart size={20} />}
- {role === "HR" && <Users size={20} />}
- </div>
- 
- <h3 className="text-xs font-black uppercase tracking-widest mb-1">{role}</h3>
- <p className="text-[10px] font-bold opacity-60">Unit Lead</p>
- </button>
- ))}
- </div>
+  const filtered = ATTENDANCE_RECORDS.filter((r) => {
+    const matchSearch =
+      r.name.toLowerCase().includes(search.toLowerCase()) ||
+      r.dept.toLowerCase().includes(search.toLowerCase());
+    const matchDept = deptFilter === "All" || r.dept === deptFilter;
+    return matchSearch && matchDept;
+  });
 
- {/* Global Telemetry Matrix */}
- <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
- <div className="lg:col-span-2 group enterprise-card bg-theme-primary border-theme-strong p-8 flex flex-col justify-between overflow-hidden relative">
- <div className="absolute top-0 right-0 p-8 transform translate-x-1/4 -translate-y-1/4 rotate-12 opacity-5 pointer-events-none">
- <Clock size={320} className="text-white" />
- </div>
- 
- <div>
- <div className="flex items-center gap-2 mb-8">
- <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
- <span className="text-[10px] font-black text-theme-subtle uppercase tracking-[0.3em]">Sector Performance {selectedRole}</span>
- </div>
- 
- <div className="grid grid-cols-2 gap-12 mb-12">
- <div>
- <h2 className="text-5xl font-black text-white tracking-tighter mb-2">{stats.attendance}%</h2>
- <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest leading-loose">Daily Attendance Velocity</p>
- <div className="mt-6 h-1 w-full bg-theme-primary rounded-full overflow-hidden">
- <div className="h-full bg-indigo-500 rounded-full animate-shimmer" style={{ width: `${stats.attendance}%` }} />
- </div>
- </div>
- <div>
- <h2 className="text-5xl font-black text-white tracking-tighter mb-2">{stats.logProgress}%</h2>
- <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest leading-loose">Log Sheet Progress Rail</p>
- <div className="mt-6 h-1 w-full bg-theme-primary rounded-full overflow-hidden">
- <div className="h-full bg-emerald-500 rounded-full animate-shimmer" style={{ width: `${stats.logProgress}%` }} />
- </div>
- </div>
- </div>
- </div>
+  const present = ATTENDANCE_RECORDS.filter((r) => r.status === "present").length;
+  const late = ATTENDANCE_RECORDS.filter((r) => r.status === "late").length;
+  const absent = ATTENDANCE_RECORDS.filter((r) => r.status === "absent").length;
+  const avgCompliance = Math.round(
+    ATTENDANCE_RECORDS.filter((r) => r.compliance > 0).reduce((s, r) => s + r.compliance, 0) /
+      ATTENDANCE_RECORDS.filter((r) => r.compliance > 0).length
+  );
 
- <div className="flex gap-8 border-t border-theme-strong pt-8">
- <div>
- <span className="block text-[8px] font-black text-theme-muted uppercase tracking-widest mb-1">Total Unit Headcount</span>
- <span className="text-xl font-black text-white">{stats.employees} Personnel</span>
- </div>
- <div className="w-px bg-theme-primary" />
- <div>
- <span className="block text-[8px] font-black text-theme-muted uppercase tracking-widest mb-1">Status: Operational</span>
- <span className="text-xl font-black text-white">{stats.active} On-Field</span>
- </div>
- </div>
- </div>
+  return (
+    <DashboardShell
+      title="Attendance"
+      subtitle="Daily attendance log and workforce compliance."
+      actions={
+        <Button variant="secondary" size="sm">
+          <Download size={14} className="mr-2" />
+          Export Report
+        </Button>
+      }
+    >
+      <div className="space-y-6">
+        {/* Summary Stats */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { label: "Total Employees", value: ATTENDANCE_RECORDS.length, icon: Users, color: "text-theme-fg", bg: "bg-theme-raised" },
+            { label: "Present", value: present, icon: UserCheck, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+            { label: "Late", value: late, icon: Clock, color: "text-amber-600", bg: "bg-amber-500/10" },
+            { label: "Absent", value: absent, icon: UserX, color: "text-red-500", bg: "bg-red-500/10" },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} className="page-card flex items-center gap-4">
+              <div className={cn("flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
+                <Icon size={18} className={color} />
+              </div>
+              <div>
+                <p className="text-xs text-theme-muted">{label}</p>
+                <p className={cn("text-2xl font-black", color)}>{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
 
- <div className="enterprise-card bg-theme-surface p-8 flex flex-col justify-between group">
- <div className="mb-8">
- <div className="flex items-center justify-between mb-8">
- <h3 className="text-[10px] font-black text-theme-fg uppercase tracking-widest">Compliance Drift</h3>
- <div className="p-2 bg-theme-raised rounded-lg group-hover:bg-theme-primary group-hover:text-white transition-colors">
- <ArrowUpRight size={16} />
- </div>
- </div>
- <p className="text-[9px] font-bold text-theme-subtle uppercase tracking-widest leading-relaxed mb-6">Real-time monitoring of policy adherence across decentralized units.</p>
- <div className="space-y-4">
- {[1, 2, 3].map(i => (
- <div key={i} className="flex flex-col gap-2">
- <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-theme-muted">
- <span>Phase {i} Strategy</span>
- <span>{90 + i}%</span>
- </div>
- <div className="h-1 w-full bg-theme-raised rounded-full overflow-hidden">
- <div className="h-full bg-theme-primary" style={{ width: `${90 + i}%` }} />
- </div>
- </div>
- ))}
- </div>
- </div>
- <button className="w-full py-4 text-[10px] font-black text-theme-fg uppercase tracking-widest border border-theme-border rounded-xl hover:bg-theme-primary hover:text-white transition-all">
- Access Deep Telemetry
- </button>
- </div>
- </div>
+        {/* Compliance Bar */}
+        <div className="page-card">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={15} className="text-theme-muted" />
+              <span className="text-xs font-semibold text-theme-fg">Overall Compliance</span>
+            </div>
+            <span className="text-sm font-black text-theme-fg">{avgCompliance}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-theme-raised">
+            <div
+              className="h-full rounded-full bg-theme-primary transition-all"
+              style={{ width: `${avgCompliance}%` }}
+            />
+          </div>
+          <div className="mt-3 flex gap-6">
+            {[
+              { label: "Present", count: present, color: "bg-emerald-500" },
+              { label: "Late", count: late, color: "bg-amber-500" },
+              { label: "Absent", count: absent, color: "bg-red-500" },
+            ].map(({ label, count, color }) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <div className={cn("h-2 w-2 rounded-full", color)} />
+                <span className="text-xs text-theme-muted">
+                  {label}: <span className="font-semibold text-theme-fg">{count}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
 
- {/* Detailed Administrative Log Sheet */}
- <div className="enterprise-card bg-theme-surface overflow-hidden p-0">
- <div className="p-8 border-b border-theme-border flex items-center justify-between">
- <h3 className="text-xs font-black text-theme-fg uppercase tracking-widest flex items-center gap-3">
- <FileText size={16} className="text-theme-subtle" />
- Unified Attendance Log Sheet
- </h3>
- <div className="flex items-center gap-4">
- <div className="relative">
- <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-subtle" size={14} />
- <input 
- type="text" 
- placeholder="SEARCH PERSONNEL..." 
- className="pl-10 pr-4 py-2 bg-theme-page border-none rounded-lg text-[9px] font-black uppercase tracking-widest focus:ring-1 focus:ring-slate-200 outline-none w-64"
- />
- </div>
- <button className="p-2 bg-theme-page text-theme-subtle hover:text-theme-fg rounded-lg transition-all">
- <Filter size={16} />
- </button>
- </div>
- </div>
+        {/* Department filter tabs */}
+        <div className="flex flex-wrap gap-2">
+          {DEPARTMENTS.map((dept) => (
+            <button
+              key={dept}
+              onClick={() => setDeptFilter(dept)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
+                deptFilter === dept
+                  ? "bg-theme-primary text-theme-surface shadow-sm"
+                  : "bg-theme-raised text-theme-muted hover:text-theme-fg"
+              )}
+            >
+              {dept}
+            </button>
+          ))}
+        </div>
 
- <div className="overflow-x-auto">
- <table className="w-full text-left">
- <thead>
- <tr className="bg-theme-page text-[9px] text-theme-muted font-black uppercase tracking-[0.2em]">
- <th className="px-8 py-4">Personnel</th>
- <th className="px-8 py-4">Functional Role</th>
- <th className="px-8 py-4">Clock-In Hub</th>
- <th className="px-8 py-4">Clock-Out Hub</th>
- <th className="px-8 py-4">Total Cycles</th>
- <th className="px-8 py-4">Compliance Score</th>
- <th className="px-8 py-4 text-right">State</th>
- </tr>
- </thead>
- <tbody className="divide-y divide-slate-50">
- {EMPLOYEES.map((person) => (
- <tr key={person.id} className="group hover:bg-theme-page transition-colors cursor-pointer">
- <td className="px-8 py-4">
- <div className="flex items-center gap-3">
- <div className="w-8 h-8 rounded-full bg-theme-primary text-white flex items-center justify-center text-[10px] font-black uppercase">
- {person.name.split(' ').map(n => n[0]).join('')}
- </div>
- <span className="text-xs font-black tracking-tight text-theme-fg">{person.name}</span>
- </div>
- </td>
- <td className="px-8 py-4">
- <span className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">{person.role} Unit</span>
- </td>
- <td className="px-8 py-4 font-mono text-[10px] text-theme-subtle">{person.clockIn}</td>
- <td className="px-8 py-4 font-mono text-[10px] text-theme-subtle">{person.clockOut}</td>
- <td className="px-8 py-4 font-mono text-[10px] text-theme-subtle">{person.hours} hrs</td>
- <td className="px-8 py-4 text-xs font-black text-theme-fg">{person.compliance}%</td>
- <td className="px-8 py-4 text-right">
- <div className={cn(
- "inline-flex items-center px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest",
- person.status === "Present" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
- )}>
- {person.status}
- </div>
- </td>
- </tr>
- ))}
- </tbody>
- </table>
- </div>
- <div className="p-6 bg-theme-page border-t border-theme-border flex items-center justify-center">
- <button className="text-[10px] font-black text-theme-subtle uppercase tracking-[0.3em] hover:text-theme-fg transition-colors flex items-center gap-2">
- Syncing Unified Records
- <ChevronRight size={14} />
- </button>
- </div>
- </div>
- </div>
+        {/* Attendance Table */}
+        <div className="page-card overflow-hidden p-0">
+          {/* Table Header */}
+          <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
+            <div className="flex items-center gap-2">
+              <CalendarDays size={15} className="text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-fg">
+                Attendance Log
+                <span className="ml-2 text-xs font-normal text-theme-muted">
+                  {filtered.length} record{filtered.length !== 1 ? "s" : ""}
+                </span>
+              </h3>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
+                <input
+                  type="text"
+                  placeholder="Search employees..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-8 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all w-52"
+                />
+              </div>
+              <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-theme-border bg-theme-page text-theme-muted hover:text-theme-fg transition-colors">
+                <Filter size={13} />
+              </button>
+            </div>
+          </div>
 
- <style jsx global>{`
- @keyframes shimmer {
- 0% { opacity: 0.5; }
- 50% { opacity: 1; }
- 100% { opacity: 0.5; }
- }
- .animate-shimmer {
- animation: shimmer 2s infinite ease-in-out;
- }
- `}</style>
- </DashboardShell>
- );
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
+                  <th className="px-6 py-3 font-semibold">Employee</th>
+                  <th className="px-6 py-3 font-semibold">Department</th>
+                  <th className="px-6 py-3 font-semibold">Clock In</th>
+                  <th className="px-6 py-3 font-semibold">Clock Out</th>
+                  <th className="px-6 py-3 font-semibold">Hours</th>
+                  <th className="px-6 py-3 font-semibold">Compliance</th>
+                  <th className="px-6 py-3 font-semibold text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-theme-border">
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-sm text-theme-subtle">
+                      No records found
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((person) => (
+                    <tr
+                      key={person.id}
+                      className="group cursor-pointer transition-colors hover:bg-theme-raised/50"
+                    >
+                      <td className="px-6 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-black uppercase">
+                            {person.name.split(" ").map((n) => n[0]).join("")}
+                          </div>
+                          <span className="text-xs font-semibold text-theme-fg">{person.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-3">
+                        <span className="text-xs text-theme-muted">{person.dept}</span>
+                      </td>
+                      <td className="px-6 py-3 font-mono text-xs text-theme-fg">{person.clockIn}</td>
+                      <td className="px-6 py-3 font-mono text-xs text-theme-fg">{person.clockOut}</td>
+                      <td className="px-6 py-3">
+                        <span className="text-xs font-semibold text-theme-fg">
+                          {person.hours > 0 ? `${person.hours}h` : "—"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3">
+                        {person.compliance > 0 ? (
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-theme-raised">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full",
+                                  person.compliance >= 90
+                                    ? "bg-emerald-500"
+                                    : person.compliance >= 75
+                                    ? "bg-amber-500"
+                                    : "bg-red-500"
+                                )}
+                                style={{ width: `${person.compliance}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-theme-muted">{person.compliance}%</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-theme-subtle">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        <Badge variant={statusBadge[person.status]}>
+                          {person.status.charAt(0).toUpperCase() + person.status.slice(1)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-theme-border bg-theme-page px-6 py-3">
+            <span className="text-xs text-theme-subtle">Showing {filtered.length} of {ATTENDANCE_RECORDS.length} employees</span>
+            <button className="flex items-center gap-1 text-xs text-theme-muted hover:text-theme-fg transition-colors">
+              View full history <ChevronRight size={13} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </DashboardShell>
+  );
 }
