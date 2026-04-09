@@ -70,35 +70,23 @@ const INITIAL_DATA = {
   columns: {
     "NEW": {
       id: "NEW", title: "New", color: "bg-emerald-500", pillBg: "bg-emerald-100", pillText: "text-emerald-700",
-      items: [
-        { id: "deal-1", company: "Zomato India", value: 1250000, priority: "High", priorityColor: "bg-purple-100 text-purple-700", leadName: "Rahul Jakhar", leadPhone: "+91 98765 43210", empName: "Vijay Kumar", empId: "EMP-402", date: "Apr 05, 2026" },
-        { id: "deal-2", company: "Rivian Automotive", value: 4500000, priority: "Critical", priorityColor: "bg-rose-100 text-rose-700", leadName: "Sarah Miller", leadPhone: "+1 (555) 012-3456", empName: "Ananya Sharma", empId: "EMP-215", date: "Apr 08, 2026" },
-      ]
+      items: []
     },
     "DISCOVERY": {
       id: "DISCOVERY", title: "Discovery", color: "bg-rose-500", pillBg: "bg-rose-100", pillText: "text-rose-700",
-      items: [
-        { id: "deal-3", company: "Paytm Payments", value: 850000, priority: "Medium", priorityColor: "bg-blue-100 text-blue-700", leadName: "Vivek Gupta", leadPhone: "+91 88888 77777", empName: "Rohan Das", empId: "EMP-108", date: "Mar 28, 2026" },
-      ]
+      items: []
     },
     "NEGOTIATION": {
       id: "NEGOTIATION", title: "Negotiation", color: "bg-amber-500", pillBg: "bg-amber-100", pillText: "text-amber-700",
-      items: [
-        { id: "deal-4", company: "BYJU'S Learning", value: 3200000, priority: "High", priorityColor: "bg-purple-100 text-purple-700", leadName: "Sneha Roy", leadPhone: "+91 91234 56789", empName: "Vijay Kumar", empId: "EMP-402", date: "Apr 01, 2026" },
-        { id: "deal-5", company: "Ola Electric", value: 950000, priority: "Medium", priorityColor: "bg-blue-100 text-blue-700", leadName: "Bhavish Aggarwal", leadPhone: "+91 90000 11111", empName: "Siddharth Malhotra", empId: "EMP-612", date: "Apr 04, 2026" },
-      ]
+      items: []
     },
     "WON": {
       id: "WON", title: "Won", color: "bg-blue-500", pillBg: "bg-blue-100", pillText: "text-blue-700",
-      items: [
-        { id: "deal-6", company: "Tesla Energy", value: 45000000, priority: "Critical", priorityColor: "bg-rose-100 text-rose-700", leadName: "Elon Musk", leadPhone: "+1 (702) 555-0199", empName: "Ananya Sharma", empId: "EMP-215", date: "Apr 07, 2026" },
-      ]
+      items: []
     },
     "LOST": {
       id: "LOST", title: "Lost", color: "bg-slate-500", pillBg: "bg-slate-100", pillText: "text-slate-700",
-      items: [
-        { id: "deal-7", company: "Swiggy Limited", value: 1500000, priority: "High", priorityColor: "bg-purple-100 text-purple-700", leadName: "Harsha Majety", leadPhone: "+91 99000 00000", empName: "Vijay Kumar", empId: "EMP-402", date: "Mar 15, 2026" },
-      ]
+      items: []
     }
   },
   columnOrder: ["NEW", "DISCOVERY", "NEGOTIATION", "WON", "LOST"]

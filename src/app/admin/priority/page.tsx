@@ -27,13 +27,7 @@ interface PriorityReq {
   reviewed_by?: { name: string };
 }
 
-const MOCK_PRIORITY: PriorityReq[] = [
-  { _id: "1", amount: 18500, reason: "Medical emergency — hospitalisation",      status: "pending",  createdAt: "2026-04-01", employee: { name: "Priya Sharma",  employeeId: "NM001", department: "Product" },    incentive: { amount: 18500, month: 3, year: 2026 } },
-  { _id: "2", amount: 12400, reason: "Home loan down payment deadline",           status: "pending",  createdAt: "2026-04-02", employee: { name: "Amit Verma",    employeeId: "NM002", department: "Sales" },      incentive: { amount: 12400, month: 3, year: 2026 } },
-  { _id: "3", amount: 22000, reason: "Child education fee due",                   status: "approved", createdAt: "2026-03-20", employee: { name: "Divya Menon",   employeeId: "NM003", department: "Executive" },  incentive: { amount: 22000, month: 2, year: 2026 }, reviewed_by: { name: "HR Admin" } },
-  { _id: "4", amount: 9800,  reason: "Vehicle repair urgency",                    status: "rejected", createdAt: "2026-03-25", employee: { name: "Rohan Gupta",   employeeId: "NM006", department: "HR" },         incentive: { amount: 9800,  month: 2, year: 2026 } },
-  { _id: "5", amount: 15600, reason: "Immediate travel for family emergency",     status: "pending",  createdAt: "2026-04-05", employee: { name: "Ananya Pillai", employeeId: "NM007", department: "Engineering" }, incentive: { amount: 15600, month: 3, year: 2026 } },
-];
+const MOCK_PRIORITY: PriorityReq[] = [];
 
 function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase();

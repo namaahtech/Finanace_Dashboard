@@ -146,12 +146,12 @@ function BusinessHealthChart({
 
 // ─── Mock fallback data (shown when API is not wired) ─────
 const MOCK_CONFIG: ConfigShape = {
-  company_revenue: 4800000,
-  expense_percentage: 38,
-  revenue_achievement_percentage: 84,
-  collections_percentage: 76,
-  delivery_health_percentage: 91,
-  payout_pool_amount: 650000,
+  company_revenue: 0,
+  expense_percentage: 0,
+  revenue_achievement_percentage: 0,
+  collections_percentage: 0,
+  delivery_health_percentage: 0,
+  payout_pool_amount: 0,
 };
 
 export default function AdminOverview() {

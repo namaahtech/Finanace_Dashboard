@@ -351,7 +351,33 @@ export default function TeamsPage() {
 
                 <div className="flex justify-end gap-3 border-t border-theme-border pt-4">
                   <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>Cancel</Button>
-                  <Button type="button" onClick={() => setShowForm(false)}>Create Team</Button>
+                  <Button 
+                    type="button" 
+                    onClick={async () => {
+                      if (!form.name) return;
+                      
+                      // 1. Create Team Channel in Supabase (Sync Logic)
+                      try {
+                        const { getSupabase } = await import("@/lib/supabase");
+                        const supabase = getSupabase();
+                        
+                        await (supabase.from("channels") as any).insert([{
+                          name: form.name.toLowerCase().replace(/\s+/g, '-'),
+                          type: 'text',
+                          org_id: 'default-org'
+                        }]);
+                        
+                        console.log("Team channel synchronized successfully");
+                      } catch (err) {
+                        console.error("Failed to sync team channel:", err);
+                      }
+                      
+                      setShowForm(false);
+                      setForm({ name: "", department: "", lead: "", members: "", budget: "" });
+                    }}
+                  >
+                    Create Team & Sync Channel
+                  </Button>
                 </div>
               </form>
             </div>

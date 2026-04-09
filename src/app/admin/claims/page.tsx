@@ -29,14 +29,7 @@ interface Claim {
 }
 
 // Mock data for preview
-const MOCK_CLAIMS: Claim[] = [
-  { _id: "1", amount: 18500, status: "approved",  cycle: 3, queue_position: 1, requested_at: "2026-04-01", employee: { name: "Priya Sharma",  employeeId: "NM001", department: "Product" },    incentive: { amount: 18500, month: 3, year: 2026 } },
-  { _id: "2", amount: 12400, status: "pending",   cycle: 3, queue_position: 2, requested_at: "2026-04-02", employee: { name: "Amit Verma",    employeeId: "NM002", department: "Sales" },      incentive: { amount: 12400, month: 3, year: 2026 } },
-  { _id: "3", amount: 22000, status: "paid",      cycle: 2, requested_at: "2026-03-15",                    employee: { name: "Divya Menon",   employeeId: "NM003", department: "Executive" },  incentive: { amount: 22000, month: 2, year: 2026 } },
-  { _id: "4", amount: 9800,  status: "queued",    cycle: 3, queue_position: 3, requested_at: "2026-04-03", employee: { name: "Rohan Gupta",   employeeId: "NM006", department: "HR" },         incentive: { amount: 9800,  month: 3, year: 2026 } },
-  { _id: "5", amount: 15600, status: "approved",  cycle: 3, queue_position: 4, requested_at: "2026-04-04", employee: { name: "Ananya Pillai", employeeId: "NM007", department: "Engineering" },incentive: { amount: 15600, month: 3, year: 2026 } },
-  { _id: "6", amount: 8200,  status: "pending",   cycle: 3, requested_at: "2026-04-05",                    employee: { name: "Dev Mehta",     employeeId: "NM008", department: "Sales" },      incentive: { amount: 8200,  month: 3, year: 2026 } },
-];
+const MOCK_CLAIMS: Claim[] = [];
 
 function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase();
