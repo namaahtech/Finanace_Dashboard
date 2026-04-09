@@ -36,7 +36,7 @@ const superAdminNav: NavSection[] = [
  ]},
  { title: "Finance", items: [
  { href: "/admin/invoicing", label: "Invoicing", icon: CreditCard },
- { href: "/admin/vendors", label: "Vendors", icon: Briefcase },
+ { href: "/admin/vendors", label: "Purchases", icon: Briefcase },
  { href: "/admin/subscriptions", label: "Subscriptions", icon: Tag },
  { href: "/admin/budgets", label: "Budgets", icon: PiggyBank },
  ]},
@@ -67,7 +67,7 @@ const accountsNav: NavSection[] = [
  ]},
  { title: "Finance", items: [
  { href: "/admin/invoicing", label: "Invoicing", icon: CreditCard },
- { href: "/admin/vendors", label: "Vendors", icon: Briefcase },
+ { href: "/admin/vendors", label: "Purchases", icon: Briefcase },
  { href: "/admin/subscriptions", label: "Subscriptions", icon: Tag },
  { href: "/admin/budgets", label: "Budgets", icon: PiggyBank },
  ]},

@@ -1,174 +1,246 @@
 "use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { 
- FileText, 
- Plus, 
- Search, 
- Filter, 
- Download, 
- MoreVertical, 
- ArrowUpRight, 
- ArrowDownLeft,
- Clock,
- CheckCircle2,
- AlertCircle
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { formatCurrency, cn } from "@/lib/utils";
+import {
+  FileText,
+  Plus,
+  Search,
+  Download,
+  IndianRupee,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  Send,
 } from "lucide-react";
 import { useState } from "react";
-import { formatCurrency } from "@/lib/utils";
 
-const INVOICES = [
- { id: "INV-2026-001", client: "Google Cloud India", amount: 450000, date: "Apr 05, 2026", dueDate: "May 05, 2026", status: "paid", type: "receivable" },
- { id: "INV-2026-002", client: "Amazon Web Services", amount: 125000, date: "Apr 02, 2026", dueDate: "May 02, 2026", status: "sent", type: "payable" },
- { id: "INV-2026-003", client: "Microsoft Azure", amount: 890000, date: "Mar 28, 2026", dueDate: "Apr 28, 2026", status: "overdue", type: "receivable" },
- { id: "INV-2026-004", client: "HackerRank Enterprise", amount: 65000, date: "Mar 25, 2026", dueDate: "Apr 25, 2026", status: "paid", type: "receivable" },
- { id: "INV-2026-005", client: "Zoom Video Comms", amount: 12000, date: "Mar 20, 2026", dueDate: "Apr 20, 2026", status: "draft", type: "payable" },
- { id: "INV-2026-006", client: "Slack Technologies", amount: 45000, date: "Mar 15, 2026", dueDate: "Apr 15, 2026", status: "paid", type: "payable" },
+interface Invoice {
+  id: string;
+  client: string;
+  amount: number;
+  issuedDate: string;
+  dueDate: string;
+  status: "draft" | "sent" | "paid" | "overdue";
+}
+
+const INVOICES: Invoice[] = [
+  { id: "INV-2026-001", client: "Google Cloud India",    amount: 450000, issuedDate: "Apr 05, 2026", dueDate: "May 05, 2026", status: "paid" },
+  { id: "INV-2026-002", client: "HackerRank Enterprise", amount: 125000, issuedDate: "Apr 02, 2026", dueDate: "May 02, 2026", status: "sent" },
+  { id: "INV-2026-003", client: "Microsoft Azure",       amount: 890000, issuedDate: "Mar 28, 2026", dueDate: "Apr 28, 2026", status: "overdue" },
+  { id: "INV-2026-004", client: "Razorpay Solutions",    amount: 65000,  issuedDate: "Mar 25, 2026", dueDate: "Apr 25, 2026", status: "paid" },
+  { id: "INV-2026-005", client: "Swiggy B2B",            amount: 38000,  issuedDate: "Mar 20, 2026", dueDate: "Apr 20, 2026", status: "draft" },
+  { id: "INV-2026-006", client: "Zepto Tech",            amount: 210000, issuedDate: "Mar 15, 2026", dueDate: "Apr 15, 2026", status: "sent" },
+  { id: "INV-2026-007", client: "CRED FinTech",          amount: 175000, issuedDate: "Mar 10, 2026", dueDate: "Apr 10, 2026", status: "paid" },
 ];
 
+const STATUS_BADGE: Record<Invoice["status"], "default" | "info" | "success" | "warning" | "danger"> = {
+  draft:   "default",
+  sent:    "info",
+  paid:    "success",
+  overdue: "danger",
+};
+
+const EMPTY_FORM = { client: "", amount: "", issuedDate: "", dueDate: "", notes: "" };
+
 export default function InvoicingPage() {
- const [filter, setFilter] = useState("all");
- const [search, setSearch] = useState("");
+  const [filter, setFilter]   = useState("all");
+  const [search, setSearch]   = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm]       = useState(EMPTY_FORM);
 
- const filteredInvoices = INVOICES.filter(inv => {
- const matchesSearch = inv.id.toLowerCase().includes(search.toLowerCase()) || 
- inv.client.toLowerCase().includes(search.toLowerCase());
- const matchesFilter = filter === "all" || inv.status === filter;
- return matchesSearch && matchesFilter;
- });
+  const filtered = INVOICES.filter((inv) => {
+    const matchSearch = inv.id.toLowerCase().includes(search.toLowerCase()) || inv.client.toLowerCase().includes(search.toLowerCase());
+    const matchFilter = filter === "all" || inv.status === filter;
+    return matchSearch && matchFilter;
+  });
 
- return (
- <DashboardShell 
- title="Invoicing Ledger" 
- subtitle="Comprehensive accounts receivable and payable management system"
- actions={
- <button className="flex items-center gap-2 rounded-xl bg-theme-primary text-white dark:text-theme-fg px-6 py-3 text-xs font-black uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-xl">
- <Plus size={16} strokeWidth={3} />
- Create Invoice
- </button>
- }
- >
- <div className="flex flex-col gap-8">
- {/* Stats Row */}
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
- {[
- { label: "Total Receivables", value: "₹1,405,000", icon: ArrowUpRight, color: "text-emerald-600", bg: "bg-emerald-500/10" },
- { label: "Total Payables", value: "₹182,000", icon: ArrowDownLeft, color: "text-rose-600", bg: "bg-rose-500/10" },
- { label: "Outstanding", value: "₹890,000", icon: Clock, color: "text-amber-600", bg: "bg-amber-500/10" },
- { label: "Draft Invoices", value: "1", icon: FileText, color: "text-sky-600", bg: "bg-sky-500/10" },
- ].map((stat, i) => (
- <div key={i} className="page-card !mb-0 p-6 flex items-center justify-between group hover:border-sky-500/20 transition-all">
- <div>
- <p className="text-[10px] font-black text-muted uppercase tracking-[0.2em] mb-1">{stat.label}</p>
- <p className={`text-xl font-black tracking-tight ${stat.color}`}>{stat.value}</p>
- </div>
- <div className={`w-12 h-12 rounded-2xl ${stat.bg} flex items-center justify-center ${stat.color} group-hover:scale-110 transition-transform`}>
- <stat.icon size={24} strokeWidth={2.5} />
- </div>
- </div>
- ))}
- </div>
+  const totalReceivable = INVOICES.reduce((s, i) => s + i.amount, 0);
+  const paid     = INVOICES.filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0);
+  const outstanding = INVOICES.filter((i) => i.status === "sent").reduce((s, i) => s + i.amount, 0);
+  const overdue  = INVOICES.filter((i) => i.status === "overdue").length;
 
- {/* Main Content */}
- <div className="page-card !p-0 overflow-hidden border border-default shadow-2xl">
- <div className="p-8 border-b border-default flex flex-col lg:row-row justify-between items-start lg:items-center gap-6 bg-[hsl(var(--surface-raised))]">
- <div className="flex items-center gap-4 w-full lg:w-auto">
- <div className="relative flex-grow lg:w-80">
- <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
- <input 
- type="text" 
- placeholder="Search by ID or Client..."
- className="w-full bg-background/50 border border-default rounded-2xl pl-12 pr-4 py-3 text-sm font-bold text-foreground outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all"
- value={search}
- onChange={(e) => setSearch(e.target.value)}
- />
- </div>
- <div className="relative">
- <select 
- className="appearance-none bg-background/50 border border-default rounded-2xl pl-4 pr-10 py-3 text-[10px] font-black uppercase tracking-widest text-foreground outline-none focus:border-sky-500 transition-all cursor-pointer"
- value={filter}
- onChange={(e) => setFilter(e.target.value)}
- >
- <option value="all">Global Filter</option>
- <option value="paid">Authorized - Paid</option>
- <option value="sent">Dispatched - Sent</option>
- <option value="overdue">Critical - Overdue</option>
- <option value="draft">Prototype - Draft</option>
- </select>
- <Filter className="absolute right-4 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={14} />
- </div>
- </div>
- </div>
+  return (
+    <DashboardShell
+      title="Invoicing"
+      subtitle="Manage customer invoices, track payments, and monitor receivables."
+      actions={
+        <Button variant="primary" size="sm" onClick={() => setShowForm(true)}>
+          <Plus size={14} className="mr-1.5" /> Create Invoice
+        </Button>
+      }
+    >
+      <div className="space-y-5">
 
- <div className="overflow-x-auto">
- <table className="w-full border-collapse">
- <thead>
- <tr className="bg-background/30 border-b border-default">
- <th className="px-8 py-5 text-left text-[9px] font-black text-muted uppercase tracking-[0.2em]">Transaction ID</th>
- <th className="px-8 py-5 text-left text-[9px] font-black text-muted uppercase tracking-[0.2em]">Client / Entity</th>
- <th className="px-8 py-5 text-left text-[9px] font-black text-muted uppercase tracking-[0.2em]">Quantum (₹)</th>
- <th className="px-8 py-5 text-left text-[9px] font-black text-muted uppercase tracking-[0.2em]">Epoch Logic</th>
- <th className="px-8 py-5 text-left text-[9px] font-black text-muted uppercase tracking-[0.2em]">Registry State</th>
- <th className="px-8 py-5 text-right text-[9px] font-black text-muted uppercase tracking-[0.2em]">Actions</th>
- </tr>
- </thead>
- <tbody className="divide-y divide-default/10">
- {filteredInvoices.map((inv) => (
- <tr key={inv.id} className="hover:bg-sky-500/[0.02] transition-colors group">
- <td className="px-8 py-6 font-black text-xs text-foreground tracking-widest">{inv.id}</td>
- <td className="px-8 py-6">
- <div className="flex items-center gap-4">
- <div className={`w-10 h-10 rounded-xl ${inv.type === 'receivable' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'} flex items-center justify-center`}>
- {inv.type === 'receivable' ? <ArrowUpRight size={18} strokeWidth={2.5} /> : <ArrowDownLeft size={18} strokeWidth={2.5} />}
- </div>
- <div>
- <p className="text-sm font-black text-foreground">{inv.client}</p>
- <p className="text-[10px] font-black text-muted uppercase tracking-widest leading-none">{inv.type}</p>
- </div>
- </div>
- </td>
- <td className="px-8 py-6">
- <p className="text-sm font-black text-foreground">{formatCurrency(inv.amount)}</p>
- </td>
- <td className="px-8 py-6">
- <div className="flex flex-col">
- <span className="text-[10px] font-black text-muted uppercase tracking-widest">Due: {inv.dueDate}</span>
- <span className="text-[9px] font-bold text-muted/60">Issued: {inv.date}</span>
- </div>
- </td>
- <td className="px-8 py-6">
- <div className="flex items-center gap-2">
- <div className={`w-2 h-2 rounded-full ${
- inv.status === 'paid' ? 'bg-emerald-500' : 
- inv.status === 'sent' ? 'bg-sky-500' : 
- inv.status === 'overdue' ? 'bg-rose-500' : 'bg-theme-subtle/80'
- }`} />
- <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${
- inv.status === 'paid' ? 'text-emerald-600' : 
- inv.status === 'sent' ? 'text-sky-600' : 
- inv.status === 'overdue' ? 'text-rose-600' : 'text-muted'
- }`}>
- {inv.status}
- </span>
- </div>
- </td>
- <td className="px-8 py-6 text-right">
- <div className="flex justify-end gap-2">
- <button className="p-2 rounded-xl border border-default hover:bg-[hsl(var(--surface-raised))] transition-all text-muted hover:text-foreground">
- <Download size={14} />
- </button>
- <button className="p-2 rounded-xl border border-default hover:bg-[hsl(var(--surface-raised))] transition-all text-muted hover:text-foreground">
- <MoreVertical size={14} />
- </button>
- </div>
- </td>
- </tr>
- ))}
- </tbody>
- </table>
- </div>
- </div>
- </div>
- </DashboardShell>
- );
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { label: "Total Receivable", value: formatCurrency(totalReceivable), icon: IndianRupee,   color: "text-theme-fg",    bg: "bg-theme-raised" },
+            { label: "Collected",        value: formatCurrency(paid),            icon: CheckCircle2,  color: "text-emerald-600", bg: "bg-emerald-500/10" },
+            { label: "Outstanding",      value: formatCurrency(outstanding),     icon: Clock,         color: "text-sky-600",     bg: "bg-sky-500/10" },
+            { label: "Overdue",          value: overdue,                         icon: AlertCircle,   color: "text-red-500",     bg: "bg-red-500/10" },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} className="page-card flex items-center gap-3">
+              <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
+                <Icon size={15} className={color} />
+              </div>
+              <div>
+                <p className="text-[11px] text-theme-muted">{label}</p>
+                <p className={cn("text-xl font-black leading-tight", color)}>{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Table */}
+        <div className="page-card overflow-hidden p-0">
+          {/* Header */}
+          <div className="flex flex-col gap-3 border-b border-theme-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5">
+              {[
+                { id: "all",     label: "All" },
+                { id: "draft",   label: "Draft" },
+                { id: "sent",    label: "Sent" },
+                { id: "paid",    label: "Paid" },
+                { id: "overdue", label: "Overdue" },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setFilter(t.id)}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
+                    filter === t.id ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="relative flex-shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search invoices…"
+                className="h-8 w-48 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
+                  <th className="px-5 py-3 font-semibold">Invoice ID</th>
+                  <th className="px-5 py-3 font-semibold">Client</th>
+                  <th className="px-5 py-3 font-semibold">Amount</th>
+                  <th className="px-5 py-3 font-semibold">Issued</th>
+                  <th className="px-5 py-3 font-semibold">Due Date</th>
+                  <th className="px-5 py-3 font-semibold">Status</th>
+                  <th className="px-5 py-3 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-theme-border">
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={7} className="py-12 text-center text-sm text-theme-subtle">No invoices found</td></tr>
+                ) : filtered.map((inv) => (
+                  <tr key={inv.id} className="group transition-colors hover:bg-theme-raised/40">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-theme-raised">
+                          <FileText size={13} className="text-theme-muted" />
+                        </div>
+                        <span className="text-xs font-semibold text-theme-fg font-mono">{inv.id}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-xs font-semibold text-theme-fg">{inv.client}</td>
+                    <td className="px-5 py-3 text-sm font-bold text-emerald-600">{formatCurrency(inv.amount)}</td>
+                    <td className="px-5 py-3 text-xs text-theme-muted">{inv.issuedDate}</td>
+                    <td className="px-5 py-3">
+                      <span className={cn("text-xs", inv.status === "overdue" ? "font-semibold text-red-500" : "text-theme-muted")}>
+                        {inv.dueDate}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge variant={STATUS_BADGE[inv.status]}>
+                        {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {inv.status === "draft" && (
+                          <Button size="sm" variant="primary">
+                            <Send size={11} className="mr-1" /> Send
+                          </Button>
+                        )}
+                        <button className="flex h-7 w-7 items-center justify-center rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-theme-fg transition-colors">
+                          <Download size={12} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-theme-border bg-theme-page px-5 py-2.5">
+            <span className="text-xs text-theme-subtle">{filtered.length} invoice{filtered.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-theme-subtle">
+              Showing total: <span className="font-bold text-theme-fg">{formatCurrency(filtered.reduce((s, i) => s + i.amount, 0))}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Create Invoice Modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-theme-surface border border-theme-border shadow-2xl">
+            <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
+              <div className="flex items-center gap-2">
+                <FileText size={15} className="text-theme-muted" />
+                <h3 className="text-sm font-bold text-theme-fg">Create Invoice</h3>
+              </div>
+              <button onClick={() => setShowForm(false)} className="rounded-lg p-1 text-theme-muted hover:bg-theme-raised transition-colors">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Client Name</label>
+                <input value={form.client} onChange={(e) => setForm({ ...form, client: e.target.value })} placeholder="e.g. Acme Corp" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Amount (₹)</label>
+                <input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Issue Date</label>
+                  <input type="date" value={form.issuedDate} onChange={(e) => setForm({ ...form, issuedDate: e.target.value })} className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Due Date</label>
+                  <input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Notes (optional)</label>
+                <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="Any additional notes…" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all resize-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 border-t border-theme-border px-6 py-4">
+              <Button variant="secondary" size="sm" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button variant="primary" size="sm" className="flex-1" onClick={() => setShowForm(false)}>Create Invoice</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardShell>
+  );
 }

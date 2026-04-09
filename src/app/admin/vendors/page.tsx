@@ -1,154 +1,241 @@
 "use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { 
- Building2, 
- Plus, 
- Search, 
- Filter, 
- ExternalLink, 
- Mail, 
- Phone, 
- IndianRupee,
- Layers,
- ChevronRight,
- User,
- MoreHorizontal
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import {
+  ShoppingCart,
+  Plus,
+  Search,
+  IndianRupee,
+  Clock,
+  CheckCircle2,
+  Tag,
+  X,
+  AlertCircle,
 } from "lucide-react";
 import { useState } from "react";
-import { formatCurrency } from "@/lib/utils";
 
-const VENDORS = [
- { id: "VND-001", name: "Apex Infrastructure", category: "Hardware", contact: "Rajesh Kumar", email: "rajesh@apex.in", phone: "+91 98XXX XXXXX", totalSpend: 1250000, active: true },
- { id: "VND-002", name: "Nebula Cloud Services", category: "SaaS", contact: "Anita Sharma", email: "anita@nebula.io", phone: "+91 97XXX XXXXX", totalSpend: 450000, active: true },
- { id: "VND-003", name: "Green Space Facilities", category: "Maintenance", contact: "Suresh P.", email: "suresh@greenspace.com", phone: "+91 96XXX XXXXX", totalSpend: 85000, active: true },
- { id: "VND-004", name: "Prompt Logistics", category: "Delivery", contact: "Vikram Singh", email: "vikram@prompt.in", phone: "+91 95XXX XXXXX", totalSpend: 240000, active: false },
- { id: "VND-005", name: "Titan Legal Associates", category: "Legal", contact: "Meera Reddy", email: "meera@titan.legal", phone: "+91 94XXX XXXXX", totalSpend: 620000, active: true },
- { id: "VND-006", name: "Quantum Marketing", category: "Advertising", contact: "Arjun Das", email: "arjun@quantum.mkt", phone: "+91 93XXX XXXXX", totalSpend: 310000, active: true },
+interface Purchase {
+  id: string;
+  vendor: string;
+  description: string;
+  category: string;
+  amount: number;
+  date: string;
+  status: "pending" | "paid" | "cancelled";
+}
+
+const PURCHASES: Purchase[] = [
+  { id: "PUR-001", vendor: "AWS India",           description: "EC2 + S3 monthly bill",        category: "Infrastructure", amount: 85000,  date: "2026-04-05", status: "paid" },
+  { id: "PUR-002", vendor: "Apex Supplies",        description: "Office furniture — 3 desks",   category: "Equipment",      amount: 42000,  date: "2026-04-03", status: "paid" },
+  { id: "PUR-003", vendor: "Green Facilities",     description: "Monthly office maintenance",    category: "Facilities",     amount: 18000,  date: "2026-04-01", status: "pending" },
+  { id: "PUR-004", vendor: "Titan Legal",          description: "Compliance audit Q1 2026",     category: "Legal",          amount: 125000, date: "2026-03-28", status: "paid" },
+  { id: "PUR-005", vendor: "Prompt Logistics",     description: "Delivery fleet service",       category: "Logistics",      amount: 31000,  date: "2026-03-25", status: "pending" },
+  { id: "PUR-006", vendor: "Quantum Advertising",  description: "Social media ad spend",        category: "Marketing",      amount: 55000,  date: "2026-03-20", status: "paid" },
+  { id: "PUR-007", vendor: "Stationary Hub",       description: "Office supplies — bulk order", category: "Supplies",       amount: 8500,   date: "2026-03-15", status: "cancelled" },
+  { id: "PUR-008", vendor: "Cloud Vision IT",      description: "Laptop × 4 units",             category: "Equipment",      amount: 220000, date: "2026-03-10", status: "paid" },
 ];
 
-export default function VendorsPage() {
- const [search, setSearch] = useState("");
- const [category, setCategory] = useState("all");
+const CATEGORY_COLORS: Record<string, string> = {
+  Infrastructure: "bg-sky-500/10 text-sky-600",
+  Equipment:      "bg-purple-500/10 text-purple-600",
+  Facilities:     "bg-emerald-500/10 text-emerald-600",
+  Legal:          "bg-amber-500/10 text-amber-600",
+  Logistics:      "bg-orange-500/10 text-orange-600",
+  Marketing:      "bg-pink-500/10 text-pink-600",
+  Supplies:       "bg-theme-raised text-theme-muted",
+};
 
- const filteredVendors = VENDORS.filter(v => {
- const matchesSearch = v.name.toLowerCase().includes(search.toLowerCase()) || 
- v.contact.toLowerCase().includes(search.toLowerCase());
- const matchesCategory = category === "all" || v.category === category;
- return matchesSearch && matchesCategory;
- });
+const STATUS_BADGE: Record<Purchase["status"], "default" | "success" | "danger"> = {
+  pending:   "default",
+  paid:      "success",
+  cancelled: "danger",
+};
 
- return (
- <DashboardShell 
- title="Vendor Ecosystem" 
- subtitle="Manage external partnerships, procurement logistics, and supplier relationships"
- actions={
- <button className="flex items-center gap-2 rounded-xl bg-theme-primary text-white dark:text-theme-fg px-6 py-3 text-xs font-black uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-xl">
- <Plus size={16} strokeWidth={3} />
- Register Partner
- </button>
- }
- >
- <div className="flex flex-col gap-10">
- {/* Header Actions */}
- <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
- <div className="lg:col-span-2 relative group">
- <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-sky-600 transition-colors" size={20} />
- <input 
- type="text" 
- placeholder="Search by partner name or contact personnel..."
- className="w-full bg-card border border-default rounded-2xl pl-14 pr-6 py-5 text-sm font-bold text-foreground outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all shadow-sm"
- value={search}
- onChange={(e) => setSearch(e.target.value)}
- />
- </div>
- <div className="relative group">
- <select 
- className="w-full appearance-none bg-card border border-default rounded-2xl pl-14 pr-6 py-5 text-[11px] font-black uppercase tracking-[0.2em] text-foreground outline-none focus:border-sky-500 transition-all cursor-pointer shadow-sm"
- value={category}
- onChange={(e) => setCategory(e.target.value)}
- >
- <option value="all">Strategic Category: Global</option>
- <option value="Hardware">Infrastructure & Hardware</option>
- <option value="SaaS">Cloud & SaaS Subscriptions</option>
- <option value="Maintenance">Facility Maintenance</option>
- <option value="Legal">Legal & Compliance</option>
- <option value="Advertising">Advertising & PR</option>
- </select>
- <Layers className="absolute left-5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={20} />
- </div>
- </div>
+const EMPTY_FORM = { vendor: "", description: "", category: "", amount: "", date: "" };
 
- {/* Vendors Grid */}
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
- {filteredVendors.map((vendor) => (
- <div key={vendor.id} className="page-card !mb-0 p-0 overflow-hidden border border-default hover:border-sky-500/30 transition-all group hover:-translate-y-2 shadow-lg">
- <div className="p-8 border-b border-default bg-[hsl(var(--surface-raised))] relative flex justify-between items-start">
- <div className="w-14 h-14 rounded-2xl bg-sky-500/10 flex items-center justify-center text-sky-600 group-hover:scale-110 transition-transform shadow-inner">
- <Building2 size={28} strokeWidth={2.5} />
- </div>
- <div className="flex flex-col items-end">
- <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.2em] ${vendor.active ? 'bg-emerald-500/10 text-emerald-600' : 'bg-theme-raised text-theme-muted'}`}>
- {vendor.active ? 'Active' : 'Archived'}
- </div>
- <p className="text-[10px] font-black text-muted uppercase tracking-widest mt-2">ID: {vendor.id}</p>
- </div>
- </div>
+export default function PurchasesPage() {
+  const [filter, setFilter]   = useState("all");
+  const [search, setSearch]   = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm]       = useState(EMPTY_FORM);
 
- <div className="p-8 space-y-8">
- <div>
- <h3 className="text-xl font-black text-foreground tracking-tight group-hover:text-sky-600 transition-colors uppercase leading-tight mb-2">{vendor.name}</h3>
- <p className="text-[10px] font-black text-muted uppercase tracking-[0.4em]">{vendor.category}</p>
- </div>
+  const filtered = PURCHASES.filter((p) => {
+    const matchSearch = p.vendor.toLowerCase().includes(search.toLowerCase()) || p.description.toLowerCase().includes(search.toLowerCase());
+    const matchFilter = filter === "all" || p.status === filter;
+    return matchSearch && matchFilter;
+  });
 
- <div className="space-y-4 pt-6 border-t border-default">
- <div className="flex items-center gap-3 text-sm font-bold text-foreground/80">
- <User size={16} className="text-muted" />
- <span>{vendor.contact}</span>
- </div>
- <div className="flex items-center gap-3 text-xs font-black text-muted uppercase tracking-widest group/link cursor-pointer hover:text-sky-600 transition-colors">
- <Mail size={16} />
- <span>{vendor.email}</span>
- <ExternalLink size={12} className="opacity-0 group-hover/link:opacity-100 transition-opacity" />
- </div>
- <div className="flex items-center gap-3 text-xs font-black text-muted uppercase tracking-widest">
- <Phone size={16} />
- <span>{vendor.phone}</span>
- </div>
- </div>
+  const totalSpend = PURCHASES.reduce((s, p) => s + p.amount, 0);
+  const thisMonth  = PURCHASES.filter((p) => p.date.startsWith("2026-04")).reduce((s, p) => s + p.amount, 0);
+  const pending    = PURCHASES.filter((p) => p.status === "pending").length;
+  const paidCount  = PURCHASES.filter((p) => p.status === "paid").length;
 
- <div className="p-6 rounded-2xl bg-[hsl(var(--surface-raised))] border border-default flex justify-between items-center group/spend transition-all hover:bg-sky-500/5">
- <div>
- <p className="text-[9px] font-black text-muted uppercase tracking-widest mb-1">Lifetime Spend</p>
- <p className="text-lg font-black text-foreground tracking-tight">{formatCurrency(vendor.totalSpend)}</p>
- </div>
- <div className="w-10 h-10 rounded-full bg-background border border-default flex items-center justify-center text-muted group-hover/spend:bg-sky-500 group-hover/spend:text-white group-hover/spend:border-sky-500 transition-all duration-500">
- <ChevronRight size={20} strokeWidth={3} />
- </div>
- </div>
- </div>
- 
- <div className="bg-background px-8 py-4 border-t border-default flex justify-between items-center">
- <button className="text-[10px] font-black uppercase tracking-[0.2em] text-muted hover:text-sky-600 transition-colors">View All Invoices</button>
- <button className="p-2 text-muted hover:text-foreground">
- <MoreHorizontal size={16} />
- </button>
- </div>
- </div>
- ))}
- 
- {/* Add Vendor Placeholder */}
- <div className="page-card !mb-0 p-8 border-2 border-dashed border-default flex flex-col items-center justify-center gap-4 group cursor-pointer hover:border-sky-500/50 hover:bg-sky-500/[0.02] transition-all">
- <div className="w-16 h-16 rounded-full bg-[hsl(var(--surface-raised))] flex items-center justify-center text-muted group-hover:scale-110 group-hover:text-sky-600 transition-all duration-500">
- <Plus size={32} strokeWidth={2} />
- </div>
- <div className="text-center">
- <p className="text-sm font-black text-foreground uppercase tracking-widest">New Strategic Partner</p>
- <p className="text-[10px] font-bold text-muted uppercase tracking-widest opacity-60">Expand Global Supply Chain</p>
- </div>
- </div>
- </div>
- </div>
- </DashboardShell>
- );
+  const categories = ["All", ...Array.from(new Set(PURCHASES.map((p) => p.category)))];
+
+  return (
+    <DashboardShell
+      title="Purchases"
+      subtitle="Record and track all company purchases and vendor payments."
+      actions={
+        <Button variant="primary" size="sm" onClick={() => setShowForm(true)}>
+          <Plus size={14} className="mr-1.5" /> Add Purchase
+        </Button>
+      }
+    >
+      <div className="space-y-5">
+
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { label: "Total Spend",   value: formatCurrency(totalSpend), icon: IndianRupee,  color: "text-theme-fg",    bg: "bg-theme-raised" },
+            { label: "This Month",    value: formatCurrency(thisMonth),  icon: ShoppingCart, color: "text-sky-600",     bg: "bg-sky-500/10" },
+            { label: "Pending",       value: pending,                    icon: Clock,        color: "text-amber-600",   bg: "bg-amber-500/10" },
+            { label: "Paid",          value: paidCount,                  icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} className="page-card flex items-center gap-3">
+              <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
+                <Icon size={15} className={color} />
+              </div>
+              <div>
+                <p className="text-[11px] text-theme-muted">{label}</p>
+                <p className={cn("text-xl font-black leading-tight", color)}>{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Table */}
+        <div className="page-card overflow-hidden p-0">
+          {/* Header */}
+          <div className="flex flex-col gap-3 border-b border-theme-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5 flex-wrap">
+              {[
+                { id: "all",       label: "All" },
+                { id: "pending",   label: "Pending" },
+                { id: "paid",      label: "Paid" },
+                { id: "cancelled", label: "Cancelled" },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setFilter(t.id)}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
+                    filter === t.id ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="relative flex-shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search purchases…"
+                className="h-8 w-48 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
+                  <th className="px-5 py-3 font-semibold">Vendor</th>
+                  <th className="px-5 py-3 font-semibold">Description</th>
+                  <th className="px-5 py-3 font-semibold">Category</th>
+                  <th className="px-5 py-3 font-semibold">Amount</th>
+                  <th className="px-5 py-3 font-semibold">Date</th>
+                  <th className="px-5 py-3 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-theme-border">
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={6} className="py-12 text-center text-sm text-theme-subtle">No purchases found</td></tr>
+                ) : filtered.map((p) => (
+                  <tr key={p.id} className="group transition-colors hover:bg-theme-raised/40">
+                    <td className="px-5 py-3">
+                      <p className="text-xs font-semibold text-theme-fg">{p.vendor}</p>
+                      <p className="text-[10px] text-theme-subtle font-mono">{p.id}</p>
+                    </td>
+                    <td className="px-5 py-3 text-xs text-theme-muted max-w-[200px]">{p.description}</td>
+                    <td className="px-5 py-3">
+                      <span className={cn("inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold", CATEGORY_COLORS[p.category] ?? "bg-theme-raised text-theme-muted")}>
+                        <Tag size={10} />
+                        {p.category}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-sm font-bold text-red-500">−{formatCurrency(p.amount)}</td>
+                    <td className="px-5 py-3 text-xs text-theme-muted">{formatDate(p.date)}</td>
+                    <td className="px-5 py-3">
+                      <Badge variant={STATUS_BADGE[p.status]}>
+                        {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-theme-border bg-theme-page px-5 py-2.5">
+            <span className="text-xs text-theme-subtle">{filtered.length} purchase{filtered.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-theme-subtle">
+              Total: <span className="font-bold text-theme-fg">{formatCurrency(filtered.reduce((s, p) => s + p.amount, 0))}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Add Purchase Modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-theme-surface border border-theme-border shadow-2xl">
+            <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
+              <div className="flex items-center gap-2">
+                <ShoppingCart size={15} className="text-theme-muted" />
+                <h3 className="text-sm font-bold text-theme-fg">Add Purchase</h3>
+              </div>
+              <button onClick={() => setShowForm(false)} className="rounded-lg p-1 text-theme-muted hover:bg-theme-raised transition-colors">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Vendor</label>
+                  <input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="e.g. AWS India" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+                <div className="col-span-2">
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Description</label>
+                  <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What was purchased?" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Category</label>
+                  <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Equipment" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Amount (₹)</label>
+                  <input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+                <div className="col-span-2">
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Purchase Date</label>
+                  <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 border-t border-theme-border px-6 py-4">
+              <Button variant="secondary" size="sm" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button variant="primary" size="sm" className="flex-1" onClick={() => setShowForm(false)}>Add Purchase</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardShell>
+  );
 }

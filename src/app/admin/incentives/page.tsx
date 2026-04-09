@@ -240,46 +240,72 @@ export default function AdminIncentivesPage() {
         </div>
 
         {/* Company performance */}
-        <div className="page-card">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Activity size={15} className="text-theme-muted" />
-              <span className="text-sm font-semibold text-theme-fg">Company Performance</span>
-              <span className="text-xs text-theme-muted">— affects all incentive multipliers</span>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+          {/* Overall score card */}
+          <div className="page-card flex flex-col items-center justify-center text-center gap-1">
+            <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl mb-1", companyScore >= 80 ? "bg-emerald-500/10" : companyScore >= 60 ? "bg-amber-500/10" : "bg-red-500/10")}>
+              <Activity size={17} className={companyScore >= 80 ? "text-emerald-600" : companyScore >= 60 ? "text-amber-600" : "text-red-500"} />
             </div>
-            <div className="flex items-center gap-2">
-              <span className={cn("text-sm font-black", companyScore >= 80 ? "text-emerald-600" : companyScore >= 60 ? "text-amber-600" : "text-red-500")}>
-                {Math.round(companyScore)}%
-              </span>
-              <span className={cn("rounded-md px-2 py-0.5 text-xs font-semibold", companyScore >= 80 ? "bg-emerald-500/10 text-emerald-600" : companyScore >= 60 ? "bg-amber-500/10 text-amber-600" : "bg-red-500/10 text-red-500")}>
-                {companyMultiplier.toFixed(1)}× multiplier
-              </span>
-            </div>
+            <p className="text-[11px] text-theme-muted">Company Score</p>
+            <p className={cn("text-3xl font-black leading-tight", companyScore >= 80 ? "text-emerald-600" : companyScore >= 60 ? "text-amber-600" : "text-red-500")}>
+              {Math.round(companyScore)}%
+            </p>
+            <span className={cn("rounded-md px-2 py-0.5 text-xs font-semibold", companyScore >= 80 ? "bg-emerald-500/10 text-emerald-600" : companyScore >= 60 ? "bg-amber-500/10 text-amber-600" : "bg-red-500/10 text-red-500")}>
+              {companyMultiplier.toFixed(1)}× multiplier
+            </span>
           </div>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-            {[
-              { key: "revenue_achievement_percentage", label: "Revenue Achievement", color: "bg-sky-500",    textColor: "text-sky-600" },
-              { key: "collections_percentage",         label: "Collections",         color: "bg-emerald-500",textColor: "text-emerald-600" },
-              { key: "delivery_health_percentage",     label: "Delivery Health",     color: "bg-purple-500", textColor: "text-purple-600" },
-            ].map((item) => (
-              <div key={item.key}>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-semibold text-theme-muted">{item.label}</label>
-                  <span className={cn("text-xs font-bold", item.textColor)}>{config[item.key as keyof ConfigState]}%</span>
+
+          {/* Three metric cards */}
+          {[
+            { key: "revenue_achievement_percentage", label: "Revenue Achievement", barColor: "bg-sky-500",    textColor: "text-sky-600",     bg: "bg-sky-500/10",     icon: TrendingUp },
+            { key: "collections_percentage",         label: "Collections",         barColor: "bg-emerald-500",textColor: "text-emerald-600",  bg: "bg-emerald-500/10", icon: IndianRupee },
+            { key: "delivery_health_percentage",     label: "Delivery Health",     barColor: "bg-purple-500", textColor: "text-purple-600",   bg: "bg-purple-500/10",  icon: Activity },
+          ].map((item) => {
+            const val = config[item.key as keyof ConfigState];
+            const Icon = item.icon;
+            return (
+              <div key={item.key} className="page-card flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={cn("flex h-7 w-7 items-center justify-center rounded-lg", item.bg)}>
+                      <Icon size={13} className={item.textColor} />
+                    </div>
+                    <p className="text-xs font-semibold text-theme-muted">{item.label}</p>
+                  </div>
+                  <span className={cn("text-lg font-black", item.textColor)}>{val}%</span>
                 </div>
-                <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-theme-raised">
-                  <div className={cn("h-full rounded-full transition-all duration-500", item.color)} style={{ width: `${config[item.key as keyof ConfigState]}%` }} />
+
+                {/* Progress bar */}
+                <div className="h-2 w-full overflow-hidden rounded-full bg-theme-raised">
+                  <div className={cn("h-full rounded-full transition-all duration-500", item.barColor)} style={{ width: `${Math.min(100, val)}%` }} />
                 </div>
-                <input
-                  type="range" min={0} max={120}
-                  value={config[item.key as keyof ConfigState]}
-                  disabled={!canEditConfig}
-                  onChange={(e) => setConfig({ ...config, [item.key]: parseInt(e.target.value) })}
-                  className="w-full h-1.5 appearance-none cursor-pointer accent-sky-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                />
+
+                {/* Stepper */}
+                {canEditConfig ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, [item.key]: Math.max(0, val - 1) })}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-theme-fg hover:border-theme-strong transition-all text-base font-bold leading-none"
+                    >−</button>
+                    <input
+                      type="number" min={0} max={120}
+                      value={val}
+                      onChange={(e) => setConfig({ ...config, [item.key]: Math.max(0, Math.min(120, parseInt(e.target.value) || 0)) })}
+                      className="h-7 flex-1 rounded-lg border border-theme-border bg-theme-page px-2 text-center text-xs font-bold text-theme-fg outline-none focus:border-theme-strong transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, [item.key]: Math.min(120, val + 1) })}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-theme-fg hover:border-theme-strong transition-all text-base font-bold leading-none"
+                    >+</button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-theme-subtle">Read-only — super admin can edit</p>
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
         {/* Award form + history */}
