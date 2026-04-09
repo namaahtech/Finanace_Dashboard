@@ -50,21 +50,9 @@ interface ConfigState {
 }
 interface KpiScore { final_score: number; }
 
-const MOCK_USERS: User[] = [
-  { _id: "1", name: "Priya Sharma",  employeeId: "NM001", department: "Product" },
-  { _id: "2", name: "Amit Verma",    employeeId: "NM002", department: "Sales" },
-  { _id: "3", name: "Divya Menon",   employeeId: "NM003", department: "Executive" },
-  { _id: "4", name: "Rohan Gupta",   employeeId: "NM006", department: "HR" },
-  { _id: "5", name: "Ananya Pillai", employeeId: "NM007", department: "Engineering" },
-];
+const MOCK_USERS: User[] = [];
 
-const MOCK_INCENTIVES: Incentive[] = [
-  { _id: "1", amount: 18500, base_amount: 15000, fixed_amount: 8000, variable_amount: 7000, status: "claimable", month: 3, year: 2026, createdAt: "2026-04-01", employee: { name: "Priya Sharma",  employeeId: "NM001" } },
-  { _id: "2", amount: 12400, base_amount: 10000, fixed_amount: 5000, variable_amount: 5000, status: "paid",      month: 2, year: 2026, createdAt: "2026-03-01", employee: { name: "Amit Verma",    employeeId: "NM002" } },
-  { _id: "3", amount: 22000, base_amount: 18000, fixed_amount: 10000,variable_amount: 8000, status: "paid",      month: 1, year: 2026, createdAt: "2026-02-01", employee: { name: "Priya Sharma",  employeeId: "NM001" } },
-  { _id: "4", amount: 9800,  base_amount: 8000,  fixed_amount: 4000, variable_amount: 4000, status: "locked",   month: 3, year: 2026, createdAt: "2026-04-02", employee: { name: "Rohan Gupta",   employeeId: "NM006" } },
-  { _id: "5", amount: 15600, base_amount: 12000, fixed_amount: 6000, variable_amount: 6000, status: "claimable",month: 3, year: 2026, createdAt: "2026-04-03", employee: { name: "Ananya Pillai", employeeId: "NM007" } },
-];
+const MOCK_INCENTIVES: Incentive[] = [];
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => ({
   value: i + 1,

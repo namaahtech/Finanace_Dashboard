@@ -24,71 +24,45 @@ const formatRupee = (n: number, compact = false) => {
 // ─── Dummy Data ───────────────────────────────────────────────────────────────
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-const COMPANY = {
-  revenue:   [3200000, 3800000, 3500000, 4200000, 3900000, 4800000, 4400000, 5100000, 4700000, 5400000, 5200000, 5900000],
-  expenses:  [1200000, 1400000, 1300000, 1600000, 1500000, 1800000, 1600000, 1900000, 1700000, 2000000, 1900000, 2100000],
+const COMPANY: {
+  revenue: number[];
+  expenses: number[];
+  profit: number[];
+  kpi: { revenue: number; expenses: number; profit: number; projects: number; budgetUsed: number };
+  quarterProfit: { q: string; v: number }[];
+  budgetDept: { label: string; v: number; color: string }[];
+  projects: { name: string; health: number; budget: number; spent: number; status: string }[];
+  kpiScorecard: { label: string; v: number; color: string }[];
+  plTable: { month: string; revenue: number; expenses: number }[];
+} = {
+  revenue:   [],
+  expenses:  [],
   profit:    [] as number[],
-  kpi: { revenue: 48200000, expenses: 11500000, profit: 36700000, projects: 24, budgetUsed: 78.3 },
-  quarterProfit: [{ q: "Q1", v: 32 }, { q: "Q2", v: 38 }, { q: "Q3", v: 44 }, { q: "Q4", v: 51 }],
-  budgetDept: [
-    { label: "Engineering", v: 35, color: "#38BDF8" },
-    { label: "Sales & CRM",  v: 25, color: "#818CF8" },
-    { label: "Operations",   v: 20, color: "#34D399" },
-    { label: "Marketing",    v: 12, color: "#FBBF24" },
-    { label: "Admin",        v: 8,  color: "#F87171" },
-  ],
-  projects: [
-    { name: "Project Alpha", health: 92, budget: 1200000, spent: 1100000, status: "On Track" },
-    { name: "Project Beta",  health: 78, budget: 800000,  spent: 650000,  status: "Attention" },
-    { name: "Project Gamma", health: 65, budget: 600000,  spent: 510000,  status: "At Risk" },
-    { name: "Project Delta", health: 88, budget: 1500000, spent: 1300000, status: "On Track" },
-    { name: "Project Epsilon",health: 55, budget: 400000, spent: 380000,  status: "At Risk" },
-    { name: "Project Zeta",  health: 71, budget: 950000,  spent: 720000,  status: "Attention" },
-  ],
-  kpiScorecard: [
-    { label: "Revenue Target",      v: 84, color: "#38BDF8" },
-    { label: "Client Retention",    v: 97, color: "#34D399" },
-    { label: "Budget Compliance",   v: 78, color: "#FBBF24" },
-    { label: "Project Delivery",    v: 89, color: "#818CF8" },
-    { label: "Employee Satisfaction", v: 91, color: "#A78BFA" },
-    { label: "API Uptime",          v: 99, color: "#34D399" },
-  ],
-  plTable: [
-    { month: "Jul 2025", revenue: 4400000, expenses: 1600000 },
-    { month: "Aug 2025", revenue: 5100000, expenses: 1900000 },
-    { month: "Sep 2025", revenue: 4700000, expenses: 1700000 },
-    { month: "Oct 2025", revenue: 5400000, expenses: 2000000 },
-    { month: "Nov 2025", revenue: 5200000, expenses: 1900000 },
-    { month: "Dec 2025", revenue: 5900000, expenses: 2100000 },
-  ],
+  kpi: { revenue: 0, expenses: 0, profit: 0, projects: 0, budgetUsed: 0 },
+  quarterProfit: [],
+  budgetDept: [],
+  projects: [],
+  kpiScorecard: [],
+  plTable: [],
 };
 COMPANY.profit = COMPANY.revenue.map((r, i) => r - COMPANY.expenses[i]);
 
-const EMPLOYEES_DATA = [
-  { id: "EMP-402", name: "Vijay Kumar",           role: "Senior Sales Executive", team: "Sales",       kpi: 94, revenue: 8200000, leads: 18, converted: 14, attendance: 97, incentive: 45000, deals: 12, rating: 4.8, trend: +8 },
-  { id: "EMP-215", name: "Ananya Sharma",          role: "Account Manager",        team: "Sales",       kpi: 89, revenue: 6800000, leads: 15, converted: 11, attendance: 95, incentive: 38000, deals: 9,  rating: 4.6, trend: +5 },
-  { id: "EMP-108", name: "Rohan Das",              role: "Business Analyst",       team: "Operations",  kpi: 82, revenue: 3100000, leads: 8,  converted: 6,  attendance: 99, incentive: 28000, deals: 5,  rating: 4.4, trend: +2 },
-  { id: "EMP-612", name: "Siddharth Malhotra",     role: "Sales Executive",        team: "Sales",       kpi: 76, revenue: 4200000, leads: 12, converted: 8,  attendance: 91, incentive: 31000, deals: 7,  rating: 4.1, trend: -3 },
-  { id: "EMP-901", name: "Priya Singh",            role: "Marketing Lead",         team: "Marketing",   kpi: 88, revenue: 1900000, leads: 22, converted: 9,  attendance: 96, incentive: 35000, deals: 4,  rating: 4.7, trend: +6 },
-];
+const EMPLOYEES_DATA: any[] = [];
 
-const EMP = {
-  kpi: { avgKpi: 85.8, totalRevenue: 24200000, avgAttendance: 95.6, totalIncentive: 177000 },
-  performanceTrend: {
-    "EMP-402": [82, 85, 87, 90, 91, 94],
-    "EMP-215": [78, 80, 82, 85, 87, 89],
-    "EMP-108": [75, 77, 79, 80, 81, 82],
-    "EMP-612": [80, 79, 78, 77, 76, 76],
-    "EMP-901": [82, 83, 85, 86, 87, 88],
-  } as Record<string, number[]>,
-  teamDist: [
-    { label: "Sales",      v: 3, color: "#38BDF8" },
-    { label: "Operations", v: 1, color: "#34D399" },
-    { label: "Marketing",  v: 1, color: "#FBBF24" },
-  ],
-  attendanceMonths: [97, 95, 99, 91, 96].map((a, i) => ({ name: EMPLOYEES_DATA[i].name.split(" ")[0], v: a })),
-  revenueByEmp: EMPLOYEES_DATA.map(e => ({ name: e.name.split(" ")[0], v: e.revenue })),
-  incentiveByEmp: EMPLOYEES_DATA.map(e => ({ name: e.name.split(" ")[0], v: e.incentive })),
+const EMP: {
+  kpi: { avgKpi: number; totalRevenue: number; avgAttendance: number; totalIncentive: number };
+  performanceTrend: Record<string, number[]>;
+  teamDist: { label: string; v: number; color: string }[];
+  attendanceMonths: { name: string; v: number }[];
+  revenueByEmp: { name: string; v: number }[];
+  incentiveByEmp: { name: string; v: number }[];
+} = {
+  kpi: { avgKpi: 0, totalRevenue: 0, avgAttendance: 0, totalIncentive: 0 },
+  performanceTrend: {} as Record<string, number[]>,
+  teamDist: [],
+  attendanceMonths: [],
+  revenueByEmp: [],
+  incentiveByEmp: [],
 };
 
 // ─── Sub-Components ───────────────────────────────────────────────────────────

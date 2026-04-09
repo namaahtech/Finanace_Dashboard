@@ -69,31 +69,13 @@ interface FormState {
 type PageTab = "entry" | "overview";
 
 // ─── Mock Data ───────────────────────────────────────────
-const MOCK_USERS: User[] = [
-  { _id: "1", name: "Priya Sharma",  employeeId: "NM001", department: "Product" },
-  { _id: "2", name: "Amit Verma",    employeeId: "NM002", department: "Sales" },
-  { _id: "3", name: "Divya Menon",   employeeId: "NM003", department: "Executive" },
-  { _id: "4", name: "Kartik Verma",  employeeId: "NM004", department: "Operations" },
-  { _id: "5", name: "Neha Kapoor",   employeeId: "NM005", department: "Finance" },
-  { _id: "6", name: "Rohan Gupta",   employeeId: "NM006", department: "HR" },
-  { _id: "7", name: "Ananya Pillai", employeeId: "NM007", department: "Engineering" },
-  { _id: "8", name: "Dev Mehta",     employeeId: "NM008", department: "Sales" },
-];
+const MOCK_USERS: User[] = [];
 
 const MOCK_OVERVIEW: Array<{
   emp: User;
   month: number; year: number;
   kpi: number; kra: number; beh: number; final: number;
-}> = [
-  { emp: MOCK_USERS[0], month: 3, year: 2026, kpi: 84, kra: 80, beh: 78, final: 81.6 },
-  { emp: MOCK_USERS[1], month: 3, year: 2026, kpi: 70, kra: 72, beh: 65, final: 70.0 },
-  { emp: MOCK_USERS[2], month: 3, year: 2026, kpi: 92, kra: 88, beh: 90, final: 90.0 },
-  { emp: MOCK_USERS[3], month: 3, year: 2026, kpi: 76, kra: 78, beh: 80, final: 77.6 },
-  { emp: MOCK_USERS[4], month: 3, year: 2026, kpi: 60, kra: 65, beh: 70, final: 63.0 },
-  { emp: MOCK_USERS[5], month: 3, year: 2026, kpi: 88, kra: 85, beh: 82, final: 86.2 },
-  { emp: MOCK_USERS[6], month: 3, year: 2026, kpi: 95, kra: 92, beh: 88, final: 92.8 },
-  { emp: MOCK_USERS[7], month: 3, year: 2026, kpi: 55, kra: 60, beh: 58, final: 57.6 },
-];
+}> = [];
 
 // ─── Helpers ─────────────────────────────────────────────
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -810,7 +792,7 @@ export default function AdminKpiPage() {
                 <h3 className="text-sm font-semibold text-theme-fg">
                   March 2026 — All Employees
                 </h3>
-                <span className="text-xs text-theme-muted">Avg: {Math.round(MOCK_OVERVIEW.reduce((s, r) => s + r.final, 0) / MOCK_OVERVIEW.length)} / 100</span>
+                <span className="text-xs text-theme-muted">Avg: {MOCK_OVERVIEW.length ? Math.round(MOCK_OVERVIEW.reduce((s, r) => s + r.final, 0) / MOCK_OVERVIEW.length) : 0} / 100</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

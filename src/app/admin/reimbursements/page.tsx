@@ -29,14 +29,7 @@ interface Reimbursement {
   employee?: { name: string; employeeId: string; department: string };
 }
 
-const MOCK_REIMBURSEMENTS: Reimbursement[] = [
-  { _id: "1", title: "Client Dinner",     category: "Meals",    amount: 3200,  status: "pending",  createdAt: "2026-04-01", employee: { name: "Priya Sharma",  employeeId: "NM001", department: "Product" } },
-  { _id: "2", title: "Travel to Mumbai",  category: "Travel",   amount: 8700,  status: "pending",  createdAt: "2026-04-02", employee: { name: "Amit Verma",    employeeId: "NM002", department: "Sales" } },
-  { _id: "3", title: "Team Offsite",      category: "Events",   amount: 15000, status: "approved", createdAt: "2026-03-20", employee: { name: "Divya Menon",   employeeId: "NM003", department: "Executive" } },
-  { _id: "4", title: "Office Supplies",   category: "Supplies", amount: 1850,  status: "paid",     createdAt: "2026-03-15", employee: { name: "Rohan Gupta",   employeeId: "NM006", department: "HR" } },
-  { _id: "5", title: "Conference Pass",   category: "Training", amount: 12000, status: "pending",  createdAt: "2026-04-05", employee: { name: "Ananya Pillai", employeeId: "NM007", department: "Engineering" } },
-  { _id: "6", title: "Cab Reimbursement", category: "Travel",   amount: 2400,  status: "rejected", reject_reason: "Missing receipts", createdAt: "2026-04-03", employee: { name: "Dev Mehta", employeeId: "NM008", department: "Sales" } },
-];
+const MOCK_REIMBURSEMENTS: Reimbursement[] = [];
 
 const CATEGORY_COLORS: Record<string, string> = {
   Meals:    "bg-orange-500/10 text-orange-600",
