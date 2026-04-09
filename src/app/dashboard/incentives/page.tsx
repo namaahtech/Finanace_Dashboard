@@ -102,7 +102,7 @@ export default function IncentivesPage() {
  {summary && (
  <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-5">
  {[
- { label: "Total Earned", value: summary.total_earned, color: "text-theme-fg dark:text-theme-subtle" },
+ { label: "Total Earned", value: summary.total_earned, color: "text-theme-fg" },
  { label: "Locked", value: summary.locked, color: "text-amber-600" },
  { label: "Claimable", value: summary.claimable, color: "text-emerald-600" },
  { label: "Held", value: summary.held, color: "text-purple-600" },
@@ -129,7 +129,7 @@ export default function IncentivesPage() {
  <div className="overflow-x-auto">
  <table className="w-full text-sm">
  <thead>
- <tr className="border-b border-theme-border dark:border-theme-border text-left text-xs text-theme-muted dark:text-theme-subtle">
+ <tr className="border-b border-theme-border text-left text-xs text-theme-muted">
  <th className="pb-3 pr-4">Period</th>
  <th className="pb-3 pr-4">Base Amount</th>
  <th className="pb-3 pr-4">Final Amount</th>
@@ -138,7 +138,7 @@ export default function IncentivesPage() {
  <th className="pb-3">Actions</th>
  </tr>
  </thead>
- <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
+ <tbody className="divide-y divide-y divide-theme-border">
  {incentives.map((inc) => (
  <tr key={inc._id}>
  <td className="py-3 pr-4 font-medium">{monthName(inc.month, inc.year)}</td>
@@ -198,7 +198,7 @@ export default function IncentivesPage() {
  {/* Hold bonus modal */}
  {selectedIncentive && projection && (
  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
- <div className="w-full max-w-md rounded-2xl bg-theme-surface p-6 shadow-2xl
+ <div className="w-full max-w-md rounded-2xl bg-theme-surface p-6 shadow-2xl">
  <div className="mb-4 flex items-center gap-2">
  <TrendingUp className="text-sky-500" size={20} />
  <h3 className="font-bold text-theme-fg">Hold Bonus Calculator</h3>
@@ -220,11 +220,11 @@ export default function IncentivesPage() {
  <div
  key={label}
  className={`flex items-center justify-between rounded-lg px-4 py-3 ${
- highlight ? "bg-emerald-50 dark:bg-emerald-900/20" : "bg-theme-page
- }`}
+ highlight ? "bg-emerald-500/10" : "bg-theme-raised"
+          }`}
  >
- <span className="text-sm text-theme-fg dark:text-theme-subtle">{label}</span>
- <span className={`font-bold ${highlight ? "text-emerald-600" : "text-theme-fg dark:text-theme-subtle"}`}>
+ <span className="text-sm text-theme-fg">{label}</span>
+ <span className={`font-bold ${highlight ? "text-emerald-600" : "text-theme-fg"}`}>
  {formatCurrency(value)}
  </span>
  </div>

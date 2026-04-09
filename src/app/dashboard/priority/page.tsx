@@ -83,7 +83,7 @@ export default function PriorityPage() {
  Select Incentive
  </label>
  <select
- className="w-full rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm dark:border-theme-border
+ className="w-full rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm"
  value={form.incentiveId}
  onChange={(e) => setForm({ ...form, incentiveId: e.target.value })}
  required
@@ -107,7 +107,7 @@ export default function PriorityPage() {
  value={form.reason}
  onChange={(e) => setForm({ ...form, reason: e.target.value })}
  placeholder="Briefly explain why this payout is urgent..."
- className="w-full rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm dark:border-theme-border
+ className="w-full rounded-lg border border-theme-border bg-theme-surface px-3 py-2 text-sm"
  />
  </div>
  <Button type="submit" loading={submitting}>Submit Request</Button>
