@@ -7,7 +7,7 @@ import { AuthProvider } from "@/components/layout/AuthProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
- title: "Namaah Pulse",
+ title: "Namaah Panel",
  description: "Performance, Incentive & Payout Management System",
 };
 
