@@ -1,166 +1,409 @@
 "use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { 
- Building2, 
- Search, 
- Mail, 
- Phone, 
- IndianRupee, 
- Calendar, 
- Plus, 
- Filter, 
- ArrowUpRight,
- ChevronRight,
- BadgeCheck,
- MoreHorizontal
+import { useCRMStore, ConvertedClient } from "@/store/crmStore";
+import {
+  Search as SearchIcon,
+  Plus,
+  MoreVertical,
+  Trash2,
+  Edit2,
+  Check,
+  X,
+  UserCheck,
+  Phone,
+  User,
+  TrendingUp,
+  Users,
+  RefreshCw,
+  ArrowRightLeft,
+  ChevronDown,
 } from "lucide-react";
-import { useState } from "react";
-import { formatCurrency } from "@/lib/utils";
+import { useState, useMemo } from "react";
+import { cn } from "@/lib/utils";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
-const CLIENTS_DATA = [
- { id: "CL-001", company: "Zomato Private Limited", contact: "Rahul Jain", email: "rahul@zomato.com", phone: "+91 98XXX XXXXX", revenue: 4500000, activeDeals: 2, lastActivity: "2 hours ago", status: "Key Account" },
- { id: "CL-002", company: "Rivian Automotive", contact: "Sarah M.", email: "sarah@rivian.com", phone: "+1 415 XXX XXXX", revenue: 1250000, activeDeals: 1, lastActivity: "1 day ago", status: "Strategic" },
- { id: "CL-003", company: "Paytm Payments Bank", contact: "Vivek Goyal", email: "vivek@paytm.com", phone: "+91 97XXX XXXXX", revenue: 850000, activeDeals: 0, lastActivity: "3 days ago", status: "Standard" },
- { id: "CL-004", company: "BYJU'S Learning", contact: "Sneha R.", email: "sneha@byjus.com", phone: "+91 96XXX XXXXX", revenue: 3200000, activeDeals: 1, lastActivity: "5 hours ago", status: "Key Account" },
- { id: "CL-005", company: "Tesla Energy India", contact: "Elon M.", email: "elon@tesla.com", phone: "+1 650 XXX XXXX", revenue: 45000000, activeDeals: 1, lastActivity: "10 mins ago", status: "Strategic" },
- { id: "CL-006", company: "Swiggy Limited", contact: "Sriharsha M.", email: "sriharsha@swiggy.in", phone: "+91 95XXX XXXXX", revenue: 1500000, activeDeals: 0, lastActivity: "1 week ago", status: "Standard" },
-];
+const formatRupee = (amount: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+
+const TIER_STYLES: Record<string, string> = {
+  Strategic: "bg-purple-100 text-purple-700",
+  "Key Account": "bg-sky-100 text-sky-700",
+  Standard: "bg-slate-100 text-slate-600",
+};
+
+const STATUS_STYLES: Record<string, string> = {
+  Active: "bg-emerald-100 text-emerald-700",
+  Pending: "bg-amber-100 text-amber-700",
+  Churned: "bg-rose-100 text-rose-700",
+};
+
+const ClientActionMenu = ({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) => (
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger asChild>
+      <button className="opacity-10 group-hover:opacity-100 hover:bg-black/5 p-1 rounded transition-all">
+        <MoreVertical size={14} className="text-black/50" />
+      </button>
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Portal>
+      <DropdownMenu.Content className="min-w-[160px] bg-white border border-black/5 rounded-lg shadow-xl p-1 z-50 animate-in fade-in zoom-in duration-200" sideOffset={5} align="end">
+        <DropdownMenu.Item onClick={onEdit} className="flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-black/70 hover:bg-black/5 outline-none cursor-pointer rounded transition-colors">
+          <Edit2 size={12} className="text-black/30" /> Edit Client
+        </DropdownMenu.Item>
+        <DropdownMenu.Separator className="h-[1px] bg-black/5 my-1" />
+        <DropdownMenu.Item onClick={onDelete} className="flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-rose-600 hover:bg-rose-50 outline-none cursor-pointer rounded transition-colors">
+          <Trash2 size={12} /> Remove Client
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Portal>
+  </DropdownMenu.Root>
+);
 
 export default function CRMClientsPage() {
- const [search, setSearch] = useState("");
+  const { convertedClients, addConvertedClient, removeClient } = useCRMStore();
+  const [search, setSearch] = useState("");
+  const [tierFilter, setTierFilter] = useState<string>("All");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<Partial<ConvertedClient>>({});
 
- const filtered = CLIENTS_DATA.filter(c => 
- c.company.toLowerCase().includes(search.toLowerCase()) || 
- c.contact.toLowerCase().includes(search.toLowerCase())
- );
+  // Inline ghost row state
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [newForm, setNewForm] = useState({
+    company: "",
+    leadName: "",
+    leadPhone: "",
+    value: 0,
+    empName: "",
+    empId: "",
+    status: "Active" as ConvertedClient["status"],
+    tier: "Standard" as ConvertedClient["tier"],
+  });
 
- return (
- <DashboardShell 
- title="Global Client Registry" 
- subtitle="Comprehensive architectural manifest of organizational partnerships and revenue contributions"
- actions={
- <button className="flex items-center gap-2 rounded-xl bg-theme-primary text-white dark:text-theme-fg px-6 py-3 text-xs font-black uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-xl">
- <Plus size={16} strokeWidth={3} />
- Onboard Entity
- </button>
- }
- >
- <div className="flex flex-col gap-10">
- {/* Header Metrics */}
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
- {[
- { label: "Total Asset Base", value: formatCurrency(56300000), icon: IndianRupee, color: "sky" },
- { label: "Strategic Partners", value: "18", icon: BadgeCheck, color: "emerald" },
- { label: "Retention Rate", value: "98.2%", icon: ArrowUpRight, color: "purple" },
- { label: "Pending Renewals", value: "05", icon: Calendar, color: "amber" },
- ].map((stat, i) => (
- <div key={i} className="page-card !mb-0 p-6 flex items-center justify-between group hover:-translate-y-1 transition-all border border-default">
- <div>
- <p className="text-[10px] font-black text-muted uppercase tracking-[0.2em] mb-1">{stat.label}</p>
- <p className="text-xl font-black text-foreground tracking-tight">{stat.value}</p>
- </div>
- <div className={`w-12 h-12 rounded-2xl bg-${stat.color}-500/10 flex items-center justify-center`} style={{ color: `var(--${stat.color}-600)` }}>
- <stat.icon size={24} strokeWidth={2.5} />
- </div>
- </div>
- ))}
- </div>
+  const filtered = useMemo(() => {
+    return convertedClients.filter((c) => {
+      const matchSearch =
+        !search ||
+        c.company.toLowerCase().includes(search.toLowerCase()) ||
+        c.leadName.toLowerCase().includes(search.toLowerCase()) ||
+        c.empName.toLowerCase().includes(search.toLowerCase());
+      const matchTier = tierFilter === "All" || c.tier === tierFilter;
+      return matchSearch && matchTier;
+    });
+  }, [convertedClients, search, tierFilter]);
 
- {/* Workspace Controls */}
- <div className="flex flex-col md:row-row justify-between items-center gap-6">
- <div className="relative w-full md:w-96 group">
- <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-sky-600 transition-colors" size={20} />
- <input 
- type="text" 
- placeholder="Locate client entity by name or contact..."
- className="w-full bg-card border border-default rounded-2xl pl-14 pr-6 py-5 text-sm font-bold text-foreground outline-none focus:border-sky-500 transition-all shadow-sm"
- value={search}
- onChange={(e) => setSearch(e.target.value)}
- />
- </div>
- <div className="flex gap-4">
- <button className="flex items-center gap-2 p-4 rounded-2xl bg-card border border-default text-muted hover:text-foreground transition-all">
- <Filter size={18} />
- <span className="text-[10px] font-black uppercase tracking-widest hidden md:block text-muted">Filter Parameters</span>
- </button>
- </div>
- </div>
+  // Stats
+  const totalRevenue = convertedClients.reduce((s, c) => s + c.value, 0);
+  const totalClients = convertedClients.length;
+  const activeClients = convertedClients.filter((c) => c.status === "Active").length;
+  const convertedThisMonth = convertedClients.filter((c) => c.fromPipeline).length;
 
- {/* Client Registry Table */}
- <div className="page-card !p-0 overflow-hidden border border-default shadow-2xl">
- <div className="overflow-x-auto">
- <table className="w-full border-collapse">
- <thead>
- <tr className="bg-[hsl(var(--surface-raised))] border-b border-default">
- <th className="px-8 py-5 text-left text-[9px] font-black text-muted uppercase tracking-[0.3em]">Entity Identity</th>
- <th className="px-8 py-5 text-left text-[9px] font-black text-muted uppercase tracking-[0.3em]">Functional Liaison</th>
- <th className="px-8 py-5 text-left text-[9px] font-black text-muted uppercase tracking-[0.3em]">Revenue Contribution</th>
- <th className="px-8 py-5 text-left text-[9px] font-black text-muted uppercase tracking-[0.3em]">Temporal Delta</th>
- <th className="px-8 py-5 text-left text-[9px] font-black text-muted uppercase tracking-[0.3em]">Tier Classification</th>
- <th className="px-8 py-5 text-right text-[9px] font-black text-muted uppercase tracking-[0.3em]">Actions</th>
- </tr>
- </thead>
- <tbody className="divide-y divide-default/10">
- {filtered.map((client) => (
- <tr key={client.id} className="hover:bg-sky-500/[0.02] transition-all group">
- <td className="px-8 py-6">
- <div className="flex items-center gap-4">
- <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-600 group-hover:scale-110 transition-transform">
- <Building2 size={20} strokeWidth={2.5} />
- </div>
- <div>
- <p className="text-sm font-black text-foreground uppercase tracking-tight leading-tight">{client.company}</p>
- <p className="text-[10px] font-black text-muted uppercase tracking-widest">{client.id}</p>
- </div>
- </div>
- </td>
- <td className="px-8 py-6">
- <div className="flex flex-col gap-1">
- <p className="text-xs font-bold text-foreground">{client.contact}</p>
- <div className="flex items-center gap-2 text-[10px] font-black text-muted uppercase tracking-widest">
- <Mail size={12} />
- <span>{client.email}</span>
- </div>
- </div>
- </td>
- <td className="px-8 py-6">
- <div className="flex flex-col">
- <p className="text-sm font-black text-emerald-600 tracking-tight">{formatCurrency(client.revenue)}</p>
- <p className="text-[10px] font-black text-muted uppercase tracking-widest">{client.activeDeals} Active Cycles</p>
- </div>
- </td>
- <td className="px-8 py-6">
- <div className="flex items-center gap-2 text-[10px] font-black text-muted uppercase tracking-widest bg-default/10 w-fit px-3 py-1 rounded-full">
- <Calendar size={12} />
- {client.lastActivity}
- </div>
- </td>
- <td className="px-8 py-6">
- <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${
- client.status === 'Strategic' ? 'bg-purple-500/10 text-purple-600' :
- client.status === 'Key Account' ? 'bg-sky-500/10 text-sky-600' : 'bg-theme-raised text-theme-muted'
- }`}>
- {client.status}
- </span>
- </td>
- <td className="px-8 py-6 text-right">
- <div className="flex justify-end gap-2">
- <button className="p-2 rounded-xl border border-default hover:bg-sky-500 hover:text-white hover:border-sky-500 transition-all text-muted">
- <ChevronRight size={16} strokeWidth={3} />
- </button>
- <button className="p-2 rounded-xl text-muted hover:text-foreground">
- <MoreHorizontal size={16} />
- </button>
- </div>
- </td>
- </tr>
- ))}
- </tbody>
- </table>
- </div>
- </div>
- </div>
- </DashboardShell>
- );
+  const handleSaveNew = () => {
+    if (!newForm.company) return;
+    addConvertedClient({
+      id: `CL-${Date.now()}`,
+      company: newForm.company,
+      leadName: newForm.leadName,
+      leadPhone: newForm.leadPhone,
+      value: newForm.value,
+      empName: newForm.empName,
+      empId: newForm.empId,
+      status: newForm.status,
+      tier: newForm.tier,
+      convertedDate: new Date().toLocaleDateString("en-IN", { month: "short", day: "2-digit", year: "numeric" }),
+      fromPipeline: false,
+    });
+    setNewForm({ company: "", leadName: "", leadPhone: "", value: 0, empName: "", empId: "", status: "Active", tier: "Standard" });
+    setIsAddingNew(false);
+  };
+
+  const handleStartEdit = (client: ConvertedClient) => {
+    setEditingId(client.id);
+    setEditValues({ ...client });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingId) return;
+    // In a real app: API call. Here we update via store remove + re-add.
+    // Simple approach: mutate via store remove + add with updated values
+    removeClient(editingId);
+    addConvertedClient({ ...(editValues as ConvertedClient) });
+    setEditingId(null);
+    setEditValues({});
+  };
+
+  const STATS = [
+    { label: "Total Revenue", value: formatRupee(totalRevenue), icon: TrendingUp, accent: "text-emerald-600", bg: "bg-emerald-50" },
+    { label: "Total Clients", value: String(totalClients), icon: Users, accent: "text-sky-600", bg: "bg-sky-50" },
+    { label: "Active Accounts", value: `${activeClients}/${totalClients}`, icon: UserCheck, accent: "text-violet-600", bg: "bg-violet-50" },
+    { label: "From Pipeline", value: String(convertedThisMonth), icon: ArrowRightLeft, accent: "text-amber-600", bg: "bg-amber-50" },
+  ];
+
+  return (
+    <DashboardShell
+      title="Client Registry"
+      subtitle="Live enterprise client manifest — synchronized with the Sales Pipeline"
+    >
+      <div className="flex flex-col gap-6 font-sans bg-[#fbfbfa] -m-8 p-8 min-h-full">
+
+        {/* ── Stat Cards ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {STATS.map((s) => (
+            <div key={s.label} className="bg-white rounded-lg p-4 shadow-[0_1px_6px_rgba(0,0,0,0.05)] flex items-center justify-between group hover:shadow-[0_2px_12px_rgba(0,0,0,0.07)] transition-shadow">
+              <div>
+                <p className="text-[10px] font-black text-black/30 uppercase tracking-widest mb-1">{s.label}</p>
+                <p className="text-xl font-black text-black/80 tracking-tight">{s.value}</p>
+              </div>
+              <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", s.bg)}>
+                <s.icon size={16} className={s.accent} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Controls ── */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-grow max-w-xs group">
+            <SearchIcon size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-black/25 group-focus-within:text-black transition-colors" />
+            <input
+              type="text"
+              placeholder="Search client, contact, employee..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-transparent pl-7 pr-2 py-1.5 text-xs font-bold text-black outline-none border-b border-black/5 focus:border-black/20 transition-all placeholder:text-black/20"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            {["All", "Strategic", "Key Account", "Standard"].map((t) => (
+              <button
+                key={t}
+                onClick={() => setTierFilter(t)}
+                className={cn("px-3 py-1 text-[10px] font-black rounded uppercase tracking-widest transition-all", tierFilter === t ? "bg-black text-white" : "text-black/30 hover:text-black hover:bg-black/5")}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className="flex-grow" />
+          <button
+            onClick={() => setIsAddingNew(true)}
+            className="flex items-center gap-2 bg-black text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded hover:opacity-90 active:scale-95 transition-all shadow-md"
+          >
+            <Plus size={13} /> Add Client
+          </button>
+        </div>
+
+        {/* ── Main Table ── */}
+        <div className="bg-white rounded-lg shadow-[0_1px_8px_rgba(0,0,0,0.05)] overflow-auto scrollbar-hide">
+          <table className="w-full text-left border-collapse min-w-[1100px]">
+            <thead>
+              <tr className="border-b border-black/[0.04]">
+                <th className="w-10 px-4 py-3 border-r border-black/[0.04]"></th>
+                {["Company", "Contact Person", "Phone", "Revenue (₹)", "Assigned Employee", "Status", "Tier", "Date", "Pipeline?"].map((h) => (
+                  <th key={h} className="px-4 py-3 text-[10px] font-black text-black/30 uppercase tracking-widest border-r border-black/[0.04] whitespace-nowrap">
+                    <div className="flex items-center gap-1">{h} <ChevronDown size={10} className="opacity-40" /></div>
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-[10px] font-black text-black/30 uppercase tracking-widest"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((client, idx) => {
+                const isEditing = editingId === client.id;
+                return (
+                  <tr
+                    key={client.id}
+                    className={cn(
+                      "border-b border-black/[0.04] transition-colors group",
+                      idx % 2 === 1 ? "bg-black/[0.01]" : "bg-white",
+                      isEditing ? "bg-black/[0.03] ring-1 ring-inset ring-black/10" : "hover:bg-black/[0.015]"
+                    )}
+                  >
+                    <td className="px-4 py-3 border-r border-black/[0.04] text-center">
+                      {isEditing ? (
+                        <div className="flex gap-1">
+                          <button onClick={handleSaveEdit} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check size={12} /></button>
+                          <button onClick={() => setEditingId(null)} className="p-1 text-rose-600 hover:bg-rose-50 rounded"><X size={12} /></button>
+                        </div>
+                      ) : (
+                        <ClientActionMenu onEdit={() => handleStartEdit(client)} onDelete={() => removeClient(client.id)} />
+                      )}
+                    </td>
+
+                    {/* Company */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded bg-black/5 flex items-center justify-center text-[9px] font-black text-black/40 flex-shrink-0">
+                          {client.company[0]}
+                        </div>
+                        {isEditing ? (
+                          <input value={editValues.company || ""} onChange={(e) => setEditValues({ ...editValues, company: e.target.value })} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/20 w-full" />
+                        ) : (
+                          <span className="text-[13px] font-bold text-black/80">{client.company}</span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Contact Person */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      {isEditing ? (
+                        <input value={editValues.leadName || ""} onChange={(e) => setEditValues({ ...editValues, leadName: e.target.value })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full" />
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-[12px] font-bold text-black/60">
+                          <User size={10} className="text-black/20" /> {client.leadName}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Phone */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      {isEditing ? (
+                        <input value={editValues.leadPhone || ""} onChange={(e) => setEditValues({ ...editValues, leadPhone: e.target.value })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full" />
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-[12px] font-bold text-black/50">
+                          <Phone size={10} className="text-black/20" /> {client.leadPhone}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Revenue */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      {isEditing ? (
+                        <input type="number" value={editValues.value || ""} onChange={(e) => setEditValues({ ...editValues, value: Number(e.target.value) })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full" />
+                      ) : (
+                        <span className="text-[12px] font-black text-emerald-600">{formatRupee(client.value)}</span>
+                      )}
+                    </td>
+
+                    {/* Assigned Employee */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 rounded-full bg-slate-100 border border-black/5 flex items-center justify-center text-[8px] font-black text-black/40 flex-shrink-0">
+                          {client.empName[0]}
+                        </div>
+                        <div className="flex flex-col leading-none">
+                          <span className="text-[11px] font-bold text-black/70">{client.empName}</span>
+                          <span className="text-[10px] font-bold text-black/40 mt-0.5">{client.empId}</span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      {isEditing ? (
+                        <select value={editValues.status || "Active"} onChange={(e) => setEditValues({ ...editValues, status: e.target.value as ConvertedClient["status"] })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10">
+                          <option>Active</option><option>Pending</option><option>Churned</option>
+                        </select>
+                      ) : (
+                        <span className={cn("px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tight", STATUS_STYLES[client.status])}>{client.status}</span>
+                      )}
+                    </td>
+
+                    {/* Tier */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      {isEditing ? (
+                        <select value={editValues.tier || "Standard"} onChange={(e) => setEditValues({ ...editValues, tier: e.target.value as ConvertedClient["tier"] })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10">
+                          <option>Standard</option><option>Key Account</option><option>Strategic</option>
+                        </select>
+                      ) : (
+                        <span className={cn("px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tight", TIER_STYLES[client.tier])}>{client.tier}</span>
+                      )}
+                    </td>
+
+                    {/* Date */}
+                    <td className="px-4 py-3 border-r border-black/[0.04] text-[11px] font-bold text-black/40 whitespace-nowrap">
+                      {client.convertedDate}
+                    </td>
+
+                    {/* From Pipeline badge */}
+                    <td className="px-4 py-3 border-r border-black/[0.04] text-center">
+                      {client.fromPipeline && (
+                        <div className="flex items-center justify-center">
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[9px] font-black rounded uppercase tracking-tight">
+                            <Check size={8} strokeWidth={3} /> Pipeline
+                          </span>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* View link */}
+                    <td className="px-4 py-3 text-right">
+                      <button className="text-[10px] font-black text-black/20 hover:text-black uppercase tracking-widest transition-colors opacity-0 group-hover:opacity-100">
+                        View →
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {/* ── Inline Ghost Row ── */}
+              {isAddingNew ? (
+                <tr className="border-b border-black/[0.04] bg-black/[0.04] ring-2 ring-inset ring-black animate-in fade-in duration-300">
+                  <td className="px-4 py-3 border-r border-black/[0.04] text-center">
+                    <div className="flex gap-1">
+                      <button onClick={handleSaveNew} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check size={12} /></button>
+                      <button onClick={() => setIsAddingNew(false)} className="p-1 text-rose-600 hover:bg-rose-50 rounded"><X size={12} /></button>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <input autoFocus placeholder="Company Name" value={newForm.company} onChange={(e) => setNewForm({ ...newForm, company: e.target.value })} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/20 w-full placeholder:text-black/20" />
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <input placeholder="Contact Person" value={newForm.leadName} onChange={(e) => setNewForm({ ...newForm, leadName: e.target.value })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full placeholder:text-black/20" />
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <input placeholder="+91 ..." value={newForm.leadPhone} onChange={(e) => setNewForm({ ...newForm, leadPhone: e.target.value })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full placeholder:text-black/20" />
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <input type="number" placeholder="Value" value={newForm.value || ""} onChange={(e) => setNewForm({ ...newForm, value: Number(e.target.value) })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full placeholder:text-black/20" />
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <input placeholder="Employee Name" value={newForm.empName} onChange={(e) => setNewForm({ ...newForm, empName: e.target.value })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full placeholder:text-black/20" />
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <select value={newForm.status} onChange={(e) => setNewForm({ ...newForm, status: e.target.value as ConvertedClient["status"] })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 w-full">
+                      <option>Active</option><option>Pending</option><option>Churned</option>
+                    </select>
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <select value={newForm.tier} onChange={(e) => setNewForm({ ...newForm, tier: e.target.value as ConvertedClient["tier"] })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 w-full">
+                      <option>Standard</option><option>Key Account</option><option>Strategic</option>
+                    </select>
+                  </td>
+                  <td colSpan={3} className="px-4 py-3 text-[10px] text-black/25 font-black uppercase italic animate-pulse">Draft Mode...</td>
+                </tr>
+              ) : (
+                <tr onClick={() => setIsAddingNew(true)} className="hover:bg-black/[0.015] transition-colors cursor-pointer group border-b border-dashed border-black/10">
+                  <td className="px-4 py-3 border-r border-black/[0.04]"></td>
+                  <td colSpan={10} className="px-4 py-3">
+                    <div className="flex items-center gap-2 text-[11px] font-black text-black/25 uppercase tracking-widest group-hover:text-black transition-colors">
+                      <Plus size={13} /> Add New Client
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="flex items-center justify-between px-1">
+          <p className="text-[10px] font-black text-black/20 uppercase tracking-widest">
+            {filtered.length} of {totalClients} clients — {convertedThisMonth} converted from pipeline
+          </p>
+          <p className="text-[10px] font-black text-black/20 uppercase tracking-widest">
+            Total Portfolio: {formatRupee(totalRevenue)}
+          </p>
+        </div>
+      </div>
+
+      <style jsx global>{`
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
+    </DashboardShell>
+  );
 }
