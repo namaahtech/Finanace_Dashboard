@@ -210,14 +210,28 @@ export type Database = {
         Insert: Omit<Database["public"]["Tables"]["clients"]["Row"], "id" | "created_at">;
         Update: Partial<Database["public"]["Tables"]["clients"]["Insert"]>;
       };
+      channels: {
+        Row: {
+          id: string;
+          name: string;
+          type: "text" | "voice" | "announcement";
+          org_id: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["channels"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["channels"]["Insert"]>;
+      };
       messages: {
         Row: {
           id: string;
-          channel_id: string | null;
+          channel_id: string;
           sender_id: string;
-          recipient_id: string | null;
+          sender_name: string;
           content: string;
-          is_read: boolean;
+          file_url: string | null;
+          file_name: string | null;
+          file_type: string | null;
+          file_size: number | null;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["messages"]["Row"], "id" | "created_at">;
