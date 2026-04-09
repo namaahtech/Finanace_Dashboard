@@ -1,165 +1,276 @@
 "use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { 
- CreditCard, 
- Plus, 
- Search, 
- Calendar, 
- AlertTriangle, 
- TrendingUp, 
- Users,
- Settings2,
- Bell,
- CheckCircle2,
- RefreshCw
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { formatCurrency, cn } from "@/lib/utils";
+import {
+  CreditCard,
+  Plus,
+  Search,
+  Calendar,
+  AlertTriangle,
+  CheckCircle2,
+  Users,
+  IndianRupee,
+  X,
+  Tag,
 } from "lucide-react";
 import { useState } from "react";
-import { formatCurrency } from "@/lib/utils";
 
-const SUBSCRIPTIONS = [
- { id: 1, name: "Google Workspace", team: "Operations", cost: 12000, cycle: "Monthly", renewal: "Apr 28, 2026", status: "active", category: "Productivity", users: 85 },
- { id: 2, name: "AWS Production", team: "Engineering", cost: 85000, cycle: "Monthly", renewal: "Apr 22, 2026", status: "expiring", category: "Infrastructure", users: 12 },
- { id: 3, name: "Slack Enterprise", team: "Human Capital", cost: 45000, cycle: "Monthly", renewal: "May 05, 2026", status: "active", category: "Communication", users: 82 },
- { id: 4, name: "Zoom Pro", team: "Sales", cost: 8500, cycle: "Monthly", renewal: "Apr 15, 2026", status: "active", category: "Meetings", users: 15 },
- { id: 5, name: "Adobe Creative Cloud", team: "Marketing", cost: 18000, cycle: "Annual", renewal: "Jun 12, 2026", status: "active", category: "Creative", users: 5 },
- { id: 6, name: "Figma Professional", team: "Product", cost: 9500, cycle: "Monthly", renewal: "Apr 20, 2026", status: "inactive", category: "Design", users: 8 },
+interface Subscription {
+  id: number;
+  name: string;
+  team: string;
+  category: string;
+  seats: number;
+  cost: number;
+  cycle: "Monthly" | "Annual";
+  renewalDate: string;
+  status: "active" | "expiring" | "inactive";
+}
+
+const SUBSCRIPTIONS: Subscription[] = [
+  { id: 1, name: "Google Workspace",    team: "Operations",  category: "Productivity",   seats: 85, cost: 12000, cycle: "Monthly", renewalDate: "Apr 28, 2026", status: "active" },
+  { id: 2, name: "AWS Production",      team: "Engineering", category: "Infrastructure", seats: 12, cost: 85000, cycle: "Monthly", renewalDate: "Apr 22, 2026", status: "expiring" },
+  { id: 3, name: "Slack Enterprise",    team: "All Teams",   category: "Communication",  seats: 82, cost: 45000, cycle: "Monthly", renewalDate: "May 05, 2026", status: "active" },
+  { id: 4, name: "Zoom Pro",            team: "Sales",       category: "Meetings",       seats: 15, cost: 8500,  cycle: "Monthly", renewalDate: "Apr 15, 2026", status: "expiring" },
+  { id: 5, name: "Adobe Creative Cloud",team: "Marketing",   category: "Creative",       seats: 5,  cost: 18000, cycle: "Annual",  renewalDate: "Jun 12, 2026", status: "active" },
+  { id: 6, name: "Figma Professional",  team: "Product",     category: "Design",         seats: 8,  cost: 9500,  cycle: "Monthly", renewalDate: "Apr 20, 2026", status: "inactive" },
+  { id: 7, name: "GitHub Enterprise",   team: "Engineering", category: "Development",    seats: 20, cost: 22000, cycle: "Monthly", renewalDate: "May 10, 2026", status: "active" },
+  { id: 8, name: "Notion Team",         team: "Product",     category: "Productivity",   seats: 30, cost: 7500,  cycle: "Monthly", renewalDate: "May 18, 2026", status: "active" },
 ];
 
+const CATEGORY_COLORS: Record<string, string> = {
+  Productivity:   "bg-sky-500/10 text-sky-600",
+  Infrastructure: "bg-purple-500/10 text-purple-600",
+  Communication:  "bg-emerald-500/10 text-emerald-600",
+  Meetings:       "bg-blue-500/10 text-blue-600",
+  Creative:       "bg-pink-500/10 text-pink-600",
+  Design:         "bg-orange-500/10 text-orange-600",
+  Development:    "bg-amber-500/10 text-amber-600",
+};
+
+const STATUS_BADGE: Record<Subscription["status"], "success" | "warning" | "default"> = {
+  active:   "success",
+  expiring: "warning",
+  inactive: "default",
+};
+
+const EMPTY_FORM = { name: "", team: "", category: "", seats: "", cost: "", cycle: "Monthly", renewalDate: "" };
+
 export default function SubscriptionsPage() {
- const [search, setSearch] = useState("");
+  const [filter, setFilter]     = useState("all");
+  const [search, setSearch]     = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm]         = useState(EMPTY_FORM);
 
- const filtered = SUBSCRIPTIONS.filter(s => 
- s.name.toLowerCase().includes(search.toLowerCase()) || 
- s.team.toLowerCase().includes(search.toLowerCase())
- );
+  const filtered = SUBSCRIPTIONS.filter((s) => {
+    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.team.toLowerCase().includes(search.toLowerCase());
+    const matchFilter = filter === "all" || s.status === filter;
+    return matchSearch && matchFilter;
+  });
 
- return (
- <DashboardShell 
- title="Subscription Inventory" 
- subtitle="Full lifecycle oversight of SaaS, license allocation, and recurring operational expenditure"
- actions={
- <button className="flex items-center gap-2 rounded-xl bg-theme-primary text-white dark:text-theme-fg px-6 py-3 text-xs font-black uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-xl">
- <Plus size={16} strokeWidth={3} />
- New Subscription
- </button>
- }
- >
- <div className="flex flex-col gap-8">
- {/* Metric Banner */}
- <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
- <div className="page-card !mb-0 p-8 border-l-4 border-l-sky-600 bg-sky-500/5 relative overflow-hidden group">
- <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:scale-110 transition-transform">
- <TrendingUp size={80} strokeWidth={1} />
- </div>
- <p className="text-[10px] font-black text-sky-600 uppercase tracking-[0.3em] mb-2">Monthly Committed Spend</p>
- <h3 className="text-3xl font-black text-foreground tracking-tighter">₹1,78,000<span className="text-sm font-bold opacity-40 ml-2">/mo</span></h3>
- </div>
- 
- <div className="page-card !mb-0 p-8 border-l-4 border-l-amber-500 bg-amber-500/5 relative overflow-hidden group">
- <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:scale-110 transition-transform">
- <AlertTriangle size={80} strokeWidth={1} />
- </div>
- <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.3em] mb-2">Renewal Alerts (72h)</p>
- <h3 className="text-3xl font-black text-foreground tracking-tighter">02 <span className="text-sm font-bold opacity-40 ml-2">Critical</span></h3>
- </div>
+  const monthlySpend = SUBSCRIPTIONS.filter((s) => s.status !== "inactive").reduce((sum, s) => {
+    return sum + (s.cycle === "Monthly" ? s.cost : Math.round(s.cost / 12));
+  }, 0);
+  const expiring    = SUBSCRIPTIONS.filter((s) => s.status === "expiring").length;
+  const active      = SUBSCRIPTIONS.filter((s) => s.status === "active").length;
+  const totalSeats  = SUBSCRIPTIONS.filter((s) => s.status !== "inactive").reduce((s, sub) => s + sub.seats, 0);
 
- <div className="page-card !mb-0 p-8 border-l-4 border-l-emerald-500 bg-emerald-500/5 relative overflow-hidden group">
- <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:scale-110 transition-transform">
- <CheckCircle2 size={80} strokeWidth={1} />
- </div>
- <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-2">Resource Utilization</p>
- <h3 className="text-3xl font-black text-foreground tracking-tighter">94.2% <span className="text-sm font-bold opacity-40 ml-2">Efficiency</span></h3>
- </div>
- </div>
+  return (
+    <DashboardShell
+      title="Subscriptions"
+      subtitle="Track all software subscriptions, team usage, and renewal dates."
+      actions={
+        <Button variant="primary" size="sm" onClick={() => setShowForm(true)}>
+          <Plus size={14} className="mr-1.5" /> Add Subscription
+        </Button>
+      }
+    >
+      <div className="space-y-5">
 
- {/* Search & Bulk Actions */}
- <div className="flex flex-col md:row-row justify-between items-center gap-6">
- <div className="relative w-full md:w-96">
- <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={18} />
- <input 
- type="text" 
- placeholder="Find inventory by name, team, or category..."
- className="w-full bg-card border border-default rounded-2xl pl-12 pr-6 py-4 text-sm font-bold text-foreground outline-none focus:border-sky-500 transition-all shadow-sm"
- value={search}
- onChange={(e) => setSearch(e.target.value)}
- />
- </div>
- <div className="flex gap-4">
- <button className="p-4 rounded-2xl bg-card border border-default text-muted hover:text-foreground hover:border-sky-500/30 transition-all">
- <RefreshCw size={18} />
- </button>
- <button className="p-4 rounded-2xl bg-card border border-default text-muted hover:text-foreground hover:border-sky-500/30 transition-all">
- <Settings2 size={18} />
- </button>
- </div>
- </div>
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { label: "Monthly Spend",  value: formatCurrency(monthlySpend), icon: IndianRupee,   color: "text-theme-fg",    bg: "bg-theme-raised" },
+            { label: "Active",         value: active,                        icon: CheckCircle2,  color: "text-emerald-600", bg: "bg-emerald-500/10" },
+            { label: "Expiring Soon",  value: expiring,                      icon: AlertTriangle, color: "text-amber-600",   bg: "bg-amber-500/10" },
+            { label: "Total Seats",    value: totalSeats,                    icon: Users,         color: "text-sky-600",     bg: "bg-sky-500/10" },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} className="page-card flex items-center gap-3">
+              <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
+                <Icon size={15} className={color} />
+              </div>
+              <div>
+                <p className="text-[11px] text-theme-muted">{label}</p>
+                <p className={cn("text-xl font-black leading-tight", color)}>{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
 
- {/* Subscription Grid */}
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
- {filtered.map((sub) => (
- <div key={sub.id} className="page-card !mb-0 p-0 overflow-hidden border border-default shadow-xl group hover:border-sky-500/20 transition-all">
- <div className="p-6 bg-[hsl(var(--surface-raised))] border-b border-default flex justify-between items-start">
- <div className="flex items-center gap-4">
- <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
- sub.status === 'expiring' ? 'bg-amber-500/10 text-amber-600' : 
- sub.status === 'inactive' ? 'bg-theme-raised text-theme-muted' : 'bg-sky-500/10 text-sky-600'
- }`}>
- <CreditCard size={24} strokeWidth={2.5} />
- </div>
- <div>
- <h4 className="text-sm font-black text-foreground uppercase tracking-wider">{sub.name}</h4>
- <p className="text-[10px] font-black text-muted uppercase tracking-widest">{sub.team}</p>
- </div>
- </div>
- <button className="text-muted hover:text-sky-600 transition-colors">
- <Bell size={16} />
- </button>
- </div>
+        {/* Table */}
+        <div className="page-card overflow-hidden p-0">
+          {/* Header */}
+          <div className="flex flex-col gap-3 border-b border-theme-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5">
+              {[
+                { id: "all",      label: "All" },
+                { id: "active",   label: "Active" },
+                { id: "expiring", label: "Expiring" },
+                { id: "inactive", label: "Inactive" },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setFilter(t.id)}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
+                    filter === t.id ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="relative flex-shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search subscriptions…"
+                className="h-8 w-48 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all"
+              />
+            </div>
+          </div>
 
- <div className="p-8 space-y-6">
- <div className="flex justify-between items-center">
- <div>
- <p className="text-[9px] font-black text-muted uppercase tracking-[0.2em] mb-1">Commitment</p>
- <p className="text-xl font-black text-foreground tracking-tight">{formatCurrency(sub.cost)}<span className="text-[10px] opacity-40 uppercase ml-1">/{sub.cycle}</span></p>
- </div>
- <div className="text-right">
- <p className="text-[9px] font-black text-muted uppercase tracking-[0.2em] mb-1">Impact</p>
- <div className="flex items-center gap-2 justify-end">
- <Users size={12} className="text-muted" />
- <span className="text-xs font-black text-foreground">{sub.users} SEATS</span>
- </div>
- </div>
- </div>
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
+                  <th className="px-5 py-3 font-semibold">Service</th>
+                  <th className="px-5 py-3 font-semibold">Team</th>
+                  <th className="px-5 py-3 font-semibold">Category</th>
+                  <th className="px-5 py-3 font-semibold text-center">Seats</th>
+                  <th className="px-5 py-3 font-semibold">Cost</th>
+                  <th className="px-5 py-3 font-semibold">Renewal</th>
+                  <th className="px-5 py-3 font-semibold text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-theme-border">
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={7} className="py-12 text-center text-sm text-theme-subtle">No subscriptions found</td></tr>
+                ) : filtered.map((sub) => (
+                  <tr key={sub.id} className="group transition-colors hover:bg-theme-raised/40">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className={cn("flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg", sub.status === "expiring" ? "bg-amber-500/10" : sub.status === "inactive" ? "bg-theme-raised" : "bg-sky-500/10")}>
+                          <CreditCard size={13} className={sub.status === "expiring" ? "text-amber-600" : sub.status === "inactive" ? "text-theme-subtle" : "text-sky-600"} />
+                        </div>
+                        <p className="text-xs font-semibold text-theme-fg">{sub.name}</p>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-xs text-theme-muted">{sub.team}</td>
+                    <td className="px-5 py-3">
+                      <span className={cn("inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold", CATEGORY_COLORS[sub.category] ?? "bg-theme-raised text-theme-muted")}>
+                        <Tag size={10} />
+                        {sub.category}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      <span className="inline-flex items-center gap-1 text-xs text-theme-muted">
+                        <Users size={11} />
+                        {sub.seats}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <p className="text-xs font-bold text-theme-fg">{formatCurrency(sub.cost)}</p>
+                      <p className="text-[10px] text-theme-subtle">/{sub.cycle}</p>
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar size={11} className={sub.status === "expiring" ? "text-amber-500" : "text-theme-subtle"} />
+                        <span className={cn("text-xs", sub.status === "expiring" ? "font-semibold text-amber-600" : "text-theme-muted")}>
+                          {sub.renewalDate}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <Badge variant={STATUS_BADGE[sub.status]}>
+                        {sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
- <div className="space-y-4 pt-6 border-t border-default">
- <div className="flex justify-between items-center px-4 py-3 rounded-xl bg-background border border-default/50">
- <div className="flex items-center gap-2">
- <Calendar size={14} className="text-muted" />
- <span className="text-[10px] font-black text-muted uppercase tracking-widest">Renewal Epoch</span>
- </div>
- <span className={`text-[10px] font-black uppercase tracking-widest ${sub.status === 'expiring' ? 'text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full' : 'text-foreground'}`}>
- {sub.renewal}
- </span>
- </div>
- </div>
- 
- <div className="flex justify-between items-center text-[8px] font-black uppercase tracking-[0.4em] text-muted opacity-60">
- <span>Category: {sub.category}</span>
- <div className="flex gap-1 items-center">
- <div className={`w-1.5 h-1.5 rounded-full ${sub.status === 'active' ? 'bg-emerald-500' : sub.status === 'expiring' ? 'bg-amber-500 animate-pulse' : 'bg-theme-subtle/80'}`} />
- {sub.status}
- </div>
- </div>
- </div>
+          <div className="flex items-center justify-between border-t border-theme-border bg-theme-page px-5 py-2.5">
+            <span className="text-xs text-theme-subtle">{filtered.length} subscription{filtered.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-theme-subtle">
+              Monthly total: <span className="font-bold text-theme-fg">{formatCurrency(monthlySpend)}</span>
+            </span>
+          </div>
+        </div>
+      </div>
 
- <div className="bg-[hsl(var(--surface-raised))] p-4 border-t border-default flex justify-center">
- <button className="text-[9px] font-black uppercase tracking-[0.3em] text-sky-600 hover:text-sky-700 transition-colors">Configure License Logic</button>
- </div>
- </div>
- ))}
- </div>
- </div>
- </DashboardShell>
- );
+      {/* Add Subscription Modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-theme-surface border border-theme-border shadow-2xl">
+            <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
+              <div className="flex items-center gap-2">
+                <CreditCard size={15} className="text-theme-muted" />
+                <h3 className="text-sm font-bold text-theme-fg">Add Subscription</h3>
+              </div>
+              <button onClick={() => setShowForm(false)} className="rounded-lg p-1 text-theme-muted hover:bg-theme-raised transition-colors">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Service Name</label>
+                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Notion Team" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Team</label>
+                  <input value={form.team} onChange={(e) => setForm({ ...form, team: e.target.value })} placeholder="e.g. Engineering" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Category</label>
+                  <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Productivity" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Cost (₹)</label>
+                  <input type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} placeholder="0" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Seats</label>
+                  <input type="number" value={form.seats} onChange={(e) => setForm({ ...form, seats: e.target.value })} placeholder="0" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Billing Cycle</label>
+                  <select value={form.cycle} onChange={(e) => setForm({ ...form, cycle: e.target.value })} className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer">
+                    <option value="Monthly">Monthly</option>
+                    <option value="Annual">Annual</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Renewal Date</label>
+                  <input type="date" value={form.renewalDate} onChange={(e) => setForm({ ...form, renewalDate: e.target.value })} className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 border-t border-theme-border px-6 py-4">
+              <Button variant="secondary" size="sm" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button variant="primary" size="sm" className="flex-1" onClick={() => setShowForm(false)}>Add Subscription</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardShell>
+  );
 }

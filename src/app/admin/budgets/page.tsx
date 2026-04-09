@@ -1,169 +1,269 @@
 "use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { 
- BarChart3, 
- Search, 
- Calendar, 
- TrendingUp, 
- TrendingDown, 
- AlertCircle,
- ArrowUpRight,
- Filter,
- DollarSign,
- PieChart
+import { Button } from "@/components/ui/Button";
+import { formatCurrency, cn } from "@/lib/utils";
+import {
+  BarChart3,
+  Search,
+  IndianRupee,
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
+  ChevronDown,
+  Users,
+  X,
 } from "lucide-react";
 import { useState } from "react";
-import { formatCurrency } from "@/lib/utils";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 
-const TEAM_BUDGETS = [
- { team: "Engineering Delta", budget: 1200000, spent: 850000, color: "sky" },
- { team: "Growth Ops (Sales)", budget: 450000, spent: 485000, color: "rose" },
- { team: "Finance Alpha", budget: 250000, spent: 95000, color: "emerald" },
- { team: "Human Capital (HR)", budget: 180000, spent: 172000, color: "amber" },
- { team: "Marketing & PR", budget: 620000, spent: 590000, color: "purple" },
- { team: "Customer Success", budget: 300000, spent: 120000, color: "blue" },
- { team: "Product Strategy", budget: 550000, spent: 540000, color: "slate" },
- { team: "Legal & Compliance", budget: 150000, spent: 45000, color: "indigo" },
+interface TeamBudget {
+  team: string;
+  department: string;
+  budget: number;
+  spent: number;
+  revenue: number;
+}
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+const TEAM_BUDGETS: TeamBudget[] = [
+  { team: "Engineering",    department: "Technology",  budget: 1200000, spent: 850000,  revenue: 4200000 },
+  { team: "Sales",          department: "Revenue",     budget: 450000,  spent: 485000,  revenue: 3800000 },
+  { team: "Finance",        department: "Operations",  budget: 250000,  spent: 95000,   revenue: 0 },
+  { team: "HR & People",    department: "Operations",  budget: 180000,  spent: 172000,  revenue: 0 },
+  { team: "Marketing",      department: "Growth",      budget: 620000,  spent: 590000,  revenue: 1200000 },
+  { team: "Customer Success",department: "Revenue",    budget: 300000,  spent: 120000,  revenue: 980000 },
+  { team: "Product",        department: "Technology",  budget: 550000,  spent: 540000,  revenue: 0 },
+  { team: "Legal",          department: "Operations",  budget: 150000,  spent: 45000,   revenue: 0 },
 ];
 
+const CHART_DATA = TEAM_BUDGETS.map((t) => ({
+  team: t.team.split(" ")[0],
+  Budget: Math.round(t.budget / 1000),
+  Spent:  Math.round(t.spent / 1000),
+}));
+
+function CustomTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-theme-border bg-theme-surface p-3 shadow-lg text-xs">
+      <p className="mb-2 font-bold text-theme-fg">{label}</p>
+      {payload.map((p: any) => (
+        <div key={p.name} className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+            <span className="text-theme-muted">{p.name}</span>
+          </div>
+          <span className="font-semibold text-theme-fg">₹{p.value}K</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function TeamBudgetsPage() {
- const [month, setMonth] = useState("April");
- const [search, setSearch] = useState("");
+  const [month, setMonth]       = useState(3);
+  const [search, setSearch]     = useState("");
+  const [filter, setFilter]     = useState("all");
+  const [editModal, setEditModal] = useState<TeamBudget | null>(null);
 
- const filtered = TEAM_BUDGETS.filter(b => b.team.toLowerCase().includes(search.toLowerCase()));
+  const filtered = TEAM_BUDGETS.filter((b) => {
+    const matchSearch = b.team.toLowerCase().includes(search.toLowerCase());
+    const pct = (b.spent / b.budget) * 100;
+    if (filter === "over")   return b.spent > b.budget;
+    if (filter === "risk")   return pct >= 85 && b.spent <= b.budget;
+    if (filter === "ok")     return pct < 85;
+    return matchSearch;
+  }).filter((b) => b.team.toLowerCase().includes(search.toLowerCase()));
 
- return (
- <DashboardShell 
- title="Strategic Budget Allocation" 
- subtitle="Calibrate team-wise operational margins and track real-time liquidity consumption"
- actions={
- <div className="flex gap-3">
- <button className="flex items-center gap-2 rounded-xl bg-card border border-default p-3 hover:border-sky-500/30 transition-all font-black uppercase text-[10px] tracking-widest text-muted hover:text-foreground">
- <Calendar size={14} />
- {month} 2026
- </button>
- <button className="flex items-center gap-2 rounded-xl bg-theme-primary text-white dark:text-theme-fg px-6 py-3 text-xs font-black uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-xl">
- Update Targets
- </button>
- </div>
- }
- >
- <div className="flex flex-col gap-10">
- {/* Global Consumption Overview */}
- <div className="page-card !mb-0 p-10 bg-theme-primary text-white dark:text-theme-fg overflow-hidden relative group">
- <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:scale-110 transition-transform">
- <PieChart size={180} strokeWidth={1} />
- </div>
+  const totalBudget = TEAM_BUDGETS.reduce((s, b) => s + b.budget, 0);
+  const totalSpent  = TEAM_BUDGETS.reduce((s, b) => s + b.spent, 0);
+  const overBudget  = TEAM_BUDGETS.filter((b) => b.spent > b.budget).length;
+  const remaining   = totalBudget - totalSpent;
 
- <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative z-10">
- <div>
- <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 dark:text-theme-fg/40 mb-4">Total Liquidity Reservoir</p>
- <h2 className="text-4xl font-black tracking-tighter">₹37,00,000</h2>
- <p className="text-xs font-bold text-emerald-400 dark:text-emerald-600 mt-2 flex items-center gap-2">
- <TrendingUp size={14} /> +12% vs last cycle
- </p>
- </div>
- <div>
- <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 dark:text-theme-fg/40 mb-4">Aggregated Consumption</p>
- <h2 className="text-4xl font-black tracking-tighter text-sky-400 dark:text-sky-600">₹28,92,000</h2>
- <p className="text-xs font-bold text-sky-400/60 dark:text-sky-600/60 mt-2 italic">78.1% Capacity Utilized</p>
- </div>
- <div>
- <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 dark:text-theme-fg/40 mb-4">Critical Threshold Alerts</p>
- <h2 className="text-4xl font-black tracking-tighter text-rose-400 dark:text-rose-600">01 <span className="text-sm font-bold opacity-40 uppercase tracking-widest">Team</span></h2>
- <p className="text-xs font-bold text-rose-400/60 dark:text-rose-600/60 mt-2">Immediate variance audit required</p>
- </div>
- </div>
- </div>
+  return (
+    <DashboardShell
+      title="Budgets"
+      subtitle="Track team budgets, monitor spend, and analyse cost vs revenue."
+      actions={
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <select
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className="h-8 appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-xs font-semibold text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
+            >
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+            <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted" />
+          </div>
+          <Button variant="primary" size="sm">Update Budgets</Button>
+        </div>
+      }
+    >
+      <div className="space-y-5">
 
- {/* Filter Toolbar */}
- <div className="flex flex-col md:row-row justify-between items-center gap-6">
- <div className="relative w-full md:w-96 group">
- <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-sky-600 transition-colors" size={20} />
- <input 
- type="text" 
- placeholder="Find budget by team archetype..."
- className="w-full bg-card border border-default rounded-2xl pl-14 pr-6 py-5 text-sm font-bold text-foreground outline-none focus:border-sky-500 transition-all shadow-sm"
- value={search}
- onChange={(e) => setSearch(e.target.value)}
- />
- </div>
- <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-muted hover:text-sky-600 transition-colors">
- <Filter size={14} /> Filter Logic
- </button>
- </div>
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { label: "Total Budget",    value: formatCurrency(totalBudget), icon: IndianRupee,  color: "text-theme-fg",    bg: "bg-theme-raised" },
+            { label: "Total Spent",     value: formatCurrency(totalSpent),  icon: TrendingDown, color: "text-sky-600",     bg: "bg-sky-500/10" },
+            { label: "Remaining",       value: formatCurrency(remaining),   icon: TrendingUp,   color: "text-emerald-600", bg: "bg-emerald-500/10" },
+            { label: "Over Budget",     value: overBudget,                  icon: AlertCircle,  color: "text-red-500",     bg: "bg-red-500/10" },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} className="page-card flex items-center gap-3">
+              <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
+                <Icon size={15} className={color} />
+              </div>
+              <div>
+                <p className="text-[11px] text-theme-muted">{label}</p>
+                <p className={cn("text-xl font-black leading-tight", color)}>{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
 
- {/* Teams Budget Grid */}
- <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
- {filtered.map((b) => {
- const percent = Math.min((b.spent / b.budget) * 100, 100);
- const isOver = b.spent > b.budget;
- const colorClass = isOver ? 'var(--rose-600)' : `var(--${b.color}-600)`;
- 
- return (
- <div key={b.team} className="page-card !mb-0 p-8 border border-default hover:border-sky-500/20 shadow-xl group transition-all">
- <div className="flex justify-between items-start mb-10">
- <div>
- <h3 className="text-base font-black text-foreground uppercase tracking-tight leading-tight mb-1">{b.team}</h3>
- <p className="text-[10px] font-black text-muted uppercase tracking-[0.3em] opacity-40">Monthly Strategic Allocation</p>
- </div>
- <div className={`w-10 h-10 rounded-2xl flex items-center justify-center bg-card border border-default group-hover:bg-sky-500 transition-all duration-500`}>
- <BarChart3 size={18} className="text-muted group-hover:text-white transition-colors" />
- </div>
- </div>
+        {/* Spend vs Budget chart */}
+        <div className="page-card">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart3 size={15} className="text-theme-muted" />
+              <span className="text-sm font-semibold text-theme-fg">Spend vs Budget by Team</span>
+            </div>
+            <div className="flex items-center gap-3 text-[11px] text-theme-muted">
+              {[
+                { dot: "bg-sky-500",    label: "Budget" },
+                { dot: "bg-emerald-500",label: "Spent" },
+              ].map(({ dot, label }) => (
+                <div key={label} className="flex items-center gap-1.5">
+                  <div className={cn("h-2 w-2 rounded-full flex-shrink-0", dot)} />
+                  {label}
+                </div>
+              ))}
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={CHART_DATA} barCategoryGap="30%" barGap={3}>
+              <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="4 0" />
+              <XAxis dataKey="team" tick={{ fontSize: 11, fill: "hsl(var(--fg-muted))" }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={(v) => `₹${v}K`} tick={{ fontSize: 11, fill: "hsl(var(--fg-muted))" }} axisLine={false} tickLine={false} width={48} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: "hsl(var(--surface-raised))", radius: 6 }} />
+              <Bar dataKey="Budget" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Spent"  fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
 
- <div className="space-y-6">
- <div className="flex justify-between items-end">
- <div className="space-y-1">
- <p className="text-[9px] font-black text-muted uppercase tracking-widest">Consumption</p>
- <p className={`text-xl font-black tracking-tighter ${isOver ? 'text-rose-600' : 'text-foreground'}`}>{formatCurrency(b.spent)}</p>
- </div>
- <div className="text-right space-y-1">
- <p className="text-[9px] font-black text-muted uppercase tracking-widest text-right">Horizon Target</p>
- <p className="text-xl font-black text-foreground tracking-tighter opacity-40">{formatCurrency(b.budget)}</p>
- </div>
- </div>
+        {/* Team budget table */}
+        <div className="page-card overflow-hidden p-0">
+          {/* Header */}
+          <div className="flex flex-col gap-3 border-b border-theme-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5">
+              {[
+                { id: "all",  label: "All" },
+                { id: "over", label: "Over Budget" },
+                { id: "risk", label: "At Risk" },
+                { id: "ok",   label: "On Track" },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setFilter(t.id)}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
+                    filter === t.id ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="relative flex-shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search teams…"
+                className="h-8 w-44 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all" />
+            </div>
+          </div>
 
- {/* Progress DNA */}
- <div className="space-y-3">
- <div className="h-4 w-full bg-default rounded-full overflow-hidden p-0.5 border border-default shadow-inner">
- <div 
- className="h-full rounded-full transition-all duration-1000 relative overflow-hidden" 
- style={{ 
- width: `${percent}%`, 
- backgroundColor: colorClass,
- boxShadow: `0 0 20px -5px ${colorClass}`
- }}
- >
- <div className="absolute inset-0 bg-theme-surface/80 animate-pulse" />
- </div>
- </div>
- <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
- <span className={isOver ? 'text-rose-600 animate-pulse' : 'text-muted'}>
- {isOver ? <AlertCircle size={10} className="inline mr-1" /> : null}
- {isOver ? 'Exhausted Authority' : `${(100-percent).toFixed(1)}% Yield Remaining`}
- </span>
- <span className="text-foreground">{percent.toFixed(0)}% Utilized</span>
- </div>
- </div>
- </div>
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
+                  <th className="px-5 py-3 font-semibold">Team</th>
+                  <th className="px-5 py-3 font-semibold">Budget</th>
+                  <th className="px-5 py-3 font-semibold">Spent</th>
+                  <th className="px-5 py-3 font-semibold">Remaining</th>
+                  <th className="px-5 py-3 font-semibold">Revenue</th>
+                  <th className="px-5 py-3 font-semibold">Spend %</th>
+                  <th className="px-5 py-3 font-semibold">Progress</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-theme-border">
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={7} className="py-12 text-center text-sm text-theme-subtle">No teams found</td></tr>
+                ) : filtered.map((b) => {
+                  const pct     = Math.min((b.spent / b.budget) * 100, 100);
+                  const isOver  = b.spent > b.budget;
+                  const isRisk  = !isOver && pct >= 85;
+                  const rem     = b.budget - b.spent;
+                  const barColor = isOver ? "bg-red-500" : isRisk ? "bg-amber-500" : "bg-emerald-500";
+                  const pctColor = isOver ? "text-red-500" : isRisk ? "text-amber-600" : "text-emerald-600";
 
- <div className="mt-8 pt-6 border-t border-default flex justify-between items-center">
- <button className="text-[9px] font-black uppercase tracking-widest text-sky-600 hover:text-sky-700 transition-all flex items-center gap-2">
- Detailed Consumption Audit <ArrowUpRight size={12} />
- </button>
- <div className="flex gap-1">
- {[1,2,3].map(i => (
- <div key={i} className="w-6 h-6 rounded-full bg-card border border-default shadow-sm hover:-translate-y-1 transition-transform cursor-pointer" />
- ))}
- </div>
- </div>
- </div>
- );
- })}
- </div>
- </div>
- </DashboardShell>
- );
+                  return (
+                    <tr key={b.team} className="group transition-colors hover:bg-theme-raised/40">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-theme-primary text-theme-surface text-[10px] font-black">
+                            {b.team.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-theme-fg">{b.team}</p>
+                            <p className="text-[10px] text-theme-subtle">{b.department}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-xs text-theme-muted">{formatCurrency(b.budget)}</td>
+                      <td className="px-5 py-3 text-xs font-semibold text-theme-fg">{formatCurrency(b.spent)}</td>
+                      <td className={cn("px-5 py-3 text-xs font-semibold", isOver ? "text-red-500" : "text-emerald-600")}>
+                        {isOver ? `−${formatCurrency(Math.abs(rem))}` : formatCurrency(rem)}
+                      </td>
+                      <td className="px-5 py-3 text-xs text-theme-muted">
+                        {b.revenue > 0 ? formatCurrency(b.revenue) : <span className="text-theme-subtle">—</span>}
+                      </td>
+                      <td className={cn("px-5 py-3 text-xs font-bold", pctColor)}>
+                        {isOver ? `${((b.spent / b.budget) * 100).toFixed(0)}%` : `${pct.toFixed(0)}%`}
+                        {isOver && <AlertCircle size={11} className="inline ml-1 text-red-500" />}
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-theme-raised">
+                          <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${pct}%` }} />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-theme-border bg-theme-page px-5 py-2.5">
+            <span className="text-xs text-theme-subtle">{filtered.length} teams</span>
+            <span className="text-xs text-theme-subtle">
+              Utilisation: <span className="font-bold text-theme-fg">{((totalSpent / totalBudget) * 100).toFixed(1)}%</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </DashboardShell>
+  );
 }
