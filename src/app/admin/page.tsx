@@ -26,6 +26,17 @@ import {
   Users,
   ChevronRight,
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  Cell,
+} from "recharts";
 
 interface UserShape  { _id: string; name: string; }
 interface ConfigShape {
@@ -35,6 +46,102 @@ interface ConfigShape {
   collections_percentage: number;
   delivery_health_percentage: number;
   payout_pool_amount: number;
+}
+
+// ─── Business Health Chart ────────────────────────────────
+// Shows last 6 months of the three KPIs as a grouped bar chart.
+// The current month uses live config values; prior months are mock trend data.
+const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
+
+function buildChartData(revenue: number, collections: number, delivery: number) {
+  // Mock trend — each prior month is offset by a small delta
+  const deltas = [
+    { r: -8,  c: -10, d: -5  },
+    { r: -5,  c: -6,  d: -3  },
+    { r: -3,  c: -4,  d:  2  },
+    { r:  2,  c: -2,  d: -1  },
+    { r: -1,  c:  3,  d:  4  },
+    { r:  0,  c:  0,  d:  0  }, // current month (live)
+  ];
+  return MONTHS.map((month, i) => ({
+    month,
+    Revenue:     Math.max(0, Math.min(100, revenue     + deltas[i].r)),
+    Collections: Math.max(0, Math.min(100, collections + deltas[i].c)),
+    Delivery:    Math.max(0, Math.min(100, delivery    + deltas[i].d)),
+    isCurrent: i === 5,
+  }));
+}
+
+function BusinessHealthChart({
+  revenue,
+  collections,
+  delivery,
+}: {
+  revenue: number;
+  collections: number;
+  delivery: number;
+}) {
+  const data = buildChartData(revenue, collections, delivery);
+
+  const COLORS: Record<string, string> = {
+    Revenue:     "#0ea5e9",
+    Collections: "#10b981",
+    Delivery:    "#a855f7",
+  };
+
+  // Custom tooltip
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="rounded-xl border border-theme-border bg-theme-surface p-3 shadow-lg text-xs">
+        <p className="mb-2 font-bold text-theme-fg">{label}</p>
+        {payload.map((p: any) => (
+          <div key={p.name} className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-1.5">
+              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+              <span className="text-theme-muted">{p.name}</span>
+            </div>
+            <span className="font-semibold text-theme-fg">{p.value}%</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <BarChart data={data} barCategoryGap="30%" barGap={3}>
+        <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="4 0" />
+        <XAxis
+          dataKey="month"
+          tick={{ fontSize: 11, fill: "hsl(var(--fg-muted))" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis
+          domain={[0, 100]}
+          tickFormatter={(v) => `${v}%`}
+          tick={{ fontSize: 11, fill: "hsl(var(--fg-muted))" }}
+          axisLine={false}
+          tickLine={false}
+          width={36}
+        />
+        <ReferenceLine y={100} stroke="hsl(var(--border))" strokeDasharray="4 4" />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: "hsl(var(--surface-raised))", radius: 6 }} />
+        {(["Revenue", "Collections", "Delivery"] as const).map((key) => (
+          <Bar key={key} dataKey={key} fill={COLORS[key]} radius={[4, 4, 0, 0]}>
+            {data.map((entry, idx) => (
+              <Cell
+                key={idx}
+                fill={COLORS[key]}
+                opacity={entry.isCurrent ? 1 : 0.55}
+              />
+            ))}
+          </Bar>
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
 }
 
 // ─── Mock fallback data (shown when API is not wired) ─────
@@ -151,40 +258,40 @@ export default function AdminOverview() {
           ))}
         </div>
 
-        {/* Business health bars */}
+        {/* Business Health Chart */}
         <div className="page-card">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Activity size={15} className="text-theme-muted" />
               <span className="text-sm font-semibold text-theme-fg">Business Health</span>
             </div>
-            <span className="text-sm font-black text-theme-fg">{Math.round(companyScore)}%</span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-theme-raised mb-4">
-            <div
-              className={cn("h-full rounded-full transition-all",
-                companyScore >= 80 ? "bg-emerald-500" : companyScore >= 60 ? "bg-amber-500" : "bg-red-500"
-              )}
-              style={{ width: `${companyScore}%` }}
-            />
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: "Revenue Target",   value: config.revenue_achievement_percentage, color: "bg-sky-500" },
-              { label: "Cash Collections", value: config.collections_percentage,         color: "bg-emerald-500" },
-              { label: "Project Success",  value: config.delivery_health_percentage,     color: "bg-purple-500" },
-            ].map(({ label, value, color }) => (
-              <div key={label}>
-                <div className="mb-1.5 flex items-center justify-between text-xs">
-                  <span className="text-theme-muted">{label}</span>
-                  <span className="font-bold text-theme-fg">{value}%</span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-theme-raised">
-                  <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${value}%` }} />
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 text-[11px] text-theme-muted">
+                {[
+                  { dot: "bg-sky-500",    label: "Revenue" },
+                  { dot: "bg-emerald-500", label: "Collections" },
+                  { dot: "bg-purple-500", label: "Delivery" },
+                ].map(({ dot, label }) => (
+                  <div key={label} className="flex items-center gap-1.5">
+                    <div className={cn("h-2 w-2 rounded-full flex-shrink-0", dot)} />
+                    {label}
+                  </div>
+                ))}
               </div>
-            ))}
+              <span className={cn(
+                "text-sm font-black",
+                companyScore >= 80 ? "text-emerald-600" : companyScore >= 60 ? "text-amber-600" : "text-red-500"
+              )}>
+                {Math.round(companyScore)}%
+              </span>
+            </div>
           </div>
+
+          <BusinessHealthChart
+            revenue={config.revenue_achievement_percentage}
+            collections={config.collections_percentage}
+            delivery={config.delivery_health_percentage}
+          />
         </div>
 
         {/* Incentive overview table */}
