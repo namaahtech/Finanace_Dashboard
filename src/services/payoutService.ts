@@ -3,11 +3,11 @@
  * Returns static data for UI testing and approval.
  */
 
-export async function submitClaim() {
+export async function submitClaim(userId: string, incentiveId: string) {
   return { claim: { id: "dummy-claim", status: "approved" }, queued: false, position: 1 };
 }
 
-export async function processClaim() {
+export async function processClaim(claimId: string, processorId: string) {
   return;
 }
 

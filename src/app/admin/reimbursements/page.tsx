@@ -22,7 +22,7 @@ interface Reimbursement {
   title: string;
   category: string;
   amount: number;
-  description: string;
+  description?: string;
   status: string;
   reject_reason?: string;
   createdAt: string;
