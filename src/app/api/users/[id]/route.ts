@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/middleware/auth";
 
 // GET /api/users/[id] — get specific user
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
     // await requireRole(req, "hr", "lead", "super_admin");
     const user = {
-      id: params.id,
+      id,
       name: "Alex Rivera",
       email: "alex@namaah.co",
       role: "employee",
@@ -23,11 +24,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 // PATCH /api/users/[id] — update user
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
     // await requireRole(req, "hr", "super_admin");
     const body = await req.json();
-    return NextResponse.json({ user: { ...body, id: params.id } });
+    return NextResponse.json({ user: { ...body, id } });
   } catch (err) {
     return NextResponse.json({ error: "Dummy error" }, { status: 500 });
   }
