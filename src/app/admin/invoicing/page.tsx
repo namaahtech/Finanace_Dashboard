@@ -124,7 +124,7 @@ export default function InvoicingPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search invoices…"
+                placeholder="Search invoicesâ€¦"
                 className="h-8 w-48 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all"
               />
             </div>
@@ -199,7 +199,7 @@ export default function InvoicingPage() {
 
       {/* Create Invoice Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-theme-surface border border-theme-border shadow-2xl">
             <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
               <div className="flex items-center gap-2">
@@ -216,7 +216,7 @@ export default function InvoicingPage() {
                 <input value={form.client} onChange={(e) => setForm({ ...form, client: e.target.value })} placeholder="e.g. Acme Corp" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Amount (₹)</label>
+                <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Amount (â‚¹)</label>
                 <input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -231,7 +231,7 @@ export default function InvoicingPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Notes (optional)</label>
-                <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="Any additional notes…" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all resize-none" />
+                <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="Any additional notesâ€¦" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all resize-none" />
               </div>
             </div>
             <div className="flex gap-3 border-t border-theme-border px-6 py-4">

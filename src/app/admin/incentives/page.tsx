@@ -6,6 +6,7 @@ import { Badge, statusBadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/components/layout/AuthProvider";
 import axios from "axios";
+import { useToast } from "@/components/ui/Toast";
 import { formatCurrency, getYearRange, cn } from "@/lib/utils";
 import {
   calculateCompanyScore,
@@ -75,6 +76,7 @@ function gaugeColor(score: number) {
 
 export default function AdminIncentivesPage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   const [users, setUsers]           = useState<User[]>(MOCK_USERS);
   const [incentives, setIncentives] = useState<Incentive[]>(MOCK_INCENTIVES);
@@ -137,14 +139,18 @@ export default function AdminIncentivesPage() {
     if (!selectedUser) return;
     const fixedAmount    = parseFloat(form.fixed_amount    || "0");
     const variableAmount = parseFloat(form.variable_amount || "0");
-    if (fixedAmount + variableAmount <= 0) return alert("Enter fixed or variable amount");
+    if (fixedAmount + variableAmount <= 0) {
+      showToast("Reward mapping incomplete. Enter fixed or variable quantum.", "warning");
+      return;
+    }
     setSubmitting(true);
     try {
       await axios.post("/api/incentives", { employee: selectedUser, fixed_amount: fixedAmount, variable_amount: variableAmount, month: form.month, year: form.year, notes: form.notes });
       setForm({ fixed_amount: "", variable_amount: "", month: new Date().getMonth() + 1, year: new Date().getFullYear(), notes: "" });
       await loadIncentives(selectedUser);
+      showToast("Incentive grant successfully mapped and protocol-locked.", "success");
     } catch (err: unknown) {
-      alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Error");
+      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Incentive Sync Error", "error");
     } finally {
       setSubmitting(false);
     }
@@ -155,8 +161,9 @@ export default function AdminIncentivesPage() {
     try {
       await axios.post("/api/incentives", { action: "process_vesting" });
       if (selectedUser) await loadIncentives(selectedUser); else await loadIncentives();
+      showToast("Global vesting algorithms executed and synchronized.", "success");
     } catch (err: unknown) {
-      alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Error");
+      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Vesting Protocol Error", "error");
     } finally {
       setVestingLoading(false);
     }
@@ -166,8 +173,9 @@ export default function AdminIncentivesPage() {
     setSavingPerformance(true);
     try {
       await axios.patch("/api/config", config);
+      showToast("Company performance multipliers updated in cloud architecture.", "success");
     } catch (err: unknown) {
-      alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Error");
+      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Multiplier Sync Error", "error");
     } finally {
       setSavingPerformance(false);
     }

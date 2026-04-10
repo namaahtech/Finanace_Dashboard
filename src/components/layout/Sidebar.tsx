@@ -8,7 +8,8 @@ import {
   Settings, LogOut, Sun, Moon, ChevronRight, Building2,
   GitBranch, Receipt, CreditCard, Tag, PiggyBank, Handshake,
   MessageSquare, CalendarClock, IndianRupee,
-  Network, Briefcase, ChevronLeft, BarChart3, ClipboardList,
+  Shield, RefreshCw, Mail, ChevronDown, Check,
+  Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder,
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
@@ -22,7 +23,9 @@ type NavSection = { title: string; items: NavItem[] };
 const superAdminNav: NavSection[] = [
   { title: "Organization", items: [
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/admin/projects", label: "Projects", icon: Folder },
     { href: "/admin/users", label: "Employees", icon: Users },
+    { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
     { href: "/admin/teams", label: "Teams", icon: Building2 },
     { href: "/admin/org-chart", label: "Org Chart", icon: Network },
   ]},
@@ -51,6 +54,7 @@ const superAdminNav: NavSection[] = [
   ]},
   { title: "System", items: [
     { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+    { href: "/admin/permissions", label: "Permissions", icon: Shield },
     { href: "/admin/report", label: "Feature Report", icon: ClipboardList },
     { href: "/admin/config", label: "System Config", icon: Settings },
   ]},
@@ -84,7 +88,9 @@ const accountsNav: NavSection[] = [
 const hrNav: NavSection[] = [
   { title: "Organization", items: [
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/admin/projects", label: "Projects", icon: Folder },
     { href: "/admin/users", label: "Employees", icon: Users },
+    { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
     { href: "/admin/teams", label: "Teams", icon: Building2 },
   ]},
   { title: "People", items: [

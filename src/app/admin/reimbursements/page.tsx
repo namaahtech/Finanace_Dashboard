@@ -186,7 +186,7 @@ export default function AdminReimbursementsPage() {
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-theme-fg">{r.employee?.name}</p>
-                          <p className="text-[10px] text-theme-subtle">{r.employee?.department} · {r.employee?.employeeId}</p>
+                          <p className="text-[10px] text-theme-subtle">{r.employee?.department} Â· {r.employee?.employeeId}</p>
                         </div>
                       </div>
                     </td>
@@ -246,7 +246,7 @@ export default function AdminReimbursementsPage() {
 
       {/* Reject modal */}
       {rejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-theme-surface border border-theme-border shadow-2xl">
             <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
               <div className="flex items-center gap-2 text-red-500">
@@ -264,7 +264,7 @@ export default function AdminReimbursementsPage() {
               <textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Enter rejection reason…"
+                placeholder="Enter rejection reasonâ€¦"
                 rows={3}
                 className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all resize-none"
               />

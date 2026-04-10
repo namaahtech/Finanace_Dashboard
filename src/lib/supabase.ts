@@ -1,19 +1,32 @@
-// Browser-side Supabase client
-// Run: npm install @supabase/supabase-js @supabase/ssr
+import { createClient } from "@supabase/supabase-js";
 
-import { createBrowserClient } from "@supabase/ssr";
-import type { Database } from "@/types/database.types";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
-export function createClient() {
-  return createBrowserClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-}
+// Client-side singleton instance for frontend requests and realtime socket subscriptions
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+  db: {
+    schema: "public",
+  },
+});
 
-// Singleton for use in client components
-let _client: ReturnType<typeof createClient> | null = null;
-export function getSupabase() {
-  if (!_client) _client = createClient();
-  return _client;
-}
+// Admin Server-side Client (To bypass RLS directly on backend Server Actions / API Routes)
+// NEVER import this to client-side pages!
+export const getSupabaseAdmin = () => {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY for admin client");
+
+  return createClient(supabaseUrl, serviceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    db: {
+      schema: "public",
+    },
+  });
+};

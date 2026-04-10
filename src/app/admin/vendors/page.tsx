@@ -29,13 +29,13 @@ interface Purchase {
 
 const PURCHASES: Purchase[] = [
   { id: "PUR-001", vendor: "AWS India",           description: "EC2 + S3 monthly bill",        category: "Infrastructure", amount: 85000,  date: "2026-04-05", status: "paid" },
-  { id: "PUR-002", vendor: "Apex Supplies",        description: "Office furniture — 3 desks",   category: "Equipment",      amount: 42000,  date: "2026-04-03", status: "paid" },
+  { id: "PUR-002", vendor: "Apex Supplies",        description: "Office furniture â€” 3 desks",   category: "Equipment",      amount: 42000,  date: "2026-04-03", status: "paid" },
   { id: "PUR-003", vendor: "Green Facilities",     description: "Monthly office maintenance",    category: "Facilities",     amount: 18000,  date: "2026-04-01", status: "pending" },
   { id: "PUR-004", vendor: "Titan Legal",          description: "Compliance audit Q1 2026",     category: "Legal",          amount: 125000, date: "2026-03-28", status: "paid" },
   { id: "PUR-005", vendor: "Prompt Logistics",     description: "Delivery fleet service",       category: "Logistics",      amount: 31000,  date: "2026-03-25", status: "pending" },
   { id: "PUR-006", vendor: "Quantum Advertising",  description: "Social media ad spend",        category: "Marketing",      amount: 55000,  date: "2026-03-20", status: "paid" },
-  { id: "PUR-007", vendor: "Stationary Hub",       description: "Office supplies — bulk order", category: "Supplies",       amount: 8500,   date: "2026-03-15", status: "cancelled" },
-  { id: "PUR-008", vendor: "Cloud Vision IT",      description: "Laptop × 4 units",             category: "Equipment",      amount: 220000, date: "2026-03-10", status: "paid" },
+  { id: "PUR-007", vendor: "Stationary Hub",       description: "Office supplies â€” bulk order", category: "Supplies",       amount: 8500,   date: "2026-03-15", status: "cancelled" },
+  { id: "PUR-008", vendor: "Cloud Vision IT",      description: "Laptop Ã— 4 units",             category: "Equipment",      amount: 220000, date: "2026-03-10", status: "paid" },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -135,7 +135,7 @@ export default function PurchasesPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search purchases…"
+                placeholder="Search purchasesâ€¦"
                 className="h-8 w-48 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all"
               />
             </div>
@@ -170,7 +170,7 @@ export default function PurchasesPage() {
                         {p.category}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-sm font-bold text-red-500">−{formatCurrency(p.amount)}</td>
+                    <td className="px-5 py-3 text-sm font-bold text-red-500">âˆ’{formatCurrency(p.amount)}</td>
                     <td className="px-5 py-3 text-xs text-theme-muted">{formatDate(p.date)}</td>
                     <td className="px-5 py-3">
                       <Badge variant={STATUS_BADGE[p.status]}>
@@ -194,7 +194,7 @@ export default function PurchasesPage() {
 
       {/* Add Purchase Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-theme-surface border border-theme-border shadow-2xl">
             <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
               <div className="flex items-center gap-2">
@@ -220,7 +220,7 @@ export default function PurchasesPage() {
                   <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Equipment" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Amount (₹)</label>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Amount (â‚¹)</label>
                   <input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
                 </div>
                 <div className="col-span-2">

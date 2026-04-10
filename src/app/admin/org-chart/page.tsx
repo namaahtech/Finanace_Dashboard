@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { supabase } from "@/lib/supabase";
 import {
   Building2,
   ChevronDown,
@@ -14,7 +15,6 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { CORPORATE_TEAMS } from "@/constants/teams";
 import { Button } from "@/components/ui/Button";
 
 interface Node {
@@ -25,61 +25,7 @@ interface Node {
   children?: Node[];
 }
 
-const ORG_DATA: Node = {
-  id: "ceo",
-  name: "Namaah Startup",
-  role: "Chief Executive Officer",
-  type: "root",
-  children: [
-    {
-      id: "cto", name: "Engineering", role: "CTO", type: "dept",
-      children: CORPORATE_TEAMS.filter((t) => t.department === "Engineering").map((t) => ({
-        id: `team-${t.id}`, name: t.name, role: t.lead, type: "team" as const,
-      })),
-    },
-    {
-      id: "cpo", name: "Product", role: "CPO", type: "dept",
-      children: CORPORATE_TEAMS.filter((t) => t.department === "Product").map((t) => ({
-        id: `team-${t.id}`, name: t.name, role: t.lead, type: "team" as const,
-      })),
-    },
-    {
-      id: "cso", name: "Sales", role: "CSO", type: "dept",
-      children: CORPORATE_TEAMS.filter((t) => t.department === "Sales").map((t) => ({
-        id: `team-${t.id}`, name: t.name, role: t.lead, type: "team" as const,
-      })),
-    },
-    {
-      id: "cmo", name: "Marketing", role: "CMO", type: "dept",
-      children: CORPORATE_TEAMS.filter((t) => t.department === "Marketing").map((t) => ({
-        id: `team-${t.id}`, name: t.name, role: t.lead, type: "team" as const,
-      })),
-    },
-    {
-      id: "coo", name: "Operations", role: "COO", type: "dept",
-      children: CORPORATE_TEAMS.filter((t) => t.department === "Operations").map((t) => ({
-        id: `team-${t.id}`, name: t.name, role: t.lead, type: "team" as const,
-      })),
-    },
-    {
-      id: "cfo", name: "Finance", role: "CFO", type: "dept",
-      children: CORPORATE_TEAMS.filter((t) => t.department === "Finance").map((t) => ({
-        id: `team-${t.id}`, name: t.name, role: t.lead, type: "team" as const,
-      })),
-    },
-    {
-      id: "chro", name: "People", role: "CHRO", type: "dept",
-      children: [
-        ...CORPORATE_TEAMS.filter((t) => t.department === "People").map((t) => ({
-          id: `team-${t.id}`, name: t.name, role: t.lead, type: "team" as const,
-        })),
-        ...CORPORATE_TEAMS.filter((t) => t.department === "Legal").map((t) => ({
-          id: `team-${t.id}`, name: t.name, role: t.lead, type: "team" as const,
-        })),
-      ],
-    },
-  ],
-};
+type Position = "only" | "first" | "middle" | "last";
 
 // ─── Node Card ────────────────────────────────────────────
 function NodeCard({
@@ -93,71 +39,82 @@ function NodeCard({
   onToggle: () => void;
   isRoot?: boolean;
 }) {
-  return (
-    <div className="flex flex-col items-center relative group" data-node-id={node.id}>
-      {/* Top connector */}
-      {!isRoot && (
-        <div className="flex flex-col items-center">
-          <div className="h-7 w-px bg-theme-border" />
-          <div className="h-0 w-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px] border-t-theme-border -mt-px" />
-        </div>
-      )}
+  const hasChildren = node.children && node.children.length > 0;
 
-      <button
-        onClick={node.children ? onToggle : undefined}
-        className={cn(
-          "relative z-10 flex min-w-[180px] flex-col items-center rounded-2xl border px-5 py-4 transition-all duration-200",
-          "hover:-translate-y-0.5 hover:shadow-lg",
+  const typeLabel =
+    node.type === "root"
+      ? "HQ Root"
+      : node.type === "dept"
+      ? "Department"
+      : hasChildren
+      ? "Lead Team"
+      : "Sub-Team";
+
+  return (
+    <button
+      onClick={hasChildren ? onToggle : undefined}
+      className={cn(
+        "relative z-10 flex min-w-[180px] max-w-[200px] flex-col items-center rounded-2xl border px-5 py-4 transition-all duration-200 shadow-sm text-left",
+        hasChildren ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-lg" : "cursor-default",
+        isRoot
+          ? "bg-gray-900 border-gray-800 shadow-xl ring-4 ring-black/10"
+          : isExpanded
+          ? "bg-theme-surface border-gray-400 shadow-md ring-1 ring-gray-300/50"
+          : "bg-theme-surface border-gray-200 hover:border-gray-400"
+      )}
+    >
+      <div className="mb-2.5 flex items-center gap-2.5 w-full">
+        <div className={cn(
+          "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border shadow-sm",
           isRoot
-            ? "bg-theme-primary text-theme-surface border-theme-primary shadow-md"
-            : isExpanded
-            ? "bg-theme-surface border-theme-strong shadow-sm"
-            : "bg-theme-surface border-theme-border hover:border-theme-strong"
-        )}
-      >
-        <div className="mb-2 flex items-center gap-2">
-          <div className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-lg",
-            isRoot ? "bg-theme-surface/20" : "bg-theme-raised"
-          )}>
-            {node.type === "root" && <Crown size={14} className={isRoot ? "text-theme-surface" : "text-theme-fg"} />}
-            {node.type === "dept" && <Building2 size={14} className="text-theme-fg" />}
-            {node.type === "team" && <Users size={14} className="text-theme-fg" />}
-          </div>
-          <div className="text-left">
-            <p className={cn("text-[10px] font-semibold opacity-60 uppercase tracking-wide",
-              isRoot ? "text-theme-surface" : "text-theme-muted"
-            )}>
-              {node.type}
-            </p>
-            <p className={cn("text-xs font-bold leading-tight",
-              isRoot ? "text-theme-surface" : "text-theme-fg"
-            )}>
-              {node.name}
-            </p>
-          </div>
-          {node.children && (
-            <div className={cn("ml-1 opacity-40", isRoot ? "text-theme-surface" : "text-theme-fg")}>
-              {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-            </div>
-          )}
+            ? "bg-white/10 border-white/20 text-white"
+            : "bg-gray-100 border-gray-200 text-gray-700"
+        )}>
+          {node.type === "root" && <Crown size={14} />}
+          {node.type === "dept" && <Building2 size={14} />}
+          {node.type === "team" && <Users size={14} />}
         </div>
-        <p className={cn("text-[10px]", isRoot ? "text-theme-surface/70" : "text-theme-muted")}>
+        <div className="text-left min-w-0 flex-1">
+          <p className={cn(
+            "text-[8px] font-black uppercase tracking-[0.15em] leading-none mb-0.5",
+            isRoot ? "text-white/50" : "text-gray-400"
+          )}>
+            {typeLabel}
+          </p>
+          <p className={cn(
+            "text-[13px] font-bold leading-tight truncate",
+            isRoot ? "text-white" : "text-gray-900"
+          )}>
+            {node.name}
+          </p>
+        </div>
+        {hasChildren && (
+          <div className={cn("flex-shrink-0 ml-auto", isRoot ? "text-white/40" : "text-gray-400")}>
+            {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          </div>
+        )}
+      </div>
+
+      <div className={cn(
+        "w-full rounded-lg px-2.5 py-1.5 text-center",
+        isRoot ? "bg-white/10" : "bg-gray-50 border border-gray-100"
+      )}>
+        <p className={cn(
+          "text-[10px] font-semibold uppercase tracking-wider truncate",
+          isRoot ? "text-white/70" : "text-gray-500"
+        )}>
           {node.role}
         </p>
-      </button>
-
-      {/* Bottom connector to children */}
-      {isExpanded && node.children && node.children.length > 0 && (
-        <div className="h-7 w-px bg-theme-border" />
-      )}
-    </div>
+      </div>
+    </button>
   );
 }
 
 // ─── Main Page ────────────────────────────────────────────
 export default function OrgChartPage() {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(["ceo"]));
+  const [orgData, setOrgData] = useState<Node | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(["root_node"]));
   const [zoom, setZoom] = useState(0.75);
   const scrollRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
@@ -166,6 +123,58 @@ export default function OrgChartPage() {
   const [startY, setStartY] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
+
+  async function hydrateChart() {
+    try {
+      setLoading(true);
+      const [{ data: config }, { data: teamsData }] = await Promise.all([
+        supabase.from("system_config").select("*").limit(1).single(),
+        supabase.from("teams").select("*"),
+      ]);
+
+      const seen = new Set<string>();
+      const teams = (teamsData || []).filter((t: any) => {
+        if (seen.has(t.id)) return false;
+        seen.add(t.id);
+        return true;
+      });
+
+      const buildTree = (parentId: string | null): Node[] =>
+        teams
+          .filter((t: any) => t.parent_id === parentId)
+          .map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            role: t.head_designation || (t.type === "department" ? "Dept Head" : "Team Lead"),
+            type: t.type === "department" ? ("dept" as const) : ("team" as const),
+            children: buildTree(t.id),
+          }));
+
+      const root: Node = {
+        id: "root_node",
+        name: config?.company_name || "Company",
+        role: [config?.founder_name, config?.founder_designation].filter(Boolean).join(" \u00b7 ") || "CEO",
+        type: "root",
+        children: buildTree(null),
+      };
+
+      setOrgData(root);
+    } catch (err) {
+      console.error("Org Chart Hydration Error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    hydrateChart();
+    const sub = supabase
+      .channel("org-chart-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "teams" }, hydrateChart)
+      .on("postgres_changes", { event: "*", schema: "public", table: "system_config" }, hydrateChart)
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, []);
 
   function toggleNode(id: string) {
     const next = new Set(expandedIds);
@@ -183,45 +192,81 @@ export default function OrgChartPage() {
     setScrollLeft(scrollRef.current.scrollLeft);
     setScrollTop(scrollRef.current.scrollTop);
   };
-
   const onMouseLeaveOrUp = () => setIsDragging(false);
-
   const onMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || !scrollRef.current) return;
     e.preventDefault();
     const x = e.pageX - scrollRef.current.offsetLeft;
     const y = e.pageY - scrollRef.current.offsetTop;
     scrollRef.current.scrollLeft = scrollLeft - (x - startX) * 1.5;
-    scrollRef.current.scrollTop  = scrollTop  - (y - startY) * 1.5;
+    scrollRef.current.scrollTop = scrollTop - (y - startY) * 1.5;
   };
-
   const onWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
-      setZoom((prev) => Math.min(Math.max(0.2, prev + (e.deltaY > 0 ? -0.1 : 0.1)), 2));
+      setZoom((p) => Math.min(Math.max(0.2, p + (e.deltaY > 0 ? -0.1 : 0.1)), 2));
     }
   };
 
-  function renderTree(node: Node, isRoot = false): React.ReactNode {
+  // ── Proper DSA Tree Renderer with flex-1 bridge connectors ──
+  function renderTree(node: Node, isRoot = false, pos: Position = "only"): React.ReactNode {
     const isExpanded = expandedIds.has(node.id);
+    const hasChildren = isExpanded && node.children && node.children.length > 0;
+
+    // Horizontal bridge segments (left-half / right-half) based on sibling position
+    const lineColor = "bg-gray-800";
+    const showLeftBridge = pos === "last" || pos === "middle";
+    const showRightBridge = pos === "first" || pos === "middle";
+
     return (
-      <div key={node.id} className="flex flex-col items-center shrink-0">
-        <NodeCard node={node} isExpanded={isExpanded} onToggle={() => toggleNode(node.id)} isRoot={isRoot} />
-        {isExpanded && node.children && (
-          <div className="relative flex flex-col items-center w-full pt-0">
-            {node.children.length > 1 && (
-              <div
-                className="absolute top-0 h-px bg-theme-border"
-                style={{
-                  left: `${(100 / node.children.length) / 2}%`,
-                  right: `${(100 / node.children.length) / 2}%`,
-                }}
-              />
-            )}
-            <div className="flex gap-4 items-start justify-center px-4 w-full">
-              {node.children.map((child) => renderTree(child))}
+      <div className="flex flex-col items-center shrink-0 flex-1 min-w-[200px]">
+
+        {/* ── TOP: Horizontal bridge then stem ── */}
+        {!isRoot && (
+          <>
+            {/* Horizontal bridge row — left half + right half */}
+            <div className="flex w-full h-px">
+              <div className={cn("flex-1 h-px", showLeftBridge ? lineColor : "bg-transparent")} />
+              <div className={cn("flex-1 h-px", showRightBridge ? lineColor : "bg-transparent")} />
             </div>
-          </div>
+            {/* Vertical stem from bridge to card */}
+            <div className={cn("w-px h-7", lineColor)} />
+          </>
+        )}
+
+        {/* ── NODE ── */}
+        <NodeCard
+          node={node}
+          isExpanded={isExpanded}
+          onToggle={() => toggleNode(node.id)}
+          isRoot={isRoot}
+        />
+
+        {/* ── BOTTOM: stem from card + children ── */}
+        {hasChildren && (
+          <>
+            {/* Stem down from node */}
+            <div className={cn("w-px h-7", lineColor)} />
+
+            {/* Children row */}
+            <div className="flex w-full items-start">
+              {node.children!.map((child, i, arr) => {
+                const childPos: Position =
+                  arr.length === 1
+                    ? "only"
+                    : i === 0
+                    ? "first"
+                    : i === arr.length - 1
+                    ? "last"
+                    : "middle";
+                return (
+                  <div key={child.id} className="flex flex-col items-center flex-1 min-w-[200px]">
+                    {renderTree(child, false, childPos)}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     );
@@ -229,105 +274,75 @@ export default function OrgChartPage() {
 
   return (
     <DashboardShell
-      title="Org Chart"
-      subtitle="Company hierarchy and team structure."
+      title="Dynamic Org Chart"
+      subtitle="Live enterprise hierarchy automatically mapped from PostgreSQL."
       actions={
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border border-theme-border bg-theme-raised p-0.5 gap-0.5">
-            <button
-              onClick={() => setZoom((z) => Math.min(2, z + 0.1))}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-theme-muted hover:text-theme-fg transition-colors"
-            >
-              <ZoomIn size={14} />
-            </button>
-            <div className="flex h-7 min-w-[48px] items-center justify-center rounded-md bg-theme-surface px-2 text-xs font-semibold text-theme-fg shadow-sm">
-              {Math.round(zoom * 100)}%
-            </div>
-            <button
-              onClick={() => setZoom((z) => Math.max(0.2, z - 0.1))}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-theme-muted hover:text-theme-fg transition-colors"
-            >
+            <button onClick={() => setZoom((z) => Math.max(0.2, z - 0.1))} className="p-1.5 hover:bg-theme-page rounded-md transition-colors text-theme-muted hover:text-theme-fg">
               <ZoomOut size={14} />
             </button>
+            <div className="px-2 py-1 text-[10px] font-black uppercase tracking-widest text-theme-muted flex items-center">
+              {Math.round(zoom * 100)}%
+            </div>
+            <button onClick={() => setZoom((z) => Math.min(2, z + 0.1))} className="p-1.5 hover:bg-theme-page rounded-md transition-colors text-theme-muted hover:text-theme-fg">
+              <ZoomIn size={14} />
+            </button>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setExpandedIds(new Set(["ceo"]));
-              setZoom(0.75);
-              if (scrollRef.current) scrollRef.current.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-            }}
-          >
-            <Maximize2 size={13} className="mr-1.5" /> Reset
+          <Button variant="outline" size="sm" onClick={() => { setZoom(0.75); setExpandedIds(new Set(["root_node"])); }}>
+            <Maximize2 size={14} className="mr-1.5" /> Reset
           </Button>
         </div>
       }
     >
-      <div className="space-y-4">
-        {/* Chart canvas */}
-        <div className="page-card min-h-[70vh] overflow-hidden p-0 relative">
-          <div
-            ref={scrollRef}
-            onMouseDown={onMouseDown}
-            onMouseUp={onMouseLeaveOrUp}
-            onMouseLeave={onMouseLeaveOrUp}
-            onMouseMove={onMouseMove}
-            onWheel={onWheel}
-            className={cn(
-              "h-full min-h-[70vh] w-full overflow-auto p-12 select-none",
-              isDragging ? "cursor-grabbing" : "cursor-grab"
-            )}
-            style={{
-              backgroundImage: "radial-gradient(hsl(var(--border)) 1px, transparent 1px)",
-              backgroundSize: "24px 24px",
-            }}
-          >
-            <div
-              ref={chartRef}
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: "top center",
-                transition: "transform 0.3s ease",
-              }}
-              className="inline-flex min-w-full justify-center pt-8 pb-32"
-            >
-              {renderTree(ORG_DATA, true)}
+      <div
+        ref={scrollRef}
+        onMouseDown={onMouseDown}
+        onMouseLeave={onMouseLeaveOrUp}
+        onMouseUp={onMouseLeaveOrUp}
+        onMouseMove={onMouseMove}
+        onWheel={onWheel}
+        className={cn(
+          "relative h-[76vh] w-full overflow-hidden rounded-3xl border border-theme-border shadow-inner",
+          isDragging ? "cursor-grabbing" : "cursor-grab"
+        )}
+        style={{
+          backgroundColor: "var(--color-theme-page, #f8f9fb)",
+          backgroundImage: "radial-gradient(circle, rgba(0,0,0,0.18) 1.2px, transparent 1.2px)",
+          backgroundSize: "22px 22px",
+        }}
+      >
+        {loading && !orgData ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-800 border-t-transparent" />
+              <p className="text-xs font-black uppercase tracking-widest text-gray-400 animate-pulse">
+                Hydrating Matrix...
+              </p>
             </div>
           </div>
-
-          {/* Zoom indicator */}
-          <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-full border border-theme-border bg-theme-surface/80 px-3 py-1.5 backdrop-blur-sm text-xs text-theme-muted select-none pointer-events-none">
-            <span>Scale: {Math.round(zoom * 100)}%</span>
-            <span className="text-theme-border">·</span>
-            <span>{isDragging ? "Panning" : "Drag to pan · Ctrl+scroll to zoom"}</span>
+        ) : orgData ? (
+          <div
+            ref={chartRef}
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: "center top",
+              transition: isDragging ? "none" : "transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)",
+            }}
+            className="flex flex-col items-center p-16 min-w-max"
+          >
+            {renderTree(orgData, true)}
           </div>
-        </div>
-
-        {/* Legend */}
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-5">
-            {[
-              { dot: "bg-theme-primary", label: "Company" },
-              { dot: "bg-theme-muted",   label: "Department" },
-              { dot: "bg-theme-border",  label: "Team" },
-            ].map(({ dot, label }) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <div className={cn("h-2 w-2 rounded-full", dot)} />
-                <span className="text-xs text-theme-muted">{label}</span>
-              </div>
-            ))}
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <div className="text-center space-y-3">
+              <ShieldCheck size={48} className="mx-auto text-gray-300" />
+              <p className="text-sm font-bold text-gray-400">No organizational nodes detected.</p>
+              <p className="text-xs text-gray-300">Create departments and teams in the Teams section.</p>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 text-emerald-600">
-            <ShieldCheck size={13} />
-            <span className="text-xs">Structure verified</span>
-          </div>
-        </div>
+        )}
       </div>
-
-      <style jsx global>{`
-        [data-node-id] { }
-      `}</style>
     </DashboardShell>
   );
 }

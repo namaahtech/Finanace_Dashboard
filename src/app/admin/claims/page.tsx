@@ -6,6 +6,7 @@ import { Badge, statusBadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import axios from "axios";
+import { useToast } from "@/components/ui/Toast";
 import {
   FileText,
   Clock,
@@ -40,6 +41,7 @@ function monthLabel(m: number, y: number) {
 }
 
 export default function AdminClaimsPage() {
+  const { showToast } = useToast();
   const [claims, setClaims] = useState<Claim[]>(MOCK_CLAIMS);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -65,9 +67,10 @@ export default function AdminClaimsPage() {
     setProcessing(claimId);
     try {
       await axios.post("/api/claims", { action: "process", claimId });
+      showToast("Payout protocol executed. Funds dispatched to nodal queue.", "success");
       await load();
     } catch (err: unknown) {
-      alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Error processing claim");
+      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Payout Sync Error", "error");
     } finally {
       setProcessing(null);
     }
@@ -77,9 +80,10 @@ export default function AdminClaimsPage() {
     setCycleConfirm(false);
     try {
       await axios.post("/api/claims", { action: "advance_cycle" });
+      showToast("Global claim cycle advanced. Queues re-serialized.", "success");
       await load();
     } catch (err: unknown) {
-      alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Error");
+      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Cycle Shift Error", "error");
     }
   }
 
@@ -194,13 +198,13 @@ export default function AdminClaimsPage() {
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-theme-fg">{c.employee?.name}</p>
-                          <p className="text-[10px] text-theme-subtle">{c.employee?.department} · {c.employee?.employeeId}</p>
+                          <p className="text-[10px] text-theme-subtle">{c.employee?.department} Â· {c.employee?.employeeId}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-5 py-3 text-sm font-bold text-emerald-600">{formatCurrency(c.amount)}</td>
                     <td className="px-5 py-3 text-xs text-theme-muted">
-                      {c.incentive ? monthLabel(c.incentive.month, c.incentive.year) : "—"}
+                      {c.incentive ? monthLabel(c.incentive.month, c.incentive.year) : "â€”"}
                     </td>
                     <td className="px-5 py-3">
                       <span className="rounded-md bg-theme-raised px-2 py-0.5 text-xs font-semibold text-theme-muted">
@@ -212,7 +216,7 @@ export default function AdminClaimsPage() {
                         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/10 text-xs font-bold text-purple-600">
                           {c.queue_position}
                         </span>
-                      ) : <span className="text-theme-subtle text-xs">—</span>}
+                      ) : <span className="text-theme-subtle text-xs">â€”</span>}
                     </td>
                     <td className="px-5 py-3">
                       <Badge variant={statusBadgeVariant(c.status)}>
@@ -249,7 +253,7 @@ export default function AdminClaimsPage() {
 
       {/* Advance cycle confirm modal */}
       {cycleConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-theme-surface border border-theme-border shadow-2xl">
             <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
               <div className="flex items-center gap-2 text-amber-600">

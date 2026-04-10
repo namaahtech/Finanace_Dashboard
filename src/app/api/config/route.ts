@@ -1,40 +1,51 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
-// GET /api/config — get system configuration
 export async function GET() {
   try {
-    // Return dummy system configuration aligned with AdminOverview expectations
-    const config = {
-      company_revenue: 145000000,
-      revenue_achievement_percentage: 84,
-      collections_percentage: 87,
-      delivery_health_percentage: 92,
-      profit_percentage: 85,
-      expense_percentage: 15,
-      company_stage: "Early Growth",
-      vesting_days: 30,
-      bonus_percentage_1m: 5,
-      bonus_percentage_2m: 10,
-      claim_limit: 25,
-      payout_pool_amount: 1250000,
-      payout_capacity: "HIGH",
-      current_claim_cycle: 4,
-      updated_at: new Date().toISOString()
-    };
+    const supabase = getSupabaseAdmin();
+    // System Config is a pure singleton, always fetch strictly the first row safely.
+    const { data: config, error } = await supabase.from("system_config").select("*").limit(1).single();
     
-    // Wrap in 'config' key as expected by AdminDashboard
+    if (error) {
+      // If no row exists, create the structural blank slate
+      if (error.code === 'PGRST116') {
+        const { data: newConfig } = await supabase.from("system_config").insert({ revenue: 0 }).select().single();
+        return NextResponse.json({ config: newConfig });
+      }
+      return NextResponse.json({ error: "System Registry Fault: " + error.message }, { status: 500 });
+    }
+
     return NextResponse.json({ config });
-  } catch (err) {
-    return NextResponse.json({ error: "Dummy error" }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: "Internal Exception: " + error.message }, { status: 500 });
   }
 }
 
-// POST /api/config — update system configuration
-export async function POST(req: NextRequest) {
+export async function PATCH(req: Request) {
   try {
+    const supabase = getSupabaseAdmin();
     const body = await req.json();
-    return NextResponse.json({ config: { ...body, updated_at: new Date().toISOString() } });
-  } catch (err) {
-    return NextResponse.json({ error: "Dummy error" }, { status: 500 });
+
+    const { data: existing, error: findError } = await supabase.from("system_config").select("id").limit(1).single();
+
+    if (findError && findError.code !== 'PGRST116') {
+      return NextResponse.json({ error: "System Verification Fault" }, { status: 500 });
+    }
+
+    let result;
+    if (!existing) {
+      const { data, error } = await supabase.from("system_config").insert(body).select().single();
+      if (error) throw error;
+      result = data;
+    } else {
+      const { data, error } = await supabase.from("system_config").update(body).eq("id", existing.id).select().single();
+      if (error) throw error;
+      result = data;
+    }
+
+    return NextResponse.json({ config: result });
+  } catch (error: any) {
+    return NextResponse.json({ error: "Configuration Deployment Fault: " + error.message }, { status: 500 });
   }
 }

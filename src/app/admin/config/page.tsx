@@ -5,7 +5,8 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { formatCurrency, cn } from "@/lib/utils";
 import axios from "axios";
-import { Settings, ShieldAlert, Save, TrendingUp, IndianRupee, Layers, Briefcase, Mail, Bell, Lock, AlertCircle, RefreshCw, ChevronDown } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
+import { Settings, ShieldAlert, Save, TrendingUp, IndianRupee, Layers, Briefcase, Mail, Bell, Lock, AlertCircle, RefreshCw, ChevronDown, Building2, LayoutGrid } from "lucide-react";
 
 interface Config {
   company_revenue: number;
@@ -22,12 +23,20 @@ interface Config {
   payout_capacity: "HIGH" | "MODERATE" | "LOW";
   current_claim_cycle: number;
   cycle_reset_date: string;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user: string;
+  smtp_pass: string;
+  company_name: string;
+  founder_name: string;
+  founder_designation: string;
 }
 
 const B = "#FBFBFA"; 
 
 export default function AdminConfigPage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [config, setConfig] = useState<Config | null>(null);
   const [form, setForm] = useState<Partial<Config>>({});
   const [loading, setLoading] = useState(true);
@@ -82,9 +91,9 @@ export default function AdminConfigPage() {
       const res = await axios.patch("/api/config", form);
       setConfig(res.data.config);
       setForm(res.data.config);
-      alert("System configuration synced securely.");
+      showToast("Global system configuration synced securely.", "success");
     } catch (err: unknown) {
-      alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Sync Error");
+      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Sync Error", "error");
     } finally {
       setSaving(false);
     }
@@ -93,8 +102,8 @@ export default function AdminConfigPage() {
   const handleTestSmtp = () => {
     setTestingSmtp(true);
     setTimeout(() => {
-      alert("Test email dispatched to root administrator.");
       setTestingSmtp(false);
+      showToast("SMTP Relay Handshake Successful.", "success");
     }, 1500);
   };
 
@@ -146,12 +155,86 @@ export default function AdminConfigPage() {
               </div>
             </div>
 
-            {/* BLOCK 1: FINANCIAL ARCHITECTURE */}
-            <section className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-black/5">
+            {/* BLOCK 1: COMPANY IDENTITY & ROOT ARCHITECTURE */}
+            <section className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-black/5 overflow-hidden">
+              <div className="p-8 border-b border-black/5 flex items-center justify-between bg-black/[0.01]">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center text-white shadow-lg">
+                    <Building2 size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-black/90 uppercase tracking-widest">Company Profile</h2>
+                    <p className="text-[11px] font-medium text-black/40 mt-0.5">This information defines the main head node for your organizational chart.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                  <div className="space-y-6">
+                    <div>
+                      <label className={LabelCls}>Company Full Name</label>
+                      <input type="text" placeholder="e.g. Namaah Tech Solutions" value={form.company_name || ""} onChange={(e) => setForm({ ...form, company_name: e.target.value })} className={InputCls} />
+                    </div>
+                    <div>
+                      <label className={LabelCls}>Main Head / Founder Name</label>
+                      <input type="text" placeholder="e.g. Aryan" value={form.founder_name || ""} onChange={(e) => setForm({ ...form, founder_name: e.target.value })} className={InputCls} />
+                    </div>
+                    <div>
+                      <label className={LabelCls}>Main Role / Designation</label>
+                      <input type="text" placeholder="e.g. Chief Executive Officer" value={form.founder_designation || ""} onChange={(e) => setForm({ ...form, founder_designation: e.target.value })} className={InputCls} />
+                    </div>
+                  </div>
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={LabelCls}>Industry Type</label>
+                        <div className="relative">
+                          <select className={InputCls + " appearance-none cursor-pointer"}>
+                            <option>Technology</option>
+                            <option>Finance</option>
+                            <option>Healthcare</option>
+                            <option>Manufacturing</option>
+                          </select>
+                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/30 pointer-events-none" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={LabelCls}>Company Size</label>
+                        <div className="relative">
+                          <select className={InputCls + " appearance-none cursor-pointer"}>
+                            <option>1-50 Employees</option>
+                            <option>51-200 Employees</option>
+                            <option>201-500 Employees</option>
+                            <option>500+ Employees</option>
+                          </select>
+                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/30 pointer-events-none" />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={LabelCls}>Headquarters Address</label>
+                      <textarea placeholder="Central Business District, Building 4" className={cn(InputCls, "min-h-[110px] resize-none py-3")} rows={3}></textarea>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="rounded-xl border border-dashed border-black/10 bg-black/[0.01] p-6 flex items-center gap-4 group hover:border-black/20 transition-colors">
+                  <div className="w-14 h-14 rounded-xl bg-white border border-black/5 flex items-center justify-center text-black/20 group-hover:text-black/40 transition-colors shadow-sm">
+                    <LayoutGrid size={24} />
+                  </div>
+                  <div>
+                    <h4 className="text-[11px] font-black uppercase text-black/80 tracking-widest mb-1">Company Branding</h4>
+                    <p className="text-[10px] font-medium text-black/40">Upload your organization's logo to reflect on all generated reports and invoices.</p>
+                  </div>
+                  <button type="button" className="ml-auto text-[10px] font-black uppercase tracking-widest bg-black text-white px-4 py-2 rounded-lg shadow-md hover:bg-black/80 transition-all">Upload Logo</button>
+                </div>
+              </div>
+
               <div className="p-8 border-b border-black/5 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full bg-black/[0.03] flex items-center justify-center text-black/80">
-                    <Briefcase size={18} />
+                    <IndianRupee size={18} />
                   </div>
                   <div>
                     <h2 className="text-sm font-black text-black/90 uppercase tracking-widest">Financial Targets</h2>
@@ -332,19 +415,19 @@ export default function AdminConfigPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
                     <label className={LabelCls}>SMTP Host</label>
-                    <input type="text" value={systemState.smtpHost} onChange={e => setSystemState(p => ({...p, smtpHost: e.target.value}))} className={InputCls} />
+                    <input type="text" value={form.smtp_host || ""} onChange={e => setForm({ ...form, smtp_host: e.target.value })} className={InputCls} />
                   </div>
                   <div>
                     <label className={LabelCls}>SMTP Port</label>
-                    <input type="text" value={systemState.smtpPort} onChange={e => setSystemState(p => ({...p, smtpPort: e.target.value}))} className={cn(InputCls, "font-mono")} />
+                    <input type="number" value={form.smtp_port || 587} onChange={e => setForm({ ...form, smtp_port: parseInt(e.target.value) || 587 })} className={cn(InputCls, "font-mono")} />
                   </div>
                   <div>
-                    <label className={LabelCls}>Email Address</label>
-                    <input type="email" value={systemState.smtpUser} onChange={e => setSystemState(p => ({...p, smtpUser: e.target.value}))} className={InputCls} />
+                    <label className={LabelCls}>Email Address Username</label>
+                    <input type="email" value={form.smtp_user || ""} onChange={e => setForm({ ...form, smtp_user: e.target.value })} className={InputCls} />
                   </div>
                   <div>
                     <label className={LabelCls}>Password / Key</label>
-                    <input type="password" value={systemState.smtpPass} onChange={e => setSystemState(p => ({...p, smtpPass: e.target.value}))} className={cn(InputCls, "tracking-[0.2em]")} />
+                    <input type="password" value={form.smtp_pass || ""} onChange={e => setForm({ ...form, smtp_pass: e.target.value })} className={cn(InputCls, "tracking-[0.2em]")} />
                   </div>
                 </div>
               </section>

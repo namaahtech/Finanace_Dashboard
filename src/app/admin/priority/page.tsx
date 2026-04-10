@@ -179,13 +179,13 @@ export default function AdminPriorityPage() {
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-theme-fg">{req.employee?.name}</p>
-                          <p className="text-[10px] text-theme-subtle">{req.employee?.department} · {req.employee?.employeeId}</p>
+                          <p className="text-[10px] text-theme-subtle">{req.employee?.department} Â· {req.employee?.employeeId}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-5 py-3 text-sm font-bold text-emerald-600">{formatCurrency(req.amount)}</td>
                     <td className="px-5 py-3 text-xs text-theme-muted">
-                      {req.incentive ? monthLabel(req.incentive.month, req.incentive.year) : "—"}
+                      {req.incentive ? monthLabel(req.incentive.month, req.incentive.year) : "â€”"}
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-start gap-1.5">
@@ -229,7 +229,7 @@ export default function AdminPriorityPage() {
 
       {/* Reject modal */}
       {rejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-theme-surface border border-theme-border shadow-2xl">
             <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
               <div className="flex items-center gap-2 text-red-500">
@@ -247,7 +247,7 @@ export default function AdminPriorityPage() {
               <textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Enter rejection reason…"
+                placeholder="Enter rejection reasonâ€¦"
                 rows={3}
                 className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all resize-none"
               />

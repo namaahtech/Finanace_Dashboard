@@ -31,6 +31,7 @@ import {
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 
 // ─── Types ───────────────────────────────────────────────
 interface User {
@@ -196,6 +197,7 @@ function StarRating({
 // ─── Main Page ────────────────────────────────────────────
 export default function AdminKpiPage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const today = new Date();
   const [tab, setTab] = useState<PageTab>("entry");
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
@@ -258,8 +260,8 @@ export default function AdminKpiPage() {
   }
 
   async function handleSubmit() {
-    if (!selectedUser) { alert("Select an employee"); return; }
-    if (!canEdit)       { alert("Only admin, HR, and leads can save KPI scores."); return; }
+    if (!selectedUser) { showToast("Select an employee to score.", "warning"); return; }
+    if (!canEdit)       { showToast("Access Denied: Admin, HR, or Lead role required.", "error"); return; }
     setSubmitting(true);
     try {
       await axios.post("/api/kpi", {
@@ -273,8 +275,9 @@ export default function AdminKpiPage() {
       });
       const res = await axios.get(`/api/kpi?employeeId=${selectedUser}`);
       setScores(res.data.scores ?? []);
+      showToast(`Performance scores for ${selectedEmployee?.name} recorded successfully.`, "success");
     } catch (err: unknown) {
-      alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Error saving score");
+      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Protocol Sync Error", "error");
     } finally {
       setSubmitting(false);
     }

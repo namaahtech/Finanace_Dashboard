@@ -138,7 +138,7 @@ export default function SubscriptionsPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search subscriptions…"
+                placeholder="Search subscriptionsâ€¦"
                 className="h-8 w-48 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all"
               />
             </div>
@@ -218,7 +218,7 @@ export default function SubscriptionsPage() {
 
       {/* Add Subscription Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-theme-surface border border-theme-border shadow-2xl">
             <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
               <div className="flex items-center gap-2">
@@ -244,7 +244,7 @@ export default function SubscriptionsPage() {
                   <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Productivity" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Cost (₹)</label>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Cost (â‚¹)</label>
                   <input type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} placeholder="0" className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
                 </div>
                 <div>

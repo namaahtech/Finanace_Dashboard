@@ -88,9 +88,9 @@ export function DatePicker({ value, onChange, label, placeholder = "Select Date"
  </div>
 
  {isOpen && !disabled && (
- <div className="absolute top-[calc(100%+4px)] left-0 z-[1000] w-[270px] bg-theme-surface enterprise-card shadow-xl animate-in fade-in slide-in-from-top-2 duration-300">
+ <div className="absolute top-[calc(100%+4px)] left-0 z-[6000] w-[225px] bg-theme-surface enterprise-card shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
  {/* Compact Calendar Header */}
- <div className="p-3 border-b border-theme-border bg-theme-raised/50 flex flex-col gap-2">
+ <div className="p-2 border-b border-theme-border bg-theme-raised/50 flex flex-col gap-2">
  <div className="flex justify-between items-center px-1">
  <div className="flex items-center gap-0.5 bg-theme-surface border border-theme-border p-0.5 rounded-lg">
  <button onClick={(e) => { e.stopPropagation(); moveYear(-1); }} className="p-1 hover:bg-theme-raised rounded-md transition-colors text-theme-subtle hover:text-theme-fg"><ChevronLeft size={14} /></button>
@@ -106,10 +106,10 @@ export function DatePicker({ value, onChange, label, placeholder = "Select Date"
  </div>
 
  {/* Compact Days Grid */}
- <div className="p-3">
- <div className="grid grid-cols-7 mb-2 px-1">
+ <div className="p-2">
+ <div className="grid grid-cols-7 mb-1 px-1">
  {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
- <div key={`${d}-${i}`} className="text-center text-[8px] font-black text-theme-subtle uppercase">{d}</div>
+ <div key={`${d}-${i}`} className="text-center text-[7px] font-black text-theme-subtle uppercase">{d}</div>
  ))}
  </div>
  <div className="grid grid-cols-7 gap-y-0.5 px-0.5">
@@ -119,7 +119,7 @@ export function DatePicker({ value, onChange, label, placeholder = "Select Date"
  disabled={!day}
  onClick={(e) => { e.stopPropagation(); day && selectDate(day); }}
  className={cn(
- "h-8 w-8 flex items-center justify-center text-[10px] font-bold rounded-md transition-all mx-auto",
+ "h-[26px] w-[26px] flex items-center justify-center text-[9px] font-bold rounded-md transition-all mx-auto",
  !day ? "cursor-default" : 
  dayjs(value).isSame(day, 'day') 
  ? "bg-theme-primary text-theme-surface shadow-md scale-105" 
