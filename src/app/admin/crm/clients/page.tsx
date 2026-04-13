@@ -19,8 +19,10 @@ import {
   ArrowRightLeft,
   ChevronDown,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/components/ui/Toast";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
 const formatRupee = (amount: number) =>
@@ -64,11 +66,57 @@ const ClientActionMenu = ({ onEdit, onDelete }: { onEdit: () => void; onDelete: 
 );
 
 export default function CRMClientsPage() {
-  const { convertedClients, addConvertedClient, removeClient } = useCRMStore();
+  const [convertedClients, setConvertedClients] = useState<ConvertedClient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState<string>("All");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<ConvertedClient>>({});
+
+  // Realtime Sync
+  useEffect(() => {
+    fetchClients();
+
+    const channel = supabase
+      .channel('clients_page_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
+        fetchClients();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const fetchClients = async () => {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      showToast("Error fetching clients", "error");
+    } else {
+      // Map database fields to UI model
+      const mapped = (data || []).map((c: any) => ({
+        id: c.id,
+        company: c.name || c.company || "Unknown",
+        leadName: c.lead_name || "N/A",
+        leadPhone: c.lead_phone || "N/A",
+        value: Number(c.value || 0),
+        empName: c.emp_id || "Direct", // In a real app, join with employees
+        empId: c.emp_id || "",
+        status: (c.status as any) || "Active",
+        tier: (c.tier as any) || "Standard",
+        convertedDate: c.converted_at ? new Date(c.converted_at).toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }) : new Date(c.created_at).toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }),
+        fromPipeline: !!c.from_pipeline
+      }));
+      setConvertedClients(mapped);
+    }
+    setLoading(false);
+  };
 
   // Inline ghost row state
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -101,23 +149,28 @@ export default function CRMClientsPage() {
   const activeClients = convertedClients.filter((c) => c.status === "Active").length;
   const convertedThisMonth = convertedClients.filter((c) => c.fromPipeline).length;
 
-  const handleSaveNew = () => {
+  const handleSaveNew = async () => {
     if (!newForm.company) return;
-    addConvertedClient({
-      id: `CL-${Date.now()}`,
-      company: newForm.company,
-      leadName: newForm.leadName,
-      leadPhone: newForm.leadPhone,
-      value: newForm.value,
-      empName: newForm.empName,
-      empId: newForm.empId,
-      status: newForm.status,
-      tier: newForm.tier,
-      convertedDate: new Date().toLocaleDateString("en-IN", { month: "short", day: "2-digit", year: "numeric" }),
-      fromPipeline: false,
-    });
-    setNewForm({ company: "", leadName: "", leadPhone: "", value: 0, empName: "", empId: "", status: "Active", tier: "Standard" });
-    setIsAddingNew(false);
+    const { error } = await supabase
+      .from('clients')
+      .insert([{
+        name: newForm.company,
+        company: newForm.company,
+        lead_name: newForm.leadName,
+        lead_phone: newForm.leadPhone,
+        value: newForm.value,
+        status: newForm.status,
+        tier: newForm.tier,
+        from_pipeline: false
+      }]);
+
+    if (error) {
+      showToast("Failed to add client", "error");
+    } else {
+      showToast("Client added to registry", "success");
+      setNewForm({ company: "", leadName: "", leadPhone: "", value: 0, empName: "", empId: "", status: "Active", tier: "Standard" });
+      setIsAddingNew(false);
+    }
   };
 
   const handleStartEdit = (client: ConvertedClient) => {
@@ -125,14 +178,34 @@ export default function CRMClientsPage() {
     setEditValues({ ...client });
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingId) return;
-    // In a real app: API call. Here we update via store remove + re-add.
-    // Simple approach: mutate via store remove + add with updated values
-    removeClient(editingId);
-    addConvertedClient({ ...(editValues as ConvertedClient) });
-    setEditingId(null);
-    setEditValues({});
+    const { error } = await supabase
+      .from('clients')
+      .update({
+        name: editValues.company,
+        company: editValues.company,
+        lead_name: editValues.leadName,
+        lead_phone: editValues.leadPhone,
+        value: editValues.value,
+        status: editValues.status,
+        tier: editValues.tier,
+      })
+      .eq('id', editingId);
+
+    if (error) {
+        showToast("Update failed", "error");
+    } else {
+        showToast("Client records synced", "success");
+        setEditingId(null);
+        setEditValues({});
+    }
+  };
+
+  const handleRemove = async (id: string) => {
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    if (error) showToast("Deletion failed", "error");
+    else showToast("Client record removed", "success");
   };
 
   const STATS = [
@@ -229,7 +302,7 @@ export default function CRMClientsPage() {
                           <button onClick={() => setEditingId(null)} className="p-1 text-rose-600 hover:bg-rose-50 rounded"><X size={12} /></button>
                         </div>
                       ) : (
-                        <ClientActionMenu onEdit={() => handleStartEdit(client)} onDelete={() => removeClient(client.id)} />
+                        <ClientActionMenu onEdit={() => handleStartEdit(client)} onDelete={() => handleRemove(client.id)} />
                       )}
                     </td>
 

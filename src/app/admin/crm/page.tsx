@@ -21,10 +21,13 @@ import {
   Columns,
   Tag,
   Briefcase,
-  UserCheck
+  UserCheck,
+  ChevronUp
 } from "lucide-react";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/components/ui/Toast";
 import { 
   DragDropContext, 
   Droppable, 
@@ -42,6 +45,15 @@ const formatRupee = (amount: number) => {
   }).format(amount);
 };
 
+// Indian Number to Words Helper
+const numberToIndianWords = (num: number) => {
+  if (!num || num === 0) return "";
+  if (num >= 10000000) return `${(num / 10000000).toFixed(2)} Cr`;
+  if (num >= 100000) return `${(num / 100000).toFixed(2)} Lakh`;
+  if (num >= 1000) return `${(num / 1000).toFixed(2)} K`;
+  return num.toString();
+};
+
 // Color Palette for Stages
 const STAGE_COLORS = [
   { c: 'bg-emerald-500', b: 'bg-emerald-100', t: 'text-emerald-700' },
@@ -56,52 +68,115 @@ const STAGE_COLORS = [
   { c: 'bg-slate-500', b: 'bg-slate-100', t: 'text-slate-700' },
 ];
 
-// Employee Master Data
-const EMPLOYEES = [
-  { id: "EMP-402", name: "Vijay Kumar" },
-  { id: "EMP-215", name: "Ananya Sharma" },
-  { id: "EMP-108", name: "Rohan Das" },
-  { id: "EMP-612", name: "Siddharth Malhotra" },
-  { id: "EMP-901", name: "Priya Singh" },
-];
+// Custom Dropdown Component
+function CustomSelect({ value, options, onChange, placeholder, icon, label, error }: any) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const selected = options.find((o: any) => o.value === value);
+
+  return (
+    <div className="relative w-full" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          "flex h-8 w-full items-center justify-between rounded border border-black/10 bg-[#fbfbfa] px-2 text-[10px] font-bold text-black outline-none focus:border-black transition-all",
+          error && "border-rose-500"
+        )}
+      >
+        <span className="flex items-center gap-2 truncate pr-1">
+          {selected ? (
+              <div className="flex flex-col items-start leading-none">
+                  <span className="font-black tracking-tight">{selected.value}</span>
+                  <span className="text-[8px] opacity-40 uppercase">{selected.label}</span>
+              </div>
+          ) : <span className="text-black/30">{placeholder}</span>}
+        </span>
+        {open ? <ChevronUp size={10} className="text-black/20" /> : <ChevronDown size={10} className="text-black/20" />}
+      </button>
+
+      {open && (
+        <div className="absolute top-full z-[100] mt-1 w-full max-h-40 overflow-y-auto rounded border border-black/10 bg-white shadow-xl p-1 animate-in zoom-in-95 duration-150">
+          {options.length > 0 ? options.map((opt: any) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={cn(
+                "flex w-full flex-col items-start rounded px-2 py-1.5 text-left transition-all",
+                value === opt.value ? "bg-black text-white" : "text-black hover:bg-black/5"
+              )}
+            >
+              <span className="text-[10px] font-black">{opt.value}</span>
+              <span className={cn("text-[8px] font-bold uppercase", value === opt.value ? "text-white/60" : "text-black/40")}>{opt.label}</span>
+            </button>
+          )) : (
+            <div className="px-2 py-3 text-center text-[8px] uppercase font-black tracking-widest text-black/20">No Results</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Render Helper for Employee Mapping
+const EmployeeDisplay = ({ empId, empName, employees }: any) => {
+  const emp = employees.find((e: any) => e.id === empId || e.employee_id === empId);
+  const displayId = emp ? emp.employee_id : (empId ? "Syncing..." : "Unassigned");
+  const displayName = emp ? emp.name : (empName || "Unassigned");
+  return (
+    <div className="flex flex-col leading-none">
+      <span className="text-[11px] font-bold text-black/70 truncate w-32">{displayName}</span>
+      <span className="text-[9px] font-bold text-black/30 mt-0.5">{displayId}</span>
+    </div>
+  );
+};
 
 // Initial data
 const INITIAL_DATA = {
   columns: {
-    "NEW": {
-      id: "NEW", title: "New", color: "bg-emerald-500", pillBg: "bg-emerald-100", pillText: "text-emerald-700",
-      items: []
+    "new": {
+      id: "new", title: "New", color: "bg-emerald-500", pillBg: "bg-emerald-100", pillText: "text-emerald-700",
+      items: [] as any[]
     },
-    "DISCOVERY": {
-      id: "DISCOVERY", title: "Discovery", color: "bg-rose-500", pillBg: "bg-rose-100", pillText: "text-rose-700",
-      items: []
+    "contacted": {
+      id: "contacted", title: "Discovery", color: "bg-rose-500", pillBg: "bg-rose-100", pillText: "text-rose-700",
+      items: [] as any[]
     },
-    "NEGOTIATION": {
-      id: "NEGOTIATION", title: "Negotiation", color: "bg-amber-500", pillBg: "bg-amber-100", pillText: "text-amber-700",
-      items: []
+    "negotiation": {
+      id: "negotiation", title: "Negotiation", color: "bg-amber-500", pillBg: "bg-amber-100", pillText: "text-amber-700",
+      items: [] as any[]
     },
-    "WON": {
-      id: "WON", title: "Won", color: "bg-blue-500", pillBg: "bg-blue-100", pillText: "text-blue-700",
-      items: []
+    "won": {
+      id: "won", title: "Won", color: "bg-blue-500", pillBg: "bg-blue-100", pillText: "text-blue-700",
+      items: [] as any[]
     },
-    "LOST": {
-      id: "LOST", title: "Lost", color: "bg-slate-500", pillBg: "bg-slate-100", pillText: "text-slate-700",
-      items: []
+    "lost": {
+      id: "lost", title: "Lost", color: "bg-slate-500", pillBg: "bg-slate-100", pillText: "text-slate-700",
+      items: [] as any[]
     }
   },
-  columnOrder: ["NEW", "DISCOVERY", "NEGOTIATION", "WON", "LOST"]
+  columnOrder: ["new", "contacted", "negotiation", "won", "lost"]
 };
 
 interface DealItem {
   id: string;
   company: string;
   value: number;
-  priority: string;
+  priority: 'Medium' | 'High' | 'Critical';
   priorityColor: string;
   leadName: string;
   leadPhone: string;
   empName: string;
   empId: string;
+  stage: string;
   date: string;
 }
 
@@ -120,6 +195,27 @@ const ActionMenu = ({ children, align = "end", onRename, onDuplicate, onDelete, 
   </DropdownMenu.Root>
 );
 
+const ConfirmDialog = ({ isOpen, title, onConfirm, onCancel }: any) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[250] animate-in slide-in-from-top-4 fade-in duration-500">
+      <div className="bg-white border border-black/10 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.1)] px-2 py-1.5 flex items-center gap-4 min-w-[320px]">
+        <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center flex-shrink-0 ml-1">
+          <Trash2 size={14} />
+        </div>
+        <div className="flex flex-col pr-4">
+           <span className="text-[10px] font-black text-black uppercase tracking-tighter leading-none">{title}</span>
+           <span className="text-[9px] font-bold text-black/30 uppercase mt-0.5">Permanent Action</span>
+        </div>
+        <div className="flex items-center gap-1">
+           <button onClick={onCancel} className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black/40 hover:text-black transition-colors rounded-full hover:bg-black/5">No</button>
+           <button onClick={onConfirm} className="px-6 py-2 text-[10px] font-black uppercase tracking-widest bg-rose-500 text-white hover:bg-rose-600 transition-colors rounded-full shadow-lg shadow-rose-200">Confirm Delete</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function CRMPipelinePage() {
   const { addConvertedClient } = useCRMStore();
   const [data, setData] = useState<any>(INITIAL_DATA);
@@ -129,6 +225,10 @@ export default function CRMPipelinePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<any>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean; itemId: string | null }>({ isOpen: false, itemId: null });
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
 
   // Inline States
   const [addingToColumn, setAddingToColumn] = useState<string | null>(null);
@@ -146,6 +246,10 @@ export default function CRMPipelinePage() {
     priorityColor: "bg-blue-100 text-blue-700"
   });
 
+  const validatePhone = (val: string) => {
+    return val.replace(/[^0-9+]/g, '').slice(0, 13);
+  };
+
   const [newColumnForm, setNewColumnForm] = useState({
     title: "",
     color: STAGE_COLORS[9].c, // Slate default
@@ -157,7 +261,71 @@ export default function CRMPipelinePage() {
 
   useEffect(() => {
     setIsReady(true);
+    fetchEmployees();
+    fetchLeads();
+
+    const channel = supabase
+      .channel('crm_realtime_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
+        fetchLeads();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, () => {
+        fetchEmployees();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const fetchLeads = async () => {
+    const { data: dbLeads, error } = await supabase
+      .from('leads')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      showToast("Error fetching leads", "error");
+    } else {
+      // Create a fresh clone of columns from INITIAL_DATA
+      const newColumns: any = {};
+      Object.keys(INITIAL_DATA.columns).forEach(key => {
+        newColumns[key] = { ...INITIAL_DATA.columns[key as keyof typeof INITIAL_DATA.columns], items: [] };
+      });
+      
+      (dbLeads || []).forEach(lead => {
+        const item: DealItem = {
+          id: lead.id,
+          company: lead.company || lead.name,
+          value: Number(lead.value),
+          leadName: lead.lead_name,
+          leadPhone: lead.lead_phone,
+          stage: lead.stage,
+          priority: lead.priority as any,
+          priorityColor: lead.priority === 'Critical' ? 'bg-rose-100 text-rose-600' : lead.priority === 'High' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500',
+          empName: lead.emp_name || "Unassigned",
+          empId: lead.emp_id || "", // This is the UUID from DB
+          date: new Date(lead.created_at).toLocaleDateString('en-IN', { month: 'short', day: '2-digit' })
+        };
+        const boardStage = lead.stage.toLowerCase();
+        if (newColumns[boardStage]) {
+          newColumns[boardStage].items.push(item);
+        }
+      });
+      setData((prev: any) => ({ ...prev, columns: newColumns }));
+    }
+    setLoading(false);
+  };
+
+  const fetchEmployees = async () => {
+    const { data, error } = await supabase
+      .from('employees')
+      .select('id, employee_id, name')
+      .order('employee_id');
+    if (error) showToast("Failed to fetch employees", "error");
+    else setEmployees(data || []);
+  };
 
   const startInlineAdd = (columnId: string | null = null) => {
     setAddingToColumn(columnId);
@@ -180,18 +348,36 @@ export default function CRMPipelinePage() {
     }, 100);
   };
 
-  const saveInlineAdd = () => {
+  const saveInlineAdd = async () => {
     if (!inlineForm.company) return;
-    const colId = addingToColumn || "NEW";
-    const newItem: DealItem = {
-      ...inlineForm,
-      id: `deal-${Date.now()}`,
-      date: new Date().toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' })
-    };
-    const newData = { ...data };
-    newData.columns[colId].items.push(newItem);
-    setData(newData);
-    cancelInlineAdd();
+    const colId = addingToColumn || "new";
+    
+    // Find UUID for employee
+    const empRecord = employees.find(e => e.employee_id === inlineForm.empId);
+    const database_emp_id = empRecord?.id || null;
+
+    const { error } = await supabase
+      .from('leads')
+      .insert([{
+        company: inlineForm.company,
+        name: inlineForm.company,
+        value: inlineForm.value,
+        lead_name: inlineForm.leadName,
+        lead_phone: inlineForm.leadPhone,
+        stage: colId,
+        priority: inlineForm.priority,
+        emp_id: database_emp_id,
+        emp_name: inlineForm.empName
+      }]);
+
+    if (error) {
+      console.error("Lead Capture Error:", error);
+      showToast(`Failed to save: ${error.message}`, "error");
+    } else {
+      showToast("Lead captured successfully", "success");
+      fetchLeads(); // Force instant refresh
+      cancelInlineAdd();
+    }
   };
 
   const handlePriorityChange = (priority: string, isEditing: boolean = false) => {
@@ -204,7 +390,7 @@ export default function CRMPipelinePage() {
   };
 
   const handleEmpIdChange = (empId: string, isEditing: boolean = false) => {
-    const emp = EMPLOYEES.find(e => e.id === empId);
+    const emp = employees.find(e => e.employee_id === empId);
     if (isEditing) {
       setEditValues({ ...editValues, empId, empName: emp ? emp.name : "" });
     } else {
@@ -229,31 +415,34 @@ export default function CRMPipelinePage() {
     setData(newData);
   };
 
-  const handleConvertToClient = (item: DealItem) => {
-    // Remove from pipeline
-    const newData = { ...data };
-    Object.keys(newData.columns).forEach(colId => {
-      const col = newData.columns[colId];
-      col.items = col.items.filter((i: any) => i.id !== item.id);
-    });
-    setData(newData);
+  const handleConvertToClient = async (item: DealItem) => {
+    const empRecord = employees.find(e => e.employee_id === item.empId);
+    const database_emp_id = empRecord?.id || null;
 
-    // Add to shared CRM store → appears live in Client Registry
-    addConvertedClient({
-      id: `CL-${Date.now()}`,
-      company: item.company,
-      value: item.value,
-      leadName: item.leadName,
-      leadPhone: item.leadPhone,
-      empName: item.empName,
-      empId: item.empId,
-      convertedDate: new Date().toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }),
-      status: "Active",
-      tier: item.priority === 'Critical' ? 'Strategic' : item.priority === 'High' ? 'Key Account' : 'Standard',
-      fromPipeline: true,
-    });
+    const { error } = await supabase
+      .from('clients')
+      .insert([{
+        name: item.company,
+        company: item.company,
+        company_name: item.company,
+        lead_name: item.leadName,
+        contact_person: item.leadName, // Added to fix not-null constraint
+        lead_phone: item.leadPhone,
+        value: item.value,
+        emp_id: database_emp_id,
+        status: 'Active',
+        tier: item.priority === 'Critical' ? 'Strategic' : item.priority === 'High' ? 'Key Account' : 'Standard',
+        from_pipeline: true,
+        converted_at: new Date().toISOString()
+      }]);
 
-    // Show premium notification
+    if (error) {
+      showToast(`Conversion failed: ${error.message}`, "error");
+      return;
+    }
+
+    await supabase.from('leads').delete().eq('id', item.id);
+    fetchLeads(); // Force instant refresh
     setNotification(`${item.company} successfully converted to Client Registry`);
     setTimeout(() => setNotification(null), 3500);
   };
@@ -263,33 +452,77 @@ export default function CRMPipelinePage() {
     setEditValues({ ...item });
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editingId || !editValues) return;
-    const newData = { ...data };
-    Object.keys(newData.columns).forEach(colId => {
-      const col = newData.columns[colId];
-      const index = col.items.findIndex((i: any) => i.id === editingId);
-      if (index !== -1) col.items[index] = { ...editValues };
-    });
-    setData(newData);
-    setEditingId(null);
-    setEditValues(null);
+    
+    // Find UUID for employee
+    const empRecord = employees.find(e => e.employee_id === editValues.empId);
+    const database_emp_id = empRecord?.id || null;
+
+    const { error } = await supabase
+      .from('leads')
+      .update({
+        company: editValues.company,
+        name: editValues.company,
+        value: editValues.value,
+        lead_name: editValues.leadName,
+        lead_phone: editValues.leadPhone,
+        priority: editValues.priority,
+        emp_id: database_emp_id,
+        emp_name: editValues.empName
+      })
+      .eq('id', editingId);
+
+    if (error) {
+      console.error("Lead Update Error:", error);
+      showToast(`Update failed: ${error.message}`, "error");
+    } else {
+      showToast("Lead details updated", "success");
+      fetchLeads(); // Force instant refresh
+      setEditingId(null);
+      setEditValues(null);
+    }
   };
 
-  const handleDuplicate = (item: DealItem, columnId: string) => {
-    const newItem = { ...item, id: `deal-${Date.now()}`, company: `${item.company} (Copy)` };
-    const newData = { ...data };
-    newData.columns[columnId].items.push(newItem);
-    setData(newData);
+  const handleDuplicate = async (item: DealItem, columnId: string) => {
+    // Find UUID for employee
+    const empRecord = employees.find(e => e.employee_id === item.empId || e.id === item.empId);
+    const database_emp_id = empRecord?.id || null;
+
+    const { error } = await supabase.from('leads').insert([{
+      company: `${item.company} (Copy)`,
+      name: `${item.company} (Copy)`,
+      value: item.value,
+      lead_name: item.leadName,
+      lead_phone: item.leadPhone,
+      stage: columnId,
+      priority: item.priority,
+      emp_id: database_emp_id,
+      emp_name: item.empName
+    }]);
+
+    if (error) {
+      showToast("Duplicate failed", "error");
+    } else {
+      showToast("Lead duplicated successfully", "success");
+      fetchLeads(); // Force instant refresh
+    }
   };
 
   const handleDelete = (itemId: string) => {
-    const newData = { ...data };
-    Object.keys(newData.columns).forEach(colId => {
-      const col = newData.columns[colId];
-      col.items = col.items.filter((i: any) => i.id !== itemId);
-    });
-    setData(newData);
+    setConfirmDialog({ isOpen: true, itemId });
+  };
+
+  const confirmDelete = async () => {
+    if (!confirmDialog.itemId) return;
+    const { error } = await supabase.from('leads').delete().eq('id', confirmDialog.itemId);
+    if (error) {
+      showToast("Delete failed", "error");
+    } else {
+      showToast("Lead deleted permanently", "success");
+      fetchLeads();
+    }
+    setConfirmDialog({ isOpen: false, itemId: null });
   };
 
   const filteredData = useMemo(() => {
@@ -310,43 +543,74 @@ export default function CRMPipelinePage() {
     return { ...data, columns: filteredCols };
   }, [data, search]);
 
-  const onDragEnd = (result: DropResult) => {
-    const { destination, source } = result;
+  const onDragEnd = async (result: DropResult) => {
+    const { destination, source, draggableId } = result;
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+    
+    // 1. OPTIMISTIC UI UPDATE
     const start = data.columns[source.droppableId];
     const finish = data.columns[destination.droppableId];
+
     if (start === finish) {
       const newItems = Array.from(start.items);
       const [removed] = newItems.splice(source.index, 1);
       newItems.splice(destination.index, 0, removed);
-      setData({ ...data, columns: { ...data.columns, [start.id]: { ...start, items: newItems } } });
-      return;
-    }
-    const startItems = Array.from(start.items);
-    const [removed] = startItems.splice(source.index, 1);
-    const finishItems = Array.from(finish.items);
-    finishItems.splice(destination.index, 0, removed);
-    setData({
-      ...data,
-      columns: { 
-        ...data.columns, 
-        [start.id]: { ...start, items: startItems },
-        [finish.id]: { ...finish, items: finishItems }
+      
+      const newColumn = { ...start, items: newItems };
+      setData((prev: any) => ({
+        ...prev,
+        columns: { ...prev.columns, [newColumn.id]: newColumn }
+      }));
+    } else {
+      const startItems = Array.from(start.items);
+      const [removed] = startItems.splice(source.index, 1);
+      const newStart = { ...start, items: startItems };
+
+      const finishItems = Array.from(finish.items);
+      const [itemToMove] = (data.columns[source.droppableId].items as any[]).filter(i => i.id === draggableId);
+      
+      // Update the item's local stage
+      const updatedItem = { ...itemToMove, stage: finish.id };
+      finishItems.splice(destination.index, 0, updatedItem);
+      const newFinish = { ...finish, items: finishItems };
+
+      setData((prev: any) => ({
+        ...prev,
+        columns: {
+          ...prev.columns,
+          [newStart.id]: newStart,
+          [newFinish.id]: newFinish
+        }
+      }));
+
+      // 2. DATABASE SYNC
+      const { error } = await supabase
+        .from('leads')
+        .update({ stage: finish.id })
+        .eq('id', draggableId);
+      
+      if (error) {
+        showToast("Database Sync failed", "error");
+        fetchLeads(); // Revert to server state
       }
-    });
+    }
   };
 
   if (!isReady) return null;
 
-  const totalValue = data.columnOrder.reduce((sum: number, colId: string) => 
-    sum + data.columns[colId].items.reduce((s: number, i: any) => s + i.value, 0), 0
-  );
-
   return (
     <DashboardShell title="Sales Pipeline Tracking" subtitle="Enterprise Administration: Synchronized attribution with dynamic stage management">
-      <div className="flex flex-col h-full font-sans bg-[#fbfbfa] -m-8 p-8 overflow-hidden relative">
+      <div className="flex flex-col h-full font-sans bg-[#fbfbfa] -m-8 p-8 relative">
         
+        {/* Custom Confirmation Dialog */}
+        <ConfirmDialog 
+          isOpen={confirmDialog.isOpen} 
+          title="Security Check: Permanent Deletion" 
+          message="Are you sure you want to remove this lead? This action is permanent and cannot be reversed." 
+          onCancel={() => setConfirmDialog({ isOpen: false, itemId: null })} 
+          onConfirm={confirmDelete} 
+        />
         {/* Premium Notification */}
         {notification && (
           <div className="fixed top-8 left-1/2 -translate-x-1/2 bg-black text-white px-6 py-3 rounded-full shadow-2xl z-[100] flex items-center gap-3 border border-white/20 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -376,7 +640,7 @@ export default function CRMPipelinePage() {
         </div>
 
         {view === 'board' ? (
-          <div ref={scrollContainerRef} className="flex gap-4 overflow-x-auto pb-12 scrollbar-hide flex-grow items-start">
+          <div ref={scrollContainerRef} className="flex gap-4 pb-12 flex-grow items-start">
             <DragDropContext onDragEnd={onDragEnd}>
               {filteredData.columnOrder.map((columnId: string) => {
                 const column = filteredData.columns[columnId];
@@ -428,8 +692,8 @@ export default function CRMPipelinePage() {
                                            <div className="flex items-center gap-2"><span className="text-[10px] uppercase font-black text-black/30 w-16">Value</span><input type="number" value={editValues.value} onChange={(e) => setEditValues({ ...editValues, value: Number(e.target.value) })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 flex-grow" /></div>
                                            <div className="flex items-center gap-2"><span className="text-[10px] uppercase font-black text-black/30 w-16">Contact</span><input value={editValues.leadName} onChange={(e) => setEditValues({ ...editValues, leadName: e.target.value })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 flex-grow" /></div>
                                            <div className="flex items-center gap-2"><span className="text-[10px] uppercase font-black text-black/30 w-16">Phone</span><input value={editValues.leadPhone} onChange={(e) => setEditValues({ ...editValues, leadPhone: e.target.value })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 flex-grow" /></div>
-                                           <div className="flex items-center gap-2 pt-1"><span className="text-[10px] uppercase font-black text-black/30 w-16">Priority</span><select value={editValues.priority} onChange={(e) => handlePriorityChange(e.target.value, true)} className="bg-white text-[11px] font-bold border border-black/10 rounded outline-none w-full"><option>Medium</option><option>High</option><option>Critical</option></select></div>
-                                           <div className="flex items-center gap-2 pt-1"><span className="text-[10px] uppercase font-black text-black/30 w-16">Assign</span><div className="flex flex-col gap-1 flex-grow"><select value={editValues.empId} onChange={(e) => handleEmpIdChange(e.target.value, true)} className="bg-white text-[11px] font-bold border border-black/10 rounded outline-none w-full">{EMPLOYEES.map(e => (<option key={e.id} value={e.id}>{e.id}</option>))}</select><p className="text-[9px] font-black text-black/40 uppercase">{editValues.empName}</p></div></div>
+                                           <div className="flex items-center gap-2 pt-1"><span className="text-[10px] uppercase font-black text-black/30 w-16">Priority</span><CustomSelect value={editValues.priority} onChange={(v: string) => handlePriorityChange(v, true)} placeholder="Rank" options={[{value: 'Medium', label: 'Medium Rank'}, {value: 'High', label: 'High Rank'}, {value: 'Critical', label: 'Critical Rank'}]} /></div>
+                                           <div className="flex items-center gap-2 pt-1"><span className="text-[10px] uppercase font-black text-black/30 w-16">Assign</span><div className="flex flex-col gap-1 flex-grow"><CustomSelect value={editValues.empId} onChange={(v: string) => handleEmpIdChange(v, true)} placeholder="Select ID" options={employees.map(e => ({ value: e.employee_id, label: e.name }))} /></div></div>
                                         </div>
                                         <div className="flex items-center gap-2 pt-1"><button onClick={saveEdit} className="px-2 py-1 bg-black text-white text-[10px] font-black rounded flex items-center gap-1"><Check size={10} /> Save</button><button onClick={() => setEditingId(null)} className="px-2 py-1 text-black/40 text-[10px] font-black hover:text-black">Cancel</button></div>
                                       </div>
@@ -441,7 +705,7 @@ export default function CRMPipelinePage() {
                                           <div className="flex items-center gap-2 text-[11px] font-bold text-black/50"><Phone size={10} className="text-black/30" /> <span>{item.leadPhone}</span></div>
                                         </div>
                                         <div className="pt-2 border-t border-black/5 mt-2 flex items-center justify-between">
-                                          <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-slate-100 flex items-center justify-center text-[8px] font-black text-black/40 border border-black/5">{item.empName[0]}</div><span className="text-[10px] font-black text-black/60">{item.empName} <span className="text-black/50 font-bold">({item.empId})</span></span></div>
+                                          <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-slate-100 flex items-center justify-center text-[8px] font-black text-black/40 border border-black/5">{String(item.empName)[0]}</div><EmployeeDisplay empId={item.empId} empName={item.empName} employees={employees} /></div>
                                           <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter shadow-sm", item.priorityColor)}>{item.priority}</span>
                                         </div>
                                       </>
@@ -458,14 +722,30 @@ export default function CRMPipelinePage() {
                             <div className="p-4 bg-white border-2 border-black rounded-lg space-y-3 animate-in fade-in duration-300 shadow-xl shadow-black/5">
                                <input autoFocus placeholder="Company Name" value={inlineForm.company} onChange={(e) => setInlineForm({...inlineForm, company: e.target.value})} className="w-full text-[13px] font-bold border-b-2 border-black/5 focus:border-black outline-none pb-1 transition-all placeholder:text-black/20" />
                                <div className="space-y-2.5">
-                                 <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">Value</span><div className="relative flex-grow"><span className="absolute left-0 text-[10px] font-bold text-black/30">₹</span><input type="number" placeholder="Enter Amount" value={inlineForm.value || ""} onChange={(e) => setInlineForm({...inlineForm, value: Number(e.target.value)})} className="w-full pl-3 text-[10px] font-bold border-b border-black/5 outline-none" /></div></div>
-                                 <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">Contact</span><input placeholder="Person Name" value={inlineForm.leadName} onChange={(e) => setInlineForm({...inlineForm, leadName: e.target.value})} className="w-full text-[10px] font-bold border-b border-black/5 outline-none" /></div>
-                                 <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">Phone</span><input placeholder="+91 ..." value={inlineForm.leadPhone} onChange={(e) => setInlineForm({...inlineForm, leadPhone: e.target.value})} className="w-full text-[10px] font-bold border-b border-black/5 outline-none" /></div>
-                                 <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12 font-black">Rank</span><select value={inlineForm.priority} onChange={(e) => handlePriorityChange(e.target.value)} className="text-[10px] font-black bg-[#fbfbfa] border border-black/10 rounded p-1 flex-grow cursor-pointer outline-none"><option>Medium</option><option>High</option><option>Critical</option></select></div>
-                                 <div className="pt-1">
-                                    <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">Assign</span><select value={inlineForm.empId} onChange={(e) => handleEmpIdChange(e.target.value)} className="text-[10px] border border-black/10 bg-[#fbfbfa] rounded outline-none p-1 flex-grow font-bold focus:border-black transition-all"><option value="">Select ID</option>{EMPLOYEES.map(e => (<option key={e.id} value={e.id}>{e.id}</option>))}</select></div>
-                                    {inlineForm.empName && <p className="text-[9px] font-black text-black/40 uppercase mt-1 pl-14">{inlineForm.empName}</p>}
-                                 </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black text-black/30 uppercase w-12">Value</span>
+                                    <div className="relative flex-grow flex items-center gap-2">
+                                      <div className="relative flex-grow">
+                                        <span className="absolute left-0 text-[10px] font-bold text-black/30 top-1/2 -translate-y-1/2">₹</span>
+                                        <input type="number" placeholder="Enter Amount" value={inlineForm.value || ""} onChange={(e) => setInlineForm({...inlineForm, value: Number(e.target.value)})} className="w-full pl-3 text-[10px] font-bold border-b border-black/5 outline-none" />
+                                      </div>
+                                      {inlineForm.value > 0 && <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded animate-in fade-in zoom-in duration-300">({numberToIndianWords(inlineForm.value)})</span>}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">Contact</span><input placeholder="Person Name" value={inlineForm.leadName} onChange={(e) => setInlineForm({...inlineForm, leadName: e.target.value})} className="w-full text-[10px] font-bold border-b border-black/5 outline-none" /></div>
+                                  <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">Phone</span><input placeholder="+91 ..." value={inlineForm.leadPhone} onChange={(e) => setInlineForm({...inlineForm, leadPhone: validatePhone(e.target.value)})} className="w-full text-[10px] font-bold border-b border-black/5 outline-none" /></div>
+                                  <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12 font-black">Rank</span><CustomSelect value={inlineForm.priority} onChange={(v: string) => handlePriorityChange(v)} placeholder="Rank" options={[{value: 'Medium', label: 'Medium Rank'}, {value: 'High', label: 'High Rank'}, {value: 'Critical', label: 'Critical Rank'}]} /></div>
+                                  <div className="pt-1">
+                                     <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-black text-black/30 uppercase w-12">Assign</span>
+                                        <CustomSelect 
+                                          value={inlineForm.empId} 
+                                          onChange={(v: string) => handleEmpIdChange(v)} 
+                                          placeholder="Select ID" 
+                                          options={employees.map(e => ({ value: e.employee_id, label: e.name }))} 
+                                        />
+                                     </div>
+                                  </div>
                                </div>
                                <div className="flex items-center gap-3 pt-2 border-t border-black/5">
                                  <button onClick={saveInlineAdd} className="bg-black text-white text-[10px] font-black uppercase px-4 py-2 rounded shadow-lg hover:opacity-90 active:scale-95 transition-all flex items-center gap-1.5"><Check size={12} /> Save</button>
@@ -518,8 +798,8 @@ export default function CRMPipelinePage() {
                          <td className="px-4 py-3 border-r border-black/5 text-[13px] font-bold text-black/80">{editingId === deal.id ? (<input type="number" className="bg-transparent text-[13px] font-bold text-black outline-none w-full border-b border-black/20" value={editValues.value} onChange={(e) => setEditValues({ ...editValues, value: Number(e.target.value) })} />) : formatRupee(deal.value)}</td>
                          <td className="px-4 py-3 border-r border-black/5">{editingId === deal.id ? (<input className="bg-transparent text-[13px] font-bold text-black outline-none w-full border-b border-black/20" value={editValues.leadName} onChange={(e) => setEditValues({ ...editValues, leadName: e.target.value })} />) : (<span className="text-[12px] font-bold text-black/60">{deal.leadName}</span>)}</td>
                          <td className="px-4 py-3 border-r border-black/5">{editingId === deal.id ? (<input className="bg-transparent text-[13px] font-bold text-black outline-none w-full border-b border-black/20" value={editValues.leadPhone} onChange={(e) => setEditValues({ ...editValues, leadPhone: e.target.value })} />) : (<span className="text-[12px] font-bold text-black/60">{deal.leadPhone}</span>)}</td>
-                         <td className="px-4 py-3 border-r border-black/5"><div className="flex items-center gap-2"><div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-bold text-black/50 border border-black/5 flex-shrink-0">{deal.empName[0]}</div>{editingId === deal.id ? (<div className="flex flex-col gap-1 w-full"><select value={editValues.empId} onChange={(e) => handleEmpIdChange(e.target.value, true)} className="bg-transparent text-[11px] font-bold text-black outline-none border-b border-black/10">{EMPLOYEES.map(e => (<option key={e.id} value={e.id}>{e.id}</option>))}</select><p className="text-[9px] font-black text-black/40">{editValues.empName}</p></div>) : (<div className="flex flex-col leading-none"><span className="text-[11px] font-bold text-black/70">{deal.empName}</span><span className="text-[10px] font-bold text-black/60 mt-1">{deal.empId}</span></div>)}</div></td>
-                         <td className="px-4 py-3 border-r border-black/5">{editingId === deal.id ? (<select value={editValues.priority} onChange={(e) => handlePriorityChange(e.target.value, true)} className="bg-transparent text-[11px] font-bold text-black outline-none border-b border-black/10 w-full"><option>Medium</option><option>High</option><option>Critical</option></select>) : (<span className={cn("px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap uppercase tracking-tighter shadow-sm", deal.priorityColor)}>{deal.priority}</span>)}</td>
+                         <td className="px-4 py-3 border-r border-black/5"><div className="flex items-center gap-2"><div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-bold text-black/50 border border-black/5 flex-shrink-0">{deal.empName[0]}</div>{editingId === deal.id ? (<div className="flex flex-col gap-1 w-full"><CustomSelect value={editValues.empId} onChange={(v: string) => handleEmpIdChange(v, true)} placeholder="ID" options={employees.map(e => ({ value: e.employee_id, label: `${e.name} (${e.employee_id})` }))} /></div>) : (<EmployeeDisplay empId={deal.empId} empName={deal.empName} employees={employees} />)}</div></td>
+                         <td className="px-4 py-3 border-r border-black/5">{editingId === deal.id ? (<CustomSelect value={editValues.priority} onChange={(v: string) => handlePriorityChange(v, true)} placeholder="Rank" options={[{value: 'Medium', label: 'Medium Rank'}, {value: 'High', label: 'High Rank'}, {value: 'Critical', label: 'Critical Rank'}]} />) : (<span className={cn("px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap uppercase tracking-tighter shadow-sm", deal.priorityColor)}>{deal.priority}</span>)}</td>
                          <td className="px-4 py-3 text-[12px] font-bold text-black/40 whitespace-nowrap">{deal.date}</td>
                       </tr>
                    ))}
@@ -530,11 +810,19 @@ export default function CRMPipelinePage() {
                          <td className="px-4 py-3 border-r border-black/5 text-center"><div className="flex flex-col gap-1"><button onClick={saveInlineAdd} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check size={14} /></button><button onClick={cancelInlineAdd} className="p-1 text-rose-600 hover:bg-rose-50 rounded"><X size={14} /></button></div></td>
                          <td className="px-4 py-3 border-r border-black/5"><input autoFocus placeholder="Company Name" value={inlineForm.company} onChange={(e) => setInlineForm({...inlineForm, company: e.target.value})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/20 w-full" /></td>
                          <td className="px-4 py-3 border-r border-black/5"><span className="px-2 py-0.5 rounded text-[10px] font-black bg-black text-white uppercase animate-pulse">Assigning..</span></td>
-                         <td className="px-4 py-3 border-r border-black/5"><div className="relative"><span className="absolute left-0 text-xs font-bold text-black/30">₹</span><input type="number" placeholder="Value" value={inlineForm.value || ""} onChange={(e) => setInlineForm({...inlineForm, value: Number(e.target.value)})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/10 w-full pl-3" /></div></td>
+                         <td className="px-4 py-3 border-r border-black/5">
+                            <div className="flex flex-col gap-1">
+                                <div className="relative">
+                                    <span className="absolute left-0 text-xs font-bold text-black/30">₹</span>
+                                    <input type="number" placeholder="Value" value={inlineForm.value || ""} onChange={(e) => setInlineForm({...inlineForm, value: Number(e.target.value)})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/20 w-full pl-3" />
+                                </div>
+                                {inlineForm.value > 0 && <span className="text-[9px] font-black text-emerald-600 self-start">{numberToIndianWords(inlineForm.value)}</span>}
+                            </div>
+                         </td>
                          <td className="px-4 py-3 border-r border-black/5"><input placeholder="Contact Person" value={inlineForm.leadName} onChange={(e) => setInlineForm({...inlineForm, leadName: e.target.value})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/10 w-full" /></td>
-                         <td className="px-4 py-3 border-r border-black/5"><input placeholder="Phone" value={inlineForm.leadPhone} onChange={(e) => setInlineForm({...inlineForm, leadPhone: e.target.value})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/10 w-full" /></td>
-                         <td className="px-4 py-3 border-r border-black/5"><div className="flex flex-col gap-1"><select value={inlineForm.empId} onChange={(e) => handleEmpIdChange(e.target.value)} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 w-full"><option value="">Select ID</option>{EMPLOYEES.map(e => (<option key={e.id} value={e.id}>{e.id}</option>))}</select><p className="text-[9px] font-black text-black/50 uppercase">{inlineForm.empName}</p></div></td>
-                         <td className="px-4 py-3 border-r border-black/5"><select value={inlineForm.priority} onChange={(e) => handlePriorityChange(e.target.value)} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 w-full"><option>Medium</option><option>High</option><option>Critical</option></select></td>
+                         <td className="px-4 py-3 border-r border-black/5"><input placeholder="Phone" value={inlineForm.leadPhone} onChange={(e) => setInlineForm({...inlineForm, leadPhone: validatePhone(e.target.value)})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/10 w-full" /></td>
+                         <td className="px-4 py-3 border-r border-black/5"><div className="flex flex-col gap-1"><CustomSelect value={inlineForm.empId} onChange={(v: string) => handleEmpIdChange(v)} placeholder="Select ID" options={employees.map(e => ({ value: e.employee_id, label: e.name }))} /></div></td>
+                         <td className="px-4 py-3 border-r border-black/5"><CustomSelect value={inlineForm.priority} onChange={(v: string) => handlePriorityChange(v)} placeholder="Rank" options={[{value: 'Medium', label: 'Medium Rank'}, {value: 'High', label: 'High Rank'}, {value: 'Critical', label: 'Critical Rank'}]} /></td>
                          <td className="px-4 py-3 text-[10px] text-black/30 font-bold uppercase italic animate-pulse">Draft Mode</td>
                       </tr>
                    ) : (

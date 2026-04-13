@@ -1,0 +1,18 @@
+import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase";
+
+export async function GET() {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("clients")
+      .select("*")
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+
+    return NextResponse.json({ clients: data || [] }, { status: 200 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
