@@ -8,14 +8,14 @@ import {
   useCallback,
 } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import { supabase } from "@/lib/supabase";
 
 interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: "employee" | "hr" | "lead" | "super_admin";
-  employeeId: string;
+  role: "employee" | "hr" | "lead" | "super_admin" | "accounts" | "sales";
+  employee_id: string;
   department: string;
   designation: string;
 }
@@ -34,25 +34,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  // On Mount: Check Supabase Authentication Status natively
   useEffect(() => {
-    axios
-      .get("/api/auth/me")
-      .then((res) => setUser(res.data.user))
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
+    let mounted = true;
+
+    async function hydrateSession() {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error || !session?.user) {
+          if (mounted) setUser(null);
+          return;
+        }
+
+        // Cross-verify with Employee Architecture Matrix
+        const { data: emp, error: empErr } = await supabase
+          .from("employees")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+
+        if (emp && !empErr && mounted) {
+          setUser(emp as AuthUser);
+        } else if (mounted) {
+          setUser(null);
+        }
+      } catch (err) {
+        console.error("Hydration Error:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    hydrateSession();
+
+    // Secure persistent listener for live token changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_OUT") setUser(null);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await axios.post("/api/auth/login", { email, password });
-    const { user: u } = res.data;
-    setUser(u);
-    if (u.role === "employee") router.push("/dashboard");
-    else if (u.role === "lead") router.push("/admin/kpi");
+    // 1. Direct Handshake with Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError || !authData.user) {
+      throw new Error(authError?.message || "Invalid Key Exchange");
+    }
+
+    // 2. Fetch internal mapping
+    const { data: emp, error: empError } = await supabase
+      .from("employees")
+      .select("*")
+      .eq("id", authData.user.id)
+      .single();
+
+    if (empError || !emp) {
+      // Revert if mapped profile doesn't exist
+      await supabase.auth.signOut();
+      throw new Error("No architectural employee profile mapped to this credential.");
+    }
+
+    setUser(emp as AuthUser);
+
+    // 3. Dynamic Router Injection
+    if (emp.role === "employee") router.push("/dashboard");
+    else if (emp.role === "lead") router.push("/admin/kpi");
     else router.push("/admin");
   }, [router]);
 
   const logout = useCallback(async () => {
-    await axios.post("/api/auth/logout");
+    await supabase.auth.signOut();
     setUser(null);
     router.push("/login");
   }, [router]);

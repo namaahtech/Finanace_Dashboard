@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { getYearRange } from "@/lib/utils";
 import {
@@ -16,7 +17,23 @@ import {
   type KpiEntryInput,
   type KraMetricsInput,
 } from "@/lib/kpiMath";
+import {
+  Award,
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  TrendingUp,
+  Users,
+  Star,
+  BarChart3,
+  ClipboardList,
+  CheckCircle2,
+  Info,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 
+// ─── Types ───────────────────────────────────────────────
 interface User {
   _id: string;
   name: string;
@@ -50,33 +67,38 @@ interface FormState {
   remarks: string;
 }
 
-const monthOptions = Array.from({ length: 12 }, (_, i) => ({
-  value: i + 1,
-  label: new Date(2000, i).toLocaleString("en-IN", { month: "long" }),
-}));
+type PageTab = "entry" | "overview";
 
-const ratingOptions = [1, 2, 3, 4, 5];
-const attendanceOptions = Array.from({ length: 21 }, (_, i) => i * 5);
+// ─── Mock Data ───────────────────────────────────────────
+const MOCK_USERS: User[] = [];
+
+const MOCK_OVERVIEW: Array<{
+  emp: User;
+  month: number; year: number;
+  kpi: number; kra: number; beh: number; final: number;
+}> = [];
+
+// ─── Helpers ─────────────────────────────────────────────
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function monthLabel(m: number, y: number) {
+  return `${MONTH_NAMES[m - 1]} ${y}`;
+}
+
+function getInitials(name: string) {
+  return name.split(" ").map((n) => n[0]).join("").toUpperCase();
+}
 
 function createDefaultForm(month: number, year: number): FormState {
   return {
-    month,
-    year,
+    month, year,
     kpiEntries: [
-      { label: "KPI 1", weight: 30, score: 0 },
-      { label: "KPI 2", weight: 30, score: 0 },
-      { label: "KPI 3 (Optional)", weight: 40, score: 0 },
+      { label: "KPI 1", weight: 40, score: 0 },
+      { label: "KPI 2", weight: 35, score: 0 },
+      { label: "KPI 3", weight: 25, score: 0 },
     ],
-    kraMetrics: {
-      ownership: 0,
-      quality: 0,
-      initiative: 0,
-    },
-    behavioralMetrics: {
-      attendance: 0,
-      discipline: 0,
-      communication: 0,
-    },
+    kraMetrics: { ownership: 0, quality: 0, initiative: 0 },
+    behavioralMetrics: { attendance: 0, discipline: 0, communication: 0 },
     remarks: "",
   };
 }
@@ -88,141 +110,158 @@ function createFormFromScore(score: KpiScore): FormState {
     kpiEntries: score.kpi_entries?.length
       ? score.kpi_entries
       : [
-          { label: "KPI 1", weight: 30, score: score.kpi_score ?? 0 },
-          { label: "KPI 2", weight: 30, score: score.kpi_score ?? 0 },
-          { label: "KPI 3 (Optional)", weight: 40, score: score.kpi_score ?? 0 },
+          { label: "KPI 1", weight: 40, score: score.kpi_score ?? 0 },
+          { label: "KPI 2", weight: 35, score: score.kpi_score ?? 0 },
+          { label: "KPI 3", weight: 25, score: score.kpi_score ?? 0 },
         ],
     kraMetrics: score.kra_metrics ?? {
       ownership: Math.round((score.kra_score ?? 0) / 20),
-      quality: Math.round((score.kra_score ?? 0) / 20),
+      quality:   Math.round((score.kra_score ?? 0) / 20),
       initiative: Math.round((score.kra_score ?? 0) / 20),
     },
     behavioralMetrics: score.behavioral_metrics ?? {
-      attendance: score.behavioral_score ?? 0,
-      discipline: 0,
+      attendance:    score.behavioral_score ?? 0,
+      discipline:    0,
       communication: 0,
     },
     remarks: score.remarks ?? "",
   };
 }
 
-function ProgressBar({ value, colorClass }: { value: number; colorClass: string }) {
+// Rating helpers
+const RATING_COLOR: Record<string, string> = {
+  Outstanding:       "text-emerald-600",
+  Exceeds:           "text-sky-600",
+  Meets:             "text-amber-600",
+  "Needs Improvement": "text-orange-500",
+  Poor:              "text-red-500",
+};
+
+const RATING_BADGE: Record<string, "success" | "info" | "warning" | "danger" | "default"> = {
+  Outstanding:       "success",
+  Exceeds:           "info",
+  Meets:             "warning",
+  "Needs Improvement": "danger",
+  Poor:              "danger",
+};
+
+function gaugeColor(score: number) {
+  if (score >= 90) return "#10b981"; // emerald-500
+  if (score >= 75) return "#0ea5e9"; // sky-500
+  if (score >= 60) return "#f59e0b"; // amber-500
+  return "#ef4444"; // red-500
+}
+
+// Star rating component
+function StarRating({
+  value,
+  onChange,
+  disabled,
+  color = "text-amber-500",
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+  color?: string;
+}) {
   return (
-    <div className="h-4 rounded-full bg-white/10">
-      <div
-        className={`h-4 rounded-full ${colorClass}`}
-        style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
-      />
+    <div className="flex gap-1.5">
+      {[1, 2, 3, 4, 5].map((r) => (
+        <button
+          key={r}
+          onClick={() => onChange(r)}
+          disabled={disabled}
+          className={cn(
+            "transition-all",
+            disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:scale-110"
+          )}
+          title={`${r}/5`}
+        >
+          <Star
+            size={20}
+            className={cn(
+              "transition-colors",
+              r <= value ? color : "text-theme-border"
+            )}
+            fill={r <= value ? "currentColor" : "none"}
+          />
+        </button>
+      ))}
+      <span className={cn("ml-1 text-xs font-bold", value > 0 ? color : "text-theme-muted")}>
+        {value > 0 ? `${value}/5` : "—"}
+      </span>
     </div>
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────
 export default function AdminKpiPage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const today = new Date();
-  const [users, setUsers] = useState<User[]>([]);
+  const [tab, setTab] = useState<PageTab>("entry");
+  const [users, setUsers] = useState<User[]>(MOCK_USERS);
   const [scores, setScores] = useState<KpiScore[]>([]);
   const [selectedUser, setSelectedUser] = useState("");
-  const [loadingUsers, setLoadingUsers] = useState(true);
   const [loadingScores, setLoadingScores] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState<FormState>(createDefaultForm(today.getMonth() + 1, today.getFullYear()));
+  const [form, setForm] = useState<FormState>(
+    createDefaultForm(today.getMonth() + 1, today.getFullYear())
+  );
 
-  const canEdit = user?.role === "super_admin" || user?.role === "lead";
+  const canEdit = user?.role === "super_admin" || user?.role === "hr" || user?.role === "lead";
 
+  // Try to load real users
   useEffect(() => {
-    setLoadingUsers(true);
-    axios
-      .get("/api/users?role=employee&limit=100")
-      .then((res) => setUsers(res.data.users ?? []))
-      .finally(() => setLoadingUsers(false));
+    axios.get("/api/users?role=employee&limit=100")
+      .then((res) => { if (res.data.users?.length) setUsers(res.data.users); })
+      .catch(() => {/* use mock */});
   }, []);
 
   useEffect(() => {
-    if (!selectedUser) {
-      setScores([]);
-      return;
-    }
-
+    if (!selectedUser) { setScores([]); return; }
     setLoadingScores(true);
-    axios
-      .get(`/api/kpi?employeeId=${selectedUser}`)
+    axios.get(`/api/kpi?employeeId=${selectedUser}`)
       .then((res) => setScores(res.data.scores ?? []))
+      .catch(() => setScores([]))
       .finally(() => setLoadingScores(false));
   }, [selectedUser]);
 
   useEffect(() => {
     if (!selectedUser) return;
-    const existingScore = scores.find((score) => score.month === form.month && score.year === form.year);
-    if (!existingScore) return;
+    const existing = scores.find((s) => s.month === form.month && s.year === form.year);
+    if (!existing) return;
+    const next = createFormFromScore(existing);
+    if (JSON.stringify(form) !== JSON.stringify(next)) setForm(next);
+  }, [selectedUser, scores]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const nextForm = createFormFromScore(existingScore);
-    const currentState = JSON.stringify(form);
-    const nextState = JSON.stringify(nextForm);
-    if (currentState !== nextState) {
-      setForm(nextForm);
-    }
-  }, [selectedUser, scores, form]);
+  // Live score calculations
+  const kpiScore       = useMemo(() => calculateWeightedKpi(form.kpiEntries),        [form.kpiEntries]);
+  const kraScore       = useMemo(() => calculateKraScore(form.kraMetrics),            [form.kraMetrics]);
+  const behavioralScore = useMemo(() => calculateBehavioralScore(form.behavioralMetrics), [form.behavioralMetrics]);
+  const finalScore     = useMemo(() => calculateFinalKpiScore(kpiScore, kraScore, behavioralScore), [kpiScore, kraScore, behavioralScore]);
+  const rating         = useMemo(() => getKpiRating(finalScore),                      [finalScore]);
+  const totalWeight    = form.kpiEntries.reduce((s, e) => s + e.weight, 0);
 
-  const kpiScore = useMemo(() => calculateWeightedKpi(form.kpiEntries), [form.kpiEntries]);
-  const kraScore = useMemo(() => calculateKraScore(form.kraMetrics), [form.kraMetrics]);
-  const behavioralScore = useMemo(
-    () => calculateBehavioralScore(form.behavioralMetrics),
-    [form.behavioralMetrics]
-  );
-  const finalScore = useMemo(
-    () => calculateFinalKpiScore(kpiScore, kraScore, behavioralScore),
-    [kpiScore, kraScore, behavioralScore]
-  );
-  const rating = useMemo(() => getKpiRating(finalScore), [finalScore]);
-  const selectedEmployee = users.find((employee) => employee._id === selectedUser);
-  const currentRecord = scores.find((score) => score.month === form.month && score.year === form.year);
-
-  function updateKpiEntry(index: number, field: "weight" | "score", value: number) {
-    setForm((current) => ({
-      ...current,
-      kpiEntries: current.kpiEntries.map((entry, entryIndex) =>
-        entryIndex === index ? { ...entry, [field]: value } : entry
-      ),
-    }));
-  }
-
-  function updateKraMetric(field: keyof KraMetricsInput, value: number) {
-    setForm((current) => ({
-      ...current,
-      kraMetrics: {
-        ...current.kraMetrics,
-        [field]: value,
-      },
-    }));
-  }
-
-  function updateBehaviorMetric(field: keyof BehavioralMetricsInput, value: number) {
-    setForm((current) => ({
-      ...current,
-      behavioralMetrics: {
-        ...current.behavioralMetrics,
-        [field]: value,
-      },
-    }));
-  }
+  const selectedEmployee = users.find((e) => e._id === selectedUser);
+  const isEditing = scores.some((s) => s.month === form.month && s.year === form.year);
 
   function resetForPeriod(month: number, year: number) {
-    const existingScore = scores.find((score) => score.month === month && score.year === year);
-    setForm(existingScore ? createFormFromScore(existingScore) : createDefaultForm(month, year));
+    const existing = scores.find((s) => s.month === month && s.year === year);
+    setForm(existing ? createFormFromScore(existing) : createDefaultForm(month, year));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedUser) {
-      alert("Select an employee");
-      return;
-    }
-    if (!canEdit) {
-      alert("Only admin and lead can edit KPI / KRA entries.");
-      return;
-    }
+  function navigatePeriod(dir: -1 | 1) {
+    let m = form.month + dir;
+    let y = form.year;
+    if (m < 1)  { m = 12; y--; }
+    if (m > 12) { m = 1;  y++; }
+    resetForPeriod(m, y);
+  }
 
+  async function handleSubmit() {
+    if (!selectedUser) { showToast("Select an employee to score.", "warning"); return; }
+    if (!canEdit)       { showToast("Access Denied: Admin, HR, or Lead role required.", "error"); return; }
     setSubmitting(true);
     try {
       await axios.post("/api/kpi", {
@@ -234,334 +273,490 @@ export default function AdminKpiPage() {
         behavioral_metrics: form.behavioralMetrics,
         remarks: form.remarks,
       });
-
       const res = await axios.get(`/api/kpi?employeeId=${selectedUser}`);
       setScores(res.data.scores ?? []);
-      alert("KPI / KRA score saved");
+      showToast(`Performance scores for ${selectedEmployee?.name} recorded successfully.`, "success");
     } catch (err: unknown) {
-      alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Error");
+      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Protocol Sync Error", "error");
     } finally {
       setSubmitting(false);
     }
   }
 
-  return (
-    <DashboardShell title="KPI / KRA Entry">
-      <div className="rounded-[28px] border border-[#1d2940] bg-[radial-gradient(circle_at_top,#16263a,transparent_45%),linear-gradient(180deg,#111827,#1c2433)] p-6 text-white shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-        <div className="mb-8 border-b border-white/10 pb-5">
-          <h1 className="text-4xl font-semibold tracking-tight">KPI / KRA Entry</h1>
-        </div>
+  // Gauge circumference
+  const R = 72;
+  const CIRC = 2 * Math.PI * R;
+  const dashOffset = CIRC - (CIRC * Math.min(100, Math.max(0, finalScore))) / 100;
 
+  return (
+    <DashboardShell
+      title="KPI & KRA"
+      subtitle="Track, score, and review employee performance each month."
+      actions={
+        <div className="flex items-center gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            loading={submitting}
+            onClick={handleSubmit}
+            disabled={!canEdit || !selectedUser}
+          >
+            <CheckCircle2 size={14} className="mr-1.5" />
+            {isEditing ? "Update Score" : "Save Score"}
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-5">
+
+        {/* Read-only warning */}
         {!canEdit && (
-          <div className="mb-6 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-            This page is read-only for your role. Only admin and lead can update KPI / KRA entries.
+          <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-900/20">
+            <CircleAlert size={16} className="text-amber-600 flex-shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              You are in view-only mode. Only Super Admin, HR, and Team Leads can edit scores.
+            </p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="rounded-[28px] border border-white/10 bg-white/[0.04] p-6">
-          <h2 className="text-3xl font-semibold">Enter Scores</h2>
-
-          <div className="mt-8">
-            <label className="mb-2 block text-sm text-slate-300">Employee</label>
-            <select
-              value={selectedUser}
-              onChange={(e) => {
-                setSelectedUser(e.target.value);
-                setForm(createDefaultForm(form.month, form.year));
-              }}
-              className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-xl text-white outline-none"
-              required
+        {/* Tabs */}
+        <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 w-fit gap-0.5">
+          {([
+            { key: "entry",    label: "Score Entry",    icon: ClipboardList },
+            { key: "overview", label: "Team Overview",  icon: Users },
+          ] as { key: PageTab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition-all",
+                tab === key
+                  ? "bg-theme-surface text-theme-fg shadow-sm"
+                  : "text-theme-muted hover:text-theme-fg"
+              )}
             >
-              <option value="" className="bg-slate-900">-- Select Employee --</option>
-              {users.map((employee) => (
-                <option key={employee._id} value={employee._id} className="bg-slate-900">
-                  {employee.name} ({employee.employeeId}) — {employee.department}
-                </option>
-              ))}
-            </select>
-            {loadingUsers && <p className="mt-2 text-sm text-slate-400">Loading employees...</p>}
-          </div>
+              <Icon size={13} />
+              {label}
+            </button>
+          ))}
+        </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Month</label>
-              <select
-                value={form.month}
-                onChange={(e) => {
-                  const nextMonth = parseInt(e.target.value, 10);
-                  resetForPeriod(nextMonth, form.year);
-                }}
-                className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-xl text-white outline-none"
-              >
-                {monthOptions.map((month) => (
-                  <option key={month.value} value={month.value} className="bg-slate-900">
-                    {month.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+        {/* ── SCORE ENTRY TAB ── */}
+        {tab === "entry" && (
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-4">
 
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Year</label>
-              <select
-                value={form.year}
-                onChange={(e) => {
-                  const nextYear = parseInt(e.target.value, 10);
-                  resetForPeriod(form.month, nextYear);
-                }}
-                className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-xl text-white outline-none"
-              >
-                {getYearRange().map((year) => (
-                  <option key={year} value={year} className="bg-slate-900">
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+            {/* Left — Input Panels */}
+            <div className="space-y-5 xl:col-span-3">
 
-          {currentRecord && (
-            <div className="mt-4 rounded-2xl border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
-              Editing existing entry for {monthOptions.find((month) => month.value === form.month)?.label} {form.year}
-              {currentRecord.enteredBy?.name ? ` · last saved by ${currentRecord.enteredBy.name}` : ""}
-            </div>
-          )}
-
-          <div className="mt-8">
-            <div className="mb-3 flex items-center justify-between text-2xl">
-              <span>KPI Score ({String(Math.round(kpiScore)).padStart(2, "0")}%)</span>
-              <span className="font-semibold text-sky-300">{Math.round(kpiScore)}</span>
-            </div>
-            <ProgressBar value={kpiScore} colorClass="bg-sky-400" />
-
-            <div className="mt-5 space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              {form.kpiEntries.map((entry, index) => (
-                <div key={entry.label} className="grid gap-3 border-b border-white/10 pb-4 last:border-b-0 last:pb-0 md:grid-cols-[1.2fr_220px_1fr_90px] md:items-center">
-                  <span className="text-2xl text-slate-100">{entry.label}</span>
-                  <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                    <span className="text-slate-400">Weight:</span>
+              {/* Employee + Period selector */}
+              <div className="page-card">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  {/* Employee */}
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-theme-muted uppercase tracking-wide">Employee</label>
                     <select
-                      value={entry.weight}
-                      onChange={(e) => updateKpiEntry(index, "weight", parseInt(e.target.value, 10))}
-                      className="w-full bg-transparent text-xl text-white outline-none"
-                      disabled={!canEdit}
+                      value={selectedUser}
+                      onChange={(e) => {
+                        setSelectedUser(e.target.value);
+                        setForm(createDefaultForm(form.month, form.year));
+                      }}
+                      className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all"
                     >
-                      {[10, 20, 25, 30, 35, 40, 50, 60].map((weight) => (
-                        <option key={weight} value={weight} className="bg-slate-900">
-                          {weight}%
+                      <option value="">Select employee…</option>
+                      {users.map((emp) => (
+                        <option key={emp._id} value={emp._id}>
+                          {emp.name} — {emp.employeeId}
                         </option>
                       ))}
                     </select>
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={entry.score}
-                    onChange={(e) => updateKpiEntry(index, "score", parseInt(e.target.value, 10))}
-                    className="w-full accent-sky-400"
-                    disabled={!canEdit}
-                  />
-                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xl">
-                    <span>{entry.score}</span>
-                    <span className="text-slate-400">%</span>
+
+                  {/* Month nav */}
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-theme-muted uppercase tracking-wide">Period</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => navigatePeriod(-1)}
+                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-theme-border bg-theme-page text-theme-muted hover:text-theme-fg transition-colors"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      <div className="flex flex-1 gap-2">
+                        <select
+                          value={form.month}
+                          onChange={(e) => resetForPeriod(parseInt(e.target.value), form.year)}
+                          className="flex-1 rounded-lg border border-theme-border bg-theme-page px-2 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all"
+                        >
+                          {MONTH_NAMES.map((m, i) => (
+                            <option key={i + 1} value={i + 1}>{m}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={form.year}
+                          onChange={(e) => resetForPeriod(form.month, parseInt(e.target.value))}
+                          className="w-24 rounded-lg border border-theme-border bg-theme-page px-2 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all"
+                        >
+                          {getYearRange().map((y) => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                      </div>
+                      <button
+                        onClick={() => navigatePeriod(1)}
+                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-theme-border bg-theme-page text-theme-muted hover:text-theme-fg transition-colors"
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Status indicator */}
+                  <div className="flex flex-col justify-end">
+                    {selectedEmployee ? (
+                      <div className="flex items-center gap-3 rounded-lg border border-theme-border bg-theme-raised px-3 py-2">
+                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-black">
+                          {getInitials(selectedEmployee.name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-theme-fg truncate">{selectedEmployee.name}</p>
+                          <p className="text-[10px] text-theme-muted">{selectedEmployee.department} · {selectedEmployee.employeeId}</p>
+                        </div>
+                        {isEditing && (
+                          <span className="ml-auto flex-shrink-0 rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold text-sky-600">
+                            Editing
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-theme-border px-3 py-2 text-center text-xs text-theme-subtle">
+                        No employee selected
+                      </div>
+                    )}
                   </div>
                 </div>
-              ))}
-            </div>
-
-            <div className="mt-5">
-              <div className="mb-3 flex items-center justify-between text-2xl">
-                <span>KPI Score (auto)</span>
-                <span className="font-semibold">{Math.round(kpiScore)} %</span>
-              </div>
-              <ProgressBar value={kpiScore} colorClass="bg-sky-400" />
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-8 xl:grid-cols-[1fr_0.95fr]">
-            <div>
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-2xl font-semibold">KRA Score (Quality of Work) (40%)</h3>
-                <span className="text-lg text-slate-300">100%</span>
               </div>
 
-              <div className="space-y-4">
-                {[
-                  { key: "ownership" as const, label: "Ownership (1–5)" },
-                  { key: "quality" as const, label: "Quality (1–5)" },
-                  { key: "initiative" as const, label: "Initiative (1–5)" },
-                ].map((metric) => (
-                  <div key={metric.key} className="grid gap-4 md:grid-cols-[1fr_260px] md:items-center">
-                    <label className="text-2xl text-slate-100">{metric.label}</label>
-                    <select
-                      value={form.kraMetrics[metric.key]}
-                      onChange={(e) => updateKraMetric(metric.key, parseInt(e.target.value, 10))}
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xl text-white outline-none"
-                      disabled={!canEdit}
-                    >
-                      <option value={0} className="bg-slate-900">-- Select Rating --</option>
-                      {ratingOptions.map((ratingValue) => (
-                        <option key={ratingValue} value={ratingValue} className="bg-slate-900">
-                          {ratingValue}
-                        </option>
+              {/* KPI Section */}
+              <div className="page-card">
+                <div className="mb-5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/10">
+                      <BarChart3 size={16} className="text-sky-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-theme-fg">Key Performance Indicators</h3>
+                      <p className="text-[11px] text-theme-muted">Weight: 40% of final score</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {totalWeight !== 100 && (
+                      <span className="flex items-center gap-1 text-[11px] text-amber-600">
+                        <Info size={12} /> Weights: {totalWeight}%
+                      </span>
+                    )}
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/10 border-2 border-sky-500/20">
+                      <span className="text-sm font-black text-sky-600">{Math.round(kpiScore)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {form.kpiEntries.map((entry, idx) => (
+                    <div key={idx} className="rounded-xl border border-theme-border bg-theme-raised/50 p-4">
+                      <div className="mb-3 flex flex-wrap items-center gap-3">
+                        <input
+                          type="text"
+                          value={entry.label}
+                          onChange={(e) => {
+                            const updated = [...form.kpiEntries];
+                            updated[idx] = { ...updated[idx], label: e.target.value };
+                            setForm((f) => ({ ...f, kpiEntries: updated }));
+                          }}
+                          disabled={!canEdit}
+                          placeholder={`KPI ${idx + 1}`}
+                          className="flex-1 min-w-[120px] rounded-lg border border-theme-border bg-theme-page px-3 py-1.5 text-xs font-semibold text-theme-fg outline-none focus:border-theme-strong transition-all disabled:opacity-60"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-theme-muted">Weight</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={entry.weight}
+                            onChange={(e) => {
+                              const updated = [...form.kpiEntries];
+                              updated[idx] = { ...updated[idx], weight: parseInt(e.target.value) || 0 };
+                              setForm((f) => ({ ...f, kpiEntries: updated }));
+                            }}
+                            disabled={!canEdit}
+                            className="w-14 rounded-lg border border-theme-border bg-theme-page px-2 py-1.5 text-center text-xs font-bold text-theme-fg outline-none focus:border-theme-strong transition-all disabled:opacity-60"
+                          />
+                          <span className="text-[11px] text-theme-muted">%</span>
+                        </div>
+                        <div className={cn(
+                          "flex h-7 w-10 items-center justify-center rounded-lg font-black text-sm",
+                          entry.score >= 80 ? "bg-emerald-500/10 text-emerald-600" :
+                          entry.score >= 60 ? "bg-sky-500/10 text-sky-600" :
+                          entry.score >= 40 ? "bg-amber-500/10 text-amber-600" :
+                          "bg-theme-raised text-theme-muted"
+                        )}>
+                          {entry.score}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={entry.score}
+                          onChange={(e) => {
+                            const updated = [...form.kpiEntries];
+                            updated[idx] = { ...updated[idx], score: parseInt(e.target.value) };
+                            setForm((f) => ({ ...f, kpiEntries: updated }));
+                          }}
+                          disabled={!canEdit}
+                          className="flex-1 h-2 cursor-pointer accent-sky-600 disabled:cursor-not-allowed"
+                        />
+                        <div className="h-2 w-24 overflow-hidden rounded-full bg-theme-border">
+                          <div
+                            className={cn("h-full rounded-full transition-all",
+                              entry.score >= 80 ? "bg-emerald-500" :
+                              entry.score >= 60 ? "bg-sky-500" :
+                              entry.score >= 40 ? "bg-amber-500" : "bg-red-400"
+                            )}
+                            style={{ width: `${entry.score}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* KRA Section */}
+              <div className="page-card">
+                <div className="mb-5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10">
+                      <TrendingUp size={16} className="text-emerald-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-theme-fg">Key Result Areas</h3>
+                      <p className="text-[11px] text-theme-muted">Weight: 40% of final score · Rate 1–5 stars</p>
+                    </div>
+                  </div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 border-2 border-emerald-500/20">
+                    <span className="text-sm font-black text-emerald-600">{Math.round(kraScore)}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  {([
+                    { key: "ownership"  as const, label: "Ownership",         desc: "Takes responsibility, follows through" },
+                    { key: "quality"    as const, label: "Quality of Work",    desc: "Accuracy, thoroughness, attention to detail" },
+                    { key: "initiative" as const, label: "Initiative",         desc: "Proactive, goes beyond assigned tasks" },
+                  ]).map(({ key, label, desc }) => (
+                    <div key={key} className="rounded-xl border border-theme-border bg-theme-raised/50 p-4 space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold text-theme-fg">{label}</p>
+                        <p className="text-[10px] text-theme-subtle mt-0.5">{desc}</p>
+                      </div>
+                      <StarRating
+                        value={form.kraMetrics[key]}
+                        onChange={(v) => setForm((f) => ({ ...f, kraMetrics: { ...f.kraMetrics, [key]: v } }))}
+                        disabled={!canEdit}
+                        color="text-emerald-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Behavioral Section */}
+              <div className="page-card">
+                <div className="mb-5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/10">
+                      <Award size={16} className="text-purple-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-theme-fg">Behavioral Assessment</h3>
+                      <p className="text-[11px] text-theme-muted">Weight: 20% of final score</p>
+                    </div>
+                  </div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-500/10 border-2 border-purple-500/20">
+                    <span className="text-sm font-black text-purple-600">{Math.round(behavioralScore)}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  {/* Attendance */}
+                  <div className="rounded-xl border border-theme-border bg-theme-raised/50 p-4 space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold text-theme-fg">Attendance</p>
+                      <p className="text-[10px] text-theme-subtle mt-0.5">Monthly attendance percentage</p>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[100, 95, 90, 85, 80, 75, 70, 60].map((a) => (
+                        <button
+                          key={a}
+                          onClick={() => setForm((f) => ({ ...f, behavioralMetrics: { ...f.behavioralMetrics, attendance: a } }))}
+                          disabled={!canEdit}
+                          className={cn(
+                            "rounded-lg py-1.5 text-[11px] font-bold transition-all border",
+                            form.behavioralMetrics.attendance === a
+                              ? "bg-purple-600 border-purple-700 text-white shadow-sm"
+                              : "border-theme-border bg-theme-page text-theme-muted hover:border-purple-300 hover:text-theme-fg"
+                          )}
+                        >
+                          {a}%
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
-                ))}
-              </div>
 
-              <div className="mt-5">
-                <div className="mb-3 flex items-center justify-between text-2xl">
-                  <span>KRA Score (auto)</span>
-                  <span className="font-semibold">{Math.round(kraScore)} %</span>
+                  {/* Discipline + Communication */}
+                  {([
+                    { key: "discipline"    as const, label: "Discipline",     desc: "Punctuality, adherence to policy" },
+                    { key: "communication" as const, label: "Communication",  desc: "Team collaboration, clarity" },
+                  ]).map(({ key, label, desc }) => (
+                    <div key={key} className="rounded-xl border border-theme-border bg-theme-raised/50 p-4 space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold text-theme-fg">{label}</p>
+                        <p className="text-[10px] text-theme-subtle mt-0.5">{desc}</p>
+                      </div>
+                      <StarRating
+                        value={form.behavioralMetrics[key]}
+                        onChange={(v) => setForm((f) => ({ ...f, behavioralMetrics: { ...f.behavioralMetrics, [key]: v } }))}
+                        disabled={!canEdit}
+                        color="text-purple-500"
+                      />
+                    </div>
+                  ))}
                 </div>
-                <ProgressBar value={kraScore} colorClass="bg-cyan-400" />
               </div>
 
-              <div className="mt-8 mb-4 flex items-center justify-between">
-                <h3 className="text-2xl font-semibold">Behavioral / Compliance Score (20%)</h3>
-                <span className="text-lg text-slate-300">100%</span>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-[1fr_260px] md:items-center">
-                  <label className="text-2xl text-slate-100">Attendance (%)</label>
-                  <select
-                    value={form.behavioralMetrics.attendance}
-                    onChange={(e) => updateBehaviorMetric("attendance", parseInt(e.target.value, 10))}
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xl text-white outline-none"
-                    disabled={!canEdit}
-                  >
-                    {attendanceOptions.map((attendance) => (
-                      <option key={attendance} value={attendance} className="bg-slate-900">
-                        {attendance}%
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {[
-                  { key: "discipline" as const, label: "Discipline (1–5)" },
-                  { key: "communication" as const, label: "Communication (1–5)" },
-                ].map((metric) => (
-                  <div key={metric.key} className="grid gap-4 md:grid-cols-[1fr_260px] md:items-center">
-                    <label className="text-2xl text-slate-100">{metric.label}</label>
-                    <select
-                      value={form.behavioralMetrics[metric.key]}
-                      onChange={(e) => updateBehaviorMetric(metric.key, parseInt(e.target.value, 10))}
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xl text-white outline-none"
-                      disabled={!canEdit}
-                    >
-                      <option value={0} className="bg-slate-900">-- Select Rating --</option>
-                      {ratingOptions.map((ratingValue) => (
-                        <option key={ratingValue} value={ratingValue} className="bg-slate-900">
-                          {ratingValue}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 border-t border-white/10 pt-4">
-                <div className="mb-3 flex items-center justify-between text-2xl">
-                  <span>Behavioral Score (auto)</span>
-                  <span className="font-semibold">{Math.round(behavioralScore)} %</span>
-                </div>
-                <ProgressBar value={behavioralScore} colorClass="bg-emerald-400" />
-              </div>
-
-              <div className="mt-6">
-                <label className="mb-2 block text-2xl text-slate-100">Remarks (optional)</label>
-                <input
-                  type="text"
+              {/* Remarks */}
+              <div className="page-card">
+                <label className="mb-2 block text-xs font-semibold text-theme-muted uppercase tracking-wide">
+                  Manager Remarks
+                </label>
+                <textarea
                   value={form.remarks}
-                  onChange={(e) => setForm((current) => ({ ...current, remarks: e.target.value }))}
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-xl text-white outline-none"
-                  placeholder="Any comments..."
+                  onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
                   disabled={!canEdit}
+                  rows={3}
+                  placeholder="Summarise the employee's performance, notable achievements, and areas for improvement…"
+                  className="w-full rounded-xl border border-theme-border bg-theme-page px-4 py-3 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all placeholder:text-theme-subtle resize-none disabled:opacity-60"
                 />
               </div>
             </div>
 
-            <div>
-              <div className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(59,130,246,0.18),rgba(15,23,42,0.18))] p-5">
-                <div className="flex flex-wrap items-center gap-3 text-3xl font-semibold">
-                  <span>Final Score</span>
-                  <span className="text-lg font-normal text-slate-300">(KPI×40%) + (KRA×40%) + (Behavioral×20%)</span>
-                  <span className="ml-auto text-4xl font-bold text-sky-300">{Math.round(finalScore)}/100</span>
+            {/* Right — Score Sidebar */}
+            <div className="space-y-4">
+              {/* Gauge */}
+              <div className="page-card sticky top-5">
+                <h3 className="mb-4 text-xs font-semibold text-theme-muted uppercase tracking-wide">Live Score</h3>
+
+                {/* SVG Gauge */}
+                <div className="relative mx-auto mb-4 flex h-40 w-40 items-center justify-center">
+                  <svg viewBox="0 0 160 160" className="h-full w-full -rotate-90">
+                    <circle cx="80" cy="80" r={R} fill="none" strokeWidth="10" className="text-theme-raised" stroke="currentColor" />
+                    <circle
+                      cx="80" cy="80" r={R}
+                      fill="none" strokeWidth="10"
+                      stroke={gaugeColor(finalScore)}
+                      strokeDasharray={CIRC}
+                      strokeDashoffset={dashOffset}
+                      strokeLinecap="round"
+                      style={{ transition: "stroke-dashoffset 0.6s ease, stroke 0.3s ease" }}
+                    />
+                  </svg>
+                  <div className="absolute flex flex-col items-center">
+                    <span className="text-4xl font-black text-theme-fg">{Math.round(finalScore)}</span>
+                    <span className={cn("text-[11px] font-bold", RATING_COLOR[rating.label] ?? "text-theme-muted")}>
+                      {rating.label}
+                    </span>
+                  </div>
                 </div>
-                <div className="mt-5 grid gap-3 text-lg text-slate-200 md:grid-cols-2">
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                    <p className="text-slate-400">KPI Score</p>
-                    <p className="mt-1 text-3xl font-semibold">{Math.round(kpiScore)}%</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                    <p className="text-slate-400">KRA Score</p>
-                    <p className="mt-1 text-3xl font-semibold">{Math.round(kraScore)}%</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                    <p className="text-slate-400">Behavioral Score</p>
-                    <p className="mt-1 text-3xl font-semibold">{Math.round(behavioralScore)}%</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                    <p className="text-slate-400">Rating</p>
-                    <p className="mt-1 text-3xl font-semibold">{rating.label}</p>
-                  </div>
+
+                {/* Incentive hint */}
+                <div className="mb-4 rounded-lg bg-theme-raised px-3 py-2 text-center">
+                  <p className="text-[10px] text-theme-muted">Incentive multiplier</p>
+                  <p className="text-sm font-bold text-theme-fg">{rating.incentiveHint}</p>
+                </div>
+
+                {/* Breakdown bars */}
+                <div className="space-y-3">
+                  {[
+                    { label: "KPI (40%)",        value: Math.round(kpiScore),       color: "bg-sky-500" },
+                    { label: "KRA (40%)",         value: Math.round(kraScore),       color: "bg-emerald-500" },
+                    { label: "Behavioral (20%)",  value: Math.round(behavioralScore), color: "bg-purple-500" },
+                  ].map(({ label, value, color }) => (
+                    <div key={label}>
+                      <div className="mb-1 flex justify-between text-[11px]">
+                        <span className="text-theme-muted">{label}</span>
+                        <span className="font-bold text-theme-fg">{value}</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-theme-raised">
+                        <div className={cn("h-full rounded-full transition-all duration-500", color)} style={{ width: `${value}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 border-t border-theme-border pt-4">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="w-full"
+                    loading={submitting}
+                    onClick={handleSubmit}
+                    disabled={!canEdit || !selectedUser}
+                  >
+                    <CheckCircle2 size={13} className="mr-1.5" />
+                    {isEditing ? "Update Score" : "Save Score"}
+                  </Button>
                 </div>
               </div>
 
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <div className="grid grid-cols-[1fr_1fr_1fr] gap-4 border-b border-white/10 pb-3 text-lg text-slate-300">
-                  <span>Score Range</span>
-                  <span>Rating</span>
-                  <span>Incentive</span>
-                </div>
-                {[
-                  ["90–100", "Outstanding", "100% × incentive"],
-                  ["75–89", "Exceeds", "80–90% × incentive"],
-                  ["60–74", "Meets", "60–70% × incentive"],
-                  ["40–59", "Needs Improvement", "30–50% × incentive"],
-                  ["Below 40", "Poor", "0%"],
-                ].map(([range, label, incentive]) => (
-                  <div key={range} className="grid grid-cols-[1fr_1fr_1fr] gap-4 border-b border-white/10 py-3 text-lg last:border-b-0">
-                    <span>{range}</span>
-                    <span>{label}</span>
-                    <span>{incentive}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <h3 className="text-2xl font-semibold">Recent Entries</h3>
+              {/* History */}
+              <div className="page-card">
+                <h3 className="mb-3 text-xs font-semibold text-theme-muted uppercase tracking-wide">Score History</h3>
                 {!selectedUser ? (
-                  <p className="mt-4 text-slate-400">Select an employee to view score history.</p>
+                  <div className="rounded-xl border border-dashed border-theme-border py-8 text-center">
+                    <p className="text-xs text-theme-subtle">Select an employee to view history</p>
+                  </div>
                 ) : loadingScores ? (
-                  <p className="mt-4 text-slate-400">Loading scores...</p>
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-16 animate-pulse rounded-xl bg-theme-raised" />
+                    ))}
+                  </div>
                 ) : scores.length === 0 ? (
-                  <p className="mt-4 text-slate-400">No scores saved yet.</p>
+                  <div className="rounded-xl border border-dashed border-theme-border py-8 text-center">
+                    <p className="text-xs text-theme-subtle">No records yet for this employee</p>
+                  </div>
                 ) : (
-                  <div className="mt-4 space-y-3">
-                    {scores.slice(0, 4).map((score) => (
+                  <div className="space-y-2">
+                    {scores.slice(0, 6).map((score) => (
                       <button
                         key={score._id}
-                        type="button"
                         onClick={() => setForm(createFormFromScore(score))}
-                        className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition hover:bg-white/[0.06]"
+                        className="group w-full rounded-xl border border-theme-border bg-theme-raised/50 px-3 py-2.5 text-left transition-all hover:border-sky-400 hover:bg-theme-raised"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-lg font-medium">
-                            {new Date(score.year, score.month - 1).toLocaleString("en-IN", {
-                              month: "long",
-                              year: "numeric",
-                            })}
+                          <span className="text-xs font-semibold text-theme-fg">
+                            {monthLabel(score.month, score.year)}
                           </span>
-                          <span className="text-xl font-semibold text-sky-300">{score.final_score}/100</span>
+                          <span className={cn("text-sm font-black", RATING_COLOR[score.rating_label ?? ""] ?? "text-theme-fg")}>
+                            {score.final_score}
+                          </span>
                         </div>
-                        <p className="mt-1 text-sm text-slate-400">
-                          KPI {score.kpi_score} · KRA {score.kra_score} · Behavioral {score.behavioral_score ?? 0}
-                        </p>
+                        <div className="mt-1 flex gap-3 text-[10px] text-theme-muted">
+                          <span>KPI {score.kpi_score}</span>
+                          <span>KRA {score.kra_score}</span>
+                          <span>BEH {score.behavioral_score ?? 0}</span>
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -569,20 +764,109 @@ export default function AdminKpiPage() {
               </div>
             </div>
           </div>
+        )}
 
-          <Button
-            type="submit"
-            loading={submitting}
-            disabled={!canEdit}
-            className="mt-8 w-full bg-sky-600 py-4 text-xl text-white hover:bg-sky-500"
-          >
-            Save Score
-          </Button>
-        </form>
+        {/* ── TEAM OVERVIEW TAB ── */}
+        {tab === "overview" && (
+          <div className="space-y-5">
+            {/* Period stats */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: "Outstanding (≥90)",     count: MOCK_OVERVIEW.filter((r) => r.final >= 90).length,  color: "text-emerald-600", bg: "bg-emerald-500/10" },
+                { label: "Exceeds (75–89)",        count: MOCK_OVERVIEW.filter((r) => r.final >= 75 && r.final < 90).length, color: "text-sky-600",     bg: "bg-sky-500/10" },
+                { label: "Meets (60–74)",          count: MOCK_OVERVIEW.filter((r) => r.final >= 60 && r.final < 75).length, color: "text-amber-600",   bg: "bg-amber-500/10" },
+                { label: "Needs Improvement",      count: MOCK_OVERVIEW.filter((r) => r.final < 60).length,  color: "text-red-500",     bg: "bg-red-500/10" },
+              ].map(({ label, count, color, bg }) => (
+                <div key={label} className="page-card flex items-center gap-3">
+                  <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
+                    <Star size={15} className={color} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-theme-muted leading-tight">{label}</p>
+                    <p className={cn("text-xl font-black", color)}>{count}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-        {selectedEmployee && (
-          <div className="mt-5 text-sm text-slate-400">
-            Working on: {selectedEmployee.name} ({selectedEmployee.employeeId}) · {selectedEmployee.department}
+            {/* Overview table */}
+            <div className="page-card overflow-hidden p-0">
+              <div className="flex items-center justify-between border-b border-theme-border px-5 py-4">
+                <h3 className="text-sm font-semibold text-theme-fg">
+                  March 2026 — All Employees
+                </h3>
+                <span className="text-xs text-theme-muted">Avg: {MOCK_OVERVIEW.length ? Math.round(MOCK_OVERVIEW.reduce((s, r) => s + r.final, 0) / MOCK_OVERVIEW.length) : 0} / 100</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
+                      <th className="px-5 py-3 font-semibold">Employee</th>
+                      <th className="px-5 py-3 font-semibold">Department</th>
+                      <th className="px-5 py-3 font-semibold text-center">KPI</th>
+                      <th className="px-5 py-3 font-semibold text-center">KRA</th>
+                      <th className="px-5 py-3 font-semibold text-center">Behavioral</th>
+                      <th className="px-5 py-3 font-semibold">Final Score</th>
+                      <th className="px-5 py-3 font-semibold text-right">Rating</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-theme-border">
+                    {[...MOCK_OVERVIEW]
+                      .sort((a, b) => b.final - a.final)
+                      .map(({ emp, kpi, kra, beh, final }) => {
+                        const r = getKpiRating(final);
+                        return (
+                          <tr
+                            key={emp._id}
+                            className="cursor-pointer transition-colors hover:bg-theme-raised/40"
+                            onClick={() => {
+                              setSelectedUser(emp._id);
+                              setTab("entry");
+                            }}
+                          >
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-black">
+                                  {getInitials(emp.name)}
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-theme-fg">{emp.name}</p>
+                                  <p className="text-[10px] text-theme-subtle">{emp.employeeId}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3">
+                              <span className="text-xs text-theme-muted">{emp.department}</span>
+                            </td>
+                            <td className="px-5 py-3 text-center font-semibold text-sky-600">{kpi}</td>
+                            <td className="px-5 py-3 text-center font-semibold text-emerald-600">{kra}</td>
+                            <td className="px-5 py-3 text-center font-semibold text-purple-600">{beh}</td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 w-20 overflow-hidden rounded-full bg-theme-raised">
+                                  <div
+                                    className="h-full rounded-full transition-all"
+                                    style={{ width: `${final}%`, backgroundColor: gaugeColor(final) }}
+                                  />
+                                </div>
+                                <span className={cn("text-xs font-bold", RATING_COLOR[r.label])}>{final}</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-right">
+                              <Badge variant={RATING_BADGE[r.label] ?? "default"}>
+                                {r.label}
+                              </Badge>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="border-t border-theme-border bg-theme-page px-5 py-2.5 text-xs text-theme-subtle">
+                Click any row to open that employee's score entry form
+              </div>
+            </div>
           </div>
         )}
       </div>

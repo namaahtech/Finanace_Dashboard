@@ -3,11 +3,14 @@
 import { useState } from "react";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { Button } from "@/components/ui/Button";
+import { Mail, Lock, ShieldCheck, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Badge } from "@/components/ui/Badge";
 
 export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -18,7 +21,9 @@ export default function LoginPage() {
     try {
       await login(email, password);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Invalid credentials";
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        "Authentication failed. Please check your credentials.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -26,60 +31,114 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-50 to-blue-100 dark:from-gray-900 dark:to-gray-800 p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-600 text-white text-2xl font-bold shadow-lg">
+    <div className="flex min-h-screen items-center justify-center bg-theme-page p-6 selection:bg-theme-primary/10">
+      <div className="w-full max-w-[400px] space-y-6">
+        
+        {/* Branding */}
+        <div className="flex flex-col items-center text-center space-y-4 mb-2">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-theme-primary text-theme-surface font-black text-xl shadow-lg shadow-black/5 ring-4 ring-theme-surface">
             N
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Namaah Pulse</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Performance & Incentive Management
-          </p>
+          <div>
+            <h1 className="text-xl font-black tracking-tight text-theme-fg">Namaah Pulse</h1>
+            <p className="text-xs font-semibold text-theme-muted uppercase tracking-widest mt-1">Enterprise Operations Panel</p>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-lg dark:border-gray-700 dark:bg-gray-900">
-          <h2 className="mb-6 text-lg font-semibold text-gray-800 dark:text-gray-100">Sign in</h2>
+        {/* Login Card */}
+        <div className="page-card shadow-2xl shadow-black/[0.03] border-theme-border/60 bg-theme-surface p-8">
+          <div className="mb-8 border-b border-theme-border pb-5 -mx-8 px-8">
+            <h2 className="text-sm font-black text-theme-fg uppercase tracking-wider">Internal Sign In</h2>
+            <p className="text-[11px] text-theme-muted mt-1 font-medium">Access your financial administration dashboard</p>
+          </div>
 
           {error && (
-            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">
-              {error}
+            <div className="mb-6 flex items-start gap-3 rounded-xl bg-theme-danger-bg border border-red-100/50 p-3.5 text-xs font-semibold text-theme-danger-fg animate-in fade-in slide-in-from-top-1">
+              <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500 text-white text-[10px]">!</div>
+              <p>{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Email
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-[11px] font-black uppercase tracking-wider text-theme-muted px-1">
+                Corporate Email
               </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:focus:ring-sky-800"
-                placeholder="Enter your email"
-              />
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none transition-colors group-focus-within:text-theme-fg">
+                  <Mail className="h-4 w-4 text-theme-subtle" />
+                </div>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  className="field pl-10 h-11 text-xs font-semibold bg-theme-raised/30 border-theme-border/80 focus:bg-theme-surface focus:border-theme-strong transition-all"
+                  placeholder="name@namaah.in"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:focus:ring-sky-800"
-                placeholder="••••••••"
-              />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <label className="text-[11px] font-black uppercase tracking-wider text-theme-muted">
+                  Security Password
+                </label>
+              </div>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none transition-colors group-focus-within:text-theme-fg">
+                  <Lock className="h-4 w-4 text-theme-subtle" />
+                </div>
+                <input
+                  type={showPwd ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  className="field pl-10 pr-10 h-11 text-xs font-semibold bg-theme-raised/30 border-theme-border/80 focus:bg-theme-surface focus:border-theme-strong transition-all"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(!showPwd)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-subtle hover:text-theme-fg transition-colors"
+                >
+                  {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
             </div>
 
-            <Button type="submit" loading={loading} className="w-full">
-              Sign in
+            <Button 
+                type="submit" 
+                loading={loading} 
+                className="w-full h-11 text-xs font-black uppercase tracking-widest bg-theme-primary text-theme-surface rounded-xl shadow-md shadow-theme-primary/10 transition-all hover:scale-[1.01] active:scale-[0.99]"
+            >
+              Authorize Access
+              {!loading && <ArrowRight className="h-3.5 w-3.5 ml-2" />}
             </Button>
           </form>
+
+          <div className="mt-8 pt-5 border-t border-theme-border/60 flex items-center justify-between">
+            <a href="#" className="text-[11px] font-bold text-theme-muted hover:text-theme-fg transition-colors">
+              Forgot credentials?
+            </a>
+            <Badge variant="success" className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/10 py-1 px-3">
+              <ShieldCheck size={10} className="mr-1.5" /> System Secure
+            </Badge>
+          </div>
+        </div>
+
+        {/* Footer info */}
+        <div className="flex flex-col items-center gap-2 pt-2 opacity-50">
+          <p className="text-[10px] font-black text-theme-subtle uppercase tracking-[0.25em]">
+            Confidential · IP Restricted
+          </p>
+          <div className="flex items-center gap-3 text-[10px] font-bold text-theme-muted">
+             <span>v2.1.0-preview</span>
+             <span className="h-1 w-1 rounded-full bg-theme-border" />
+             <span>Namaah Tech Compliance</span>
+          </div>
         </div>
       </div>
     </div>

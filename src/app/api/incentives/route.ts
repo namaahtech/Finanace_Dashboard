@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
 import { authenticate, requireRole } from "@/middleware/auth";
 import { awardIncentive, getIncentiveSummary, processVesting } from "@/services/incentiveService";
 import { z } from "zod";
@@ -27,7 +26,6 @@ const AwardSchema = z.object({
 export async function GET(req: NextRequest) {
   try {
     const authUser = await authenticate();
-    await connectDB();
 
     const { searchParams } = new URL(req.url);
     const employeeId =
@@ -47,7 +45,6 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await requireRole(req, "hr", "super_admin");
-    await connectDB();
 
     const body = await req.json();
 

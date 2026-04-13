@@ -2,247 +2,267 @@
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { Printer, CheckCircle, XCircle, Shield, Users, User } from "lucide-react";
+import { Printer, Shield, Users, Activity, Lock, Search, Download, Check, X } from "lucide-react";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 
-const check = <CheckCircle size={16} className="inline text-emerald-500" />;
-const cross = <XCircle size={16} className="inline text-red-400" />;
+const B = "#FBFBFA"; // background
 
-const sections = [
+const ROLES = [
+  { id: "sa", name: "Super Admin", color: "#0ea5e9", bg: "#e0f2fe" },    // sky
+  { id: "acc", name: "Accounts",   color: "#10b981", bg: "#d1fae5" },    // emerald
+  { id: "hr", name: "HR",          color: "#8b5cf6", bg: "#ede9fe" },    // violet
+  { id: "ld", name: "Lead",        color: "#f59e0b", bg: "#fef3c7" },    // amber
+  { id: "emp", name: "Employee",     color: "#3b82f6", bg: "#dbeafe" },    // blue
+  { id: "sls", name: "Sales",        color: "#f43f5e", bg: "#ffe4e6" },    // rose
+];
+
+const INITIAL_SECTIONS = [
   {
-    title: "Authentication & Access",
+    title: "M01: Employee & Team Management",
     features: [
-      { name: "Login with email & password", employee: true, hr: true, superAdmin: true },
-      { name: "JWT-based secure session", employee: true, hr: true, superAdmin: true },
-      { name: "Auto logout on token expiry", employee: true, hr: true, superAdmin: true },
-      { name: "Dark / Light mode toggle", employee: true, hr: true, superAdmin: true },
+      { name: "View organizational directory", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
+      { name: "Manage team structures & departments", roles: { sa: true, acc: false, hr: true, ld: false, emp: false, sls: false } },
+      { name: "Interactive org chart view", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
     ],
   },
   {
-    title: "Employee Management",
+    title: "M02: Attendance & Leaves",
     features: [
-      { name: "View own profile", employee: true, hr: false, superAdmin: false },
-      { name: "View all employees (with search & filter)", employee: false, hr: true, superAdmin: true },
-      { name: "Add new employee", employee: false, hr: true, superAdmin: true },
-      { name: "Edit employee details (department, designation)", employee: false, hr: true, superAdmin: true },
-      { name: "Activate / Deactivate employee account", employee: false, hr: true, superAdmin: true },
-      { name: "Assign roles (Employee / HR)", employee: false, hr: true, superAdmin: true },
-      { name: "Assign Super Admin role", employee: false, hr: false, superAdmin: true },
+      { name: "Daily clock-in / clock-out logging", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
+      { name: "Leave request submission", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
+      { name: "Leave approval & balance mgmt", roles: { sa: true, acc: false, hr: true, ld: true, emp: false, sls: false } },
     ],
   },
   {
-    title: "Attendance",
+    title: "M03: KPI / KRA & Performance",
     features: [
-      { name: "View own monthly attendance (from Google Sheets)", employee: true, hr: false, superAdmin: false },
-      { name: "View attendance by month / year filter", employee: true, hr: false, superAdmin: false },
-      { name: "View attendance of any employee", employee: false, hr: true, superAdmin: true },
-      { name: "Attendance summary (Present / Absent / PTO / Holiday)", employee: true, hr: true, superAdmin: true },
-      { name: "6-month attendance bar chart", employee: true, hr: true, superAdmin: true },
+      { name: "View performance history & trends", roles: { sa: true, acc: false, hr: true, ld: true, emp: true, sls: false } },
+      { name: "Enter KPI / KRA scores", roles: { sa: true, acc: false, hr: true, ld: true, emp: false, sls: false } },
+      { name: "Set monthly team targets", roles: { sa: true, acc: false, hr: false, ld: true, emp: false, sls: false } },
     ],
   },
   {
-    title: "KPI / KRA Performance",
+    title: "M04: Incentives & Payroll",
     features: [
-      { name: "View own KPI & KRA scores", employee: true, hr: false, superAdmin: false },
-      { name: "View score trend chart (line graph)", employee: true, hr: false, superAdmin: false },
-      { name: "View score formula (KPI×50% + KRA×50%)", employee: true, hr: true, superAdmin: true },
-      { name: "Enter KPI & KRA scores for employees", employee: false, hr: true, superAdmin: true },
-      { name: "Add monthly remarks", employee: false, hr: true, superAdmin: true },
-      { name: "View score history of any employee", employee: false, hr: true, superAdmin: true },
+      { name: "Run organizational payroll", roles: { sa: true, acc: true, hr: false, ld: false, emp: false, sls: false } },
+      { name: "Issue performance incentive grants", roles: { sa: true, acc: true, hr: false, ld: false, emp: false, sls: false } },
+      { name: "View individual payslips", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
     ],
   },
   {
-    title: "Incentive Wallet",
+    title: "M05: Claims & Reimbursements",
     features: [
-      { name: "View own incentive wallet (Earned / Locked / Claimable / Held / Claimed)", employee: true, hr: false, superAdmin: false },
-      { name: "View full transaction history", employee: true, hr: false, superAdmin: false },
-      { name: "Claim vested incentive", employee: true, hr: false, superAdmin: false },
-      { name: "Hold incentive for bonus (1 or 2 months)", employee: true, hr: false, superAdmin: false },
-      { name: "See projected payout with hold bonus calculator", employee: true, hr: false, superAdmin: false },
-      { name: "Award incentive to an employee", employee: false, hr: true, superAdmin: true },
-      { name: "View wallet of any employee", employee: false, hr: true, superAdmin: true },
-      { name: "Manually trigger vesting process", employee: false, hr: true, superAdmin: true },
+      { name: "Submit expense reimbursement", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
+      { name: "Claim vested incentives", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
+      { name: "Financial approval & processing", roles: { sa: true, acc: true, hr: false, ld: false, emp: false, sls: false } },
     ],
   },
   {
-    title: "Incentive Business Rules",
+    title: "M06: Invoicing & Purchases",
     features: [
-      { name: "Incentives locked for 30 days (configurable) after award", employee: true, hr: true, superAdmin: true },
-      { name: "Auto-vest to claimable after vesting period", employee: true, hr: true, superAdmin: true },
-      { name: "Hold 1 month → +5% bonus (configurable)", employee: true, hr: true, superAdmin: true },
-      { name: "Hold 2 months → +10% bonus (max cap, configurable)", employee: true, hr: true, superAdmin: true },
-      { name: "First 25 users per cycle get approved (configurable)", employee: true, hr: true, superAdmin: true },
-      { name: "Overflow users auto-queued to next cycle", employee: true, hr: true, superAdmin: true },
+      { name: "Create & dispatch client invoices", roles: { sa: true, acc: true, hr: false, ld: false, emp: false, sls: false } },
+      { name: "Vendor records & purchase orders", roles: { sa: true, acc: true, hr: false, ld: false, emp: false, sls: false } },
     ],
   },
   {
-    title: "Claims & Payouts",
+    title: "M07: Subscription Tracker",
     features: [
-      { name: "Submit claim for claimable incentive", employee: true, hr: false, superAdmin: false },
-      { name: "View own claim history & queue position", employee: true, hr: false, superAdmin: false },
-      { name: "View all claims (filter by status / cycle)", employee: false, hr: true, superAdmin: true },
-      { name: "Mark approved claims as paid", employee: false, hr: true, superAdmin: true },
-      { name: "Advance to next claim cycle", employee: false, hr: false, superAdmin: true },
+      { name: "Global SaaS / utility inventory", roles: { sa: true, acc: true, hr: false, ld: false, emp: false, sls: false } },
+      { name: "Renewal alerts & cost allocation", roles: { sa: true, acc: true, hr: false, ld: true, emp: false, sls: false } },
     ],
   },
   {
-    title: "Priority Payout",
+    title: "M08: Team Budget Management",
     features: [
-      { name: "Submit priority (urgent) payout request with reason", employee: true, hr: false, superAdmin: false },
-      { name: "View own priority request status", employee: true, hr: false, superAdmin: false },
-      { name: "View all priority requests", employee: false, hr: true, superAdmin: true },
-      { name: "Approve priority request (bypasses queue)", employee: false, hr: true, superAdmin: true },
-      { name: "Reject priority request with reason", employee: false, hr: true, superAdmin: true },
+      { name: "Set monthly operational budgets", roles: { sa: true, acc: true, hr: false, ld: false, emp: false, sls: false } },
+      { name: "Budget vs Actuals real-time tracker", roles: { sa: true, acc: true, hr: false, ld: true, emp: false, sls: false } },
     ],
   },
   {
-    title: "Reimbursements",
+    title: "M09 & M10: CRM & Pipeline",
     features: [
-      { name: "Submit reimbursement request (travel, food, medical, etc.)", employee: true, hr: false, superAdmin: false },
-      { name: "Upload bill details", employee: true, hr: false, superAdmin: false },
-      { name: "Track own reimbursement status", employee: true, hr: false, superAdmin: false },
-      { name: "View all reimbursement requests (filter by status)", employee: false, hr: true, superAdmin: true },
-      { name: "Approve reimbursement", employee: false, hr: true, superAdmin: true },
-      { name: "Reject reimbursement with reason", employee: false, hr: true, superAdmin: true },
-      { name: "Mark reimbursement as paid", employee: false, hr: true, superAdmin: true },
+      { name: "Lead acquisition & pipeline kanban", roles: { sa: true, acc: false, hr: false, ld: false, emp: false, sls: true } },
+      { name: "Client records & deal closure", roles: { sa: true, acc: true, hr: false, ld: false, emp: false, sls: true } },
     ],
   },
   {
-    title: "System Configuration",
+    title: "M11 & M12: Internal Comms",
     features: [
-      { name: "View payout capacity status (HIGH / MODERATE / LOW)", employee: true, hr: true, superAdmin: true },
-      { name: "View current claim cycle & vesting period", employee: true, hr: true, superAdmin: true },
-      { name: "Set vesting period (days)", employee: false, hr: false, superAdmin: true },
-      { name: "Set hold bonus % (1-month and 2-month cap)", employee: false, hr: false, superAdmin: true },
-      { name: "Set claim limit per cycle", employee: false, hr: false, superAdmin: true },
-      { name: "Set & manage payout pool amount", employee: false, hr: false, superAdmin: true },
-      { name: "Set payout capacity (triggers delay warning for employees)", employee: false, hr: false, superAdmin: true },
+      { name: "Secure organizational messaging", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
+      { name: "Schedule meetings & Google Meet sync", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
     ],
   },
   {
-    title: "Admin Overview Dashboard",
+    title: "M13: Mobile Extension",
     features: [
-      { name: "View total employee count", employee: false, hr: true, superAdmin: true },
-      { name: "View payout pool balance", employee: false, hr: true, superAdmin: true },
-      { name: "View approved claims count & pending amount", employee: false, hr: true, superAdmin: true },
-      { name: "View pending priority requests count", employee: false, hr: true, superAdmin: true },
-      { name: "View current claim cycle & limit", employee: false, hr: true, superAdmin: true },
+      { name: "Field clock-in / clock-out (Flutter)", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
+      { name: "Mobile push notifications (FCM)", roles: { sa: true, acc: true, hr: true, ld: true, emp: true, sls: true } },
+    ],
+  },
+  {
+    title: "M14: System & Security",
+    features: [
+      { name: "Global archetype configuration", roles: { sa: true, acc: false, hr: false, ld: false, emp: false, sls: false } },
+      { name: "SQL schema & RLS policy mgmt", roles: { sa: true, acc: false, hr: false, ld: false, emp: false, sls: false } },
+      { name: "Financial audit logs", roles: { sa: true, acc: true, hr: false, ld: false, emp: false, sls: false } },
     ],
   },
 ];
 
-function Cell({ value }: { value: boolean }) {
+function KPICard({ label, value, icon: Icon, colorClass, borderClass }: any) {
   return (
-    <td className="px-4 py-3 text-center">
-      {value ? <CheckCircle size={16} className="inline text-emerald-500" /> : <XCircle size={16} className="inline text-red-300 dark:text-red-600" />}
-    </td>
+    <div className="rounded-lg p-5 flex items-center gap-4 border bg-white shadow-[0_1px_6px_rgba(0,0,0,0.03)] border-black/5 hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)] transition-all">
+      <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center border", borderClass, colorClass)}>
+        <Icon size={20} />
+      </div>
+      <div>
+        <p className="text-[10px] font-black text-black/40 uppercase tracking-widest">{label}</p>
+        <p className="text-2xl font-black text-black/80 tracking-tight">{value}</p>
+      </div>
+    </div>
   );
 }
 
 export default function ReportPage() {
   const { user } = useAuth();
+  const [sections, setSections] = useState(INITIAL_SECTIONS);
+  const [search, setSearch] = useState("");
 
+  const togglePermission = (sectionIndex: number, featureIndex: number, roleId: string) => {
+    // Only simulate toggle if user is root/admin mathematically (for visual interactive demo)
+    setSections(prev => {
+      const nw = [...prev];
+      const nwF = [...nw[sectionIndex].features];
+      const nwR = { ...nwF[featureIndex].roles };
+      // Toggle logic
+      nwR[roleId as keyof typeof nwR] = !nwR[roleId as keyof typeof nwR];
+      nwF[featureIndex] = { ...nwF[featureIndex], roles: nwR };
+      nw[sectionIndex] = { ...nw[sectionIndex], features: nwF };
+      return nw;
+    });
+  };
+
+  const filteredSections = sections.map(s => ({
+    ...s,
+    features: s.features.filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
+  })).filter(s => s.features.length > 0);
+
+  // Stats calculation
+  const totalFeatures = sections.reduce((acc, s) => acc + s.features.length, 0);
+  const totalEnabled = sections.reduce((acc, s) => acc + s.features.reduce((a, f) => a + Object.values(f.roles).filter(Boolean).length, 0), 0);
+  const totalPossible = totalFeatures * ROLES.length;
+  const securityScore = Math.floor(100 - ((totalEnabled / totalPossible) * 100)); // fewer permissions = higher security score theoretically
+  
   return (
-    <DashboardShell title="System Feature Report">
-      {/* Print button */}
-      <div className="mb-6 flex items-center justify-between">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Complete feature access report by user role — Namaah Pulse
-        </p>
-        <button
-          onClick={() => window.print()}
-          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-        >
-          <Printer size={15} />
-          Print / Export PDF
-        </button>
-      </div>
+    <DashboardShell 
+      title="Access Control & Feature Registry" 
+      subtitle="Enterprise-grade Role-Based Access Control (RBAC) across 14 operational modules"
+    >
+      <div className="min-h-full -m-8" style={{ background: B, padding: "32px" }}>
+        
+        {/* Dynamic KPI Header */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <KPICard label="Auth Modules" value={sections.length} icon={Shield} colorClass="bg-sky-50 text-sky-600" borderClass="border-sky-100" />
+          <KPICard label="Access Endpoints" value={totalFeatures} icon={Activity} colorClass="bg-indigo-50 text-indigo-600" borderClass="border-indigo-100" />
+          <KPICard label="Managed Roles" value={ROLES.length} icon={Users} colorClass="bg-emerald-50 text-emerald-600" borderClass="border-emerald-100" />
+          <KPICard label="System Security" value={`${securityScore}%`} icon={Lock} colorClass="bg-amber-50 text-amber-600" borderClass="border-amber-100" />
+        </div>
 
-      {/* Role legend */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3">
-        {[
-          {
-            icon: User,
-            role: "Employee",
-            color: "border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-900/20",
-            iconColor: "text-sky-600",
-            desc: "Can only view and manage their own data — attendance, incentives, reimbursements.",
-          },
-          {
-            icon: Users,
-            role: "HR / Admin",
-            color: "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20",
-            iconColor: "text-emerald-600",
-            desc: "Manages all employees, enters KPI scores, reviews reimbursements and claims.",
-          },
-          {
-            icon: Shield,
-            role: "Super Admin",
-            color: "border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-900/20",
-            iconColor: "text-purple-600",
-            desc: "Full control including system configuration, payout pool, vesting & bonus settings.",
-          },
-        ].map(({ icon: Icon, role, color, iconColor, desc }) => (
-          <div key={role} className={`rounded-xl border p-4 ${color}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <Icon size={18} className={iconColor} />
-              <span className="font-semibold text-gray-800 dark:text-gray-100">{role}</span>
-            </div>
-            <p className="text-xs text-gray-600 dark:text-gray-400">{desc}</p>
+        {/* Global Controls */}
+        <div className="flex flex-col md:flex-row items-center gap-4 mb-6 justify-between bg-white p-2 rounded-lg border border-black/5 shadow-[0_1px_6px_rgba(0,0,0,0.03)]">
+          
+          <div className="flex items-center w-full md:w-96 px-4 py-2 bg-black/[0.03] rounded-md border border-black/5 focus-within:border-sky-500/50 transition-colors">
+            <Search size={14} className="text-black/30" />
+            <input 
+              type="text" 
+              placeholder="Search privileges..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-transparent border-none outline-none text-sm text-black/80 font-bold ml-2 w-full placeholder:text-black/30"
+            />
           </div>
-        ))}
-      </div>
 
-      {/* Feature sections */}
-      <div className="space-y-6">
-        {sections.map((section) => (
-          <div key={section.title} className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 print:break-inside-avoid">
-            {/* Section header */}
-            <div className="bg-gray-50 px-4 py-3 dark:bg-gray-800/60">
-              <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm">{section.title}</h3>
-            </div>
-
-            {/* Table */}
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-700">
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 w-full">Feature</th>
-                  <th className="px-4 py-2.5 text-center text-xs font-medium text-sky-600 whitespace-nowrap min-w-[90px]">Employee</th>
-                  <th className="px-4 py-2.5 text-center text-xs font-medium text-emerald-600 whitespace-nowrap min-w-[90px]">HR</th>
-                  <th className="px-4 py-2.5 text-center text-xs font-medium text-purple-600 whitespace-nowrap min-w-[110px]">Super Admin</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
-                {section.features.map((feature) => (
-                  <tr key={feature.name} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
-                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{feature.name}</td>
-                    <Cell value={feature.employee} />
-                    <Cell value={feature.hr} />
-                    <Cell value={feature.superAdmin} />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex items-center gap-2">
+            <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-black/50 hover:text-black px-4 py-3 rounded-md border border-black/10 hover:bg-black/5 transition-all">
+              <Download size={13} /> JSON Dump
+            </button>
+            <button onClick={() => window.print()} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white bg-black px-4 py-3 rounded-md hover:bg-black/80 transition-all shadow-md hover:shadow-lg">
+              <Printer size={13} /> Export Audits
+            </button>
           </div>
-        ))}
-      </div>
+        </div>
 
-      {/* Footer */}
-      <div className="mt-8 rounded-xl border border-gray-100 bg-gray-50 px-5 py-4 dark:border-gray-700 dark:bg-gray-800/40 print:mt-4">
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          <strong>Generated by:</strong> Namaah Pulse &nbsp;·&nbsp;
-          <strong>Date:</strong> {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })} &nbsp;·&nbsp;
-          <strong>Viewed by:</strong> {user?.name} ({user?.role?.replace("_", " ")})
-        </p>
-      </div>
+        {/* The Matrix */}
+        <div className="space-y-6">
+          {filteredSections.map((section, sIdx) => (
+            <div key={section.title} className="bg-white rounded-xl shadow-[0_1px_6px_rgba(0,0,0,0.03)] border border-black/5 overflow-hidden group/sec">
+              <div className="bg-black/[0.01] px-6 py-4 border-b border-black/5 flex justify-between items-center group-hover/sec:bg-black/[0.02] transition-colors">
+                <h3 className="text-[11px] font-black text-black/70 uppercase tracking-[0.2em]">{section.title}</h3>
+                <div className="px-2 py-1 bg-white border border-black/5 rounded text-[9px] font-black text-black/40 uppercase shadow-sm">
+                  {section.features.length} Policies
+                </div>
+              </div>
 
-      {/* Print styles */}
-      <style>{`
-        @media print {
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          nav, aside, button { display: none !important; }
-          main { padding: 0 !important; }
-        }
-      `}</style>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse min-w-[800px]">
+                  <thead>
+                    <tr className="bg-black/[0.01]">
+                      <th className="px-6 py-3 text-left text-[9px] font-black text-black/40 uppercase tracking-[0.2em] border-b border-black/5 w-1/3">Functional Resource</th>
+                      {ROLES.map(role => (
+                        <th key={role.id} className="px-3 py-3 text-center border-b border-black/5 border-l border-black/5 bg-white">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: role.color }}>{role.id}</span>
+                            <span className="text-[8px] font-bold text-black/30 hidden lg:inline">{role.name}</span>
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/5">
+                    {section.features.map((feature, fIdx) => (
+                      <tr key={feature.name} className="hover:bg-black/[0.02] transition-colors">
+                        <td className="px-6 py-4">
+                          <span className="text-[11px] font-bold text-black/70">{feature.name}</span>
+                        </td>
+                        {ROLES.map(role => {
+                          const isActive = feature.roles[role.id as keyof typeof feature.roles];
+                          
+                          return (
+                            <td key={role.id} className="px-3 py-3 text-center border-l border-black/5">
+                              <button
+                                onClick={() => togglePermission(sIdx, fIdx, role.id)}
+                                className={cn(
+                                  "mx-auto w-10 h-5 rounded-full flex items-center px-0.5 transition-all outline-none",
+                                  isActive ? "bg-emerald-500" : "bg-black/10"
+                                )}
+                              >
+                                <div className={cn(
+                                  "w-4 h-4 rounded-full flex items-center justify-center transition-transform bg-white shadow-sm",
+                                  isActive ? "translate-x-5" : "translate-x-0"
+                                )}>
+                                  {isActive ? <Check size={10} className="text-emerald-500" /> : <X size={10} className="text-black/30" />}
+                                </div>
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+
+          {filteredSections.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-black/30">
+              <Search size={40} className="mb-4 opacity-50" />
+              <p className="text-sm font-bold uppercase tracking-widest">No policies match your search.</p>
+            </div>
+          )}
+        </div>
+      </div>
     </DashboardShell>
   );
 }

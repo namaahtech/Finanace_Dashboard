@@ -1,79 +1,80 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
-import { authenticate, requireRole } from "@/middleware/auth";
-import { submitClaim, processClaim, advanceCycle } from "@/services/payoutService";
-import Claim from "@/models/Claim";
-import { z } from "zod";
+import { authenticate } from "@/middleware/auth";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
-const ClaimSchema = z.object({
-  incentiveId: z.string(),
-});
-
-// GET /api/claims — list claims
+// GET /api/claims — HR/Admin view all claims
 export async function GET(req: NextRequest) {
   try {
-    const authUser = await authenticate();
-    await connectDB();
-
+    const supabase = getSupabaseAdmin();
     const { searchParams } = new URL(req.url);
-    const filter: Record<string, unknown> = {};
+    const status = searchParams.get("status");
 
-    if (authUser.role === "employee") {
-      filter.employee = authUser.userId;
-    } else {
-      const empId = searchParams.get("employeeId");
-      if (empId) filter.employee = empId;
+    let query = supabase.from("claims").select(`
+      id, amount, status, cycle, queue_position, requested_at,
+      employee:employees(name, employee_id, department),
+      incentive:incentives(amount, month, year)
+    `);
+
+    if (status && status !== "all") {
+      query = query.eq("status", status);
     }
 
-    const status = searchParams.get("status");
-    if (status) filter.status = status;
-
-    const cycle = searchParams.get("cycle");
-    if (cycle) filter.cycle = parseInt(cycle);
-
-    const claims = await Claim.find(filter)
-      .sort({ createdAt: -1 })
-      .populate("employee", "name employeeId department")
-      .populate("incentive", "amount base_amount month year")
-      .lean();
+    const { data: claims, error } = await query;
+    if (error) throw new Error(error.message);
 
     return NextResponse.json({ claims });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
-// POST /api/claims — submit or process claim
+// POST /api/claims — employee submits a claim
 export async function POST(req: NextRequest) {
   try {
     const authUser = await authenticate();
-    await connectDB();
-
+    const supabase = getSupabaseAdmin();
     const body = await req.json();
 
-    // Admin: process a claim
-    if (body.action === "process" && authUser.role !== "employee") {
-      await requireRole(req, "hr", "super_admin");
-      await processClaim(body.claimId, authUser.userId);
-      return NextResponse.json({ message: "Claim processed" });
-    }
-
-    // Admin: advance cycle
     if (body.action === "advance_cycle") {
-      await requireRole(req, "super_admin");
-      await advanceCycle();
+      // Logic for advancing cycle over claims
+      await supabase.from("claims").update({ status: "approved" }).eq("status", "pending");
       return NextResponse.json({ message: "Cycle advanced" });
     }
 
-    // Employee: submit a claim
-    const { incentiveId } = ClaimSchema.parse(body);
-    const result = await submitClaim(authUser.userId, incentiveId);
+    if (body.action === "process") {
+       await supabase.from("claims").update({ status: "approved" }).eq("id", body.claimId);
+       return NextResponse.json({ message: "Claim processed successfully" });
+    }
 
-    return NextResponse.json(result, { status: 201 });
+    // Submit a claim
+    const { incentiveId } = body;
+    const { data: incentive } = await supabase.from("incentives").select("amount, employee").eq("id", incentiveId).single();
+    if (!incentive) throw new Error("Incentive not found");
+
+    const { data } = await supabase.from("claims").insert({
+       employee_id: incentive.employee,
+       incentive_id: incentiveId,
+       amount: incentive.amount,
+       status: "pending"
+    }).select().single();
+
+    return NextResponse.json(data);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+// PATCH /api/claims — admin processes claim
+export async function PATCH(req: NextRequest) {
+  try {
+    const authUser = await authenticate();
+    const supabase = getSupabaseAdmin();
+    const body = await req.json();
+    const { claimId } = body;
+
+    await supabase.from("claims").update({ status: "processed" }).eq("id", claimId);
+    return NextResponse.json({ message: "Claim processed" });
   } catch (err) {
-    if (err instanceof z.ZodError) return NextResponse.json({ error: err.errors }, { status: 400 });
-    const msg = err instanceof Error ? err.message : "Error";
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return NextResponse.json({ error: "Dummy error" }, { status: 500 });
   }
 }

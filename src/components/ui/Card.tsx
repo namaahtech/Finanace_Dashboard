@@ -1,31 +1,38 @@
 import { cn } from "@/lib/utils";
 
 interface CardProps {
-  className?: string;
-  children: React.ReactNode;
+ children: React.ReactNode;
+ className?: string;
+ title?: string;
+ subtitle?: string;
 }
 
-export function Card({ className, children }: CardProps) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800",
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
+export function Card({ children, className, title, subtitle }: CardProps) {
+ return (
+ <div className={cn("enterprise-card", className)}>
+ {(title || subtitle) && (
+ <div className="border-b border-theme-border px-6 py-4 bg-theme-raised/50">
+ {title && <h3 className="text-[10px] font-black text-theme-fg uppercase tracking-[0.2em] leading-none mb-1">{title}</h3>}
+ {subtitle && <p className="text-[9px] font-medium text-theme-muted uppercase tracking-widest">{subtitle}</p>}
+ </div>
+ )}
+ <div className="p-6">{children}</div>
+ </div>
+ );
 }
 
-export function CardHeader({ className, children }: CardProps) {
-  return <div className={cn("mb-4 flex items-center justify-between", className)}>{children}</div>;
+export function CardHeader({ children, className }: { children: React.ReactNode; className?: string }) {
+ return (
+ <div className={cn("border-b border-theme-border px-6 py-4 bg-theme-raised/50", className)}>
+ {children}
+ </div>
+ );
 }
 
-export function CardTitle({ className, children }: CardProps) {
-  return (
-    <h3 className={cn("text-base font-semibold text-gray-800 dark:text-gray-100", className)}>
-      {children}
-    </h3>
-  );
+export function CardTitle({ children, className }: { children: React.ReactNode; className?: string }) {
+ return (
+ <h3 className={cn("text-[10px] font-black text-theme-fg uppercase tracking-[0.2em]", className)}>
+ {children}
+ </h3>
+ );
 }
