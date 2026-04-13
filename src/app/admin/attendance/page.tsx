@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { TimePicker } from "@/components/ui/TimePicker";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/Toast";
 import dayjs from "dayjs";
@@ -786,26 +787,16 @@ export default function AdminAttendancePage() {
               
               <div className="p-6 space-y-5">
                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                       <label className="block text-xs font-medium text-theme-muted mb-1.5">Clock In</label>
-                       <input 
-                          type="time" 
-                          step="1"
-                          value={overrideForm.clock_in}
-                          onChange={(e) => setOverrideForm({...overrideForm, clock_in: e.target.value})}
-                          className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
-                       />
-                    </div>
-                    <div>
-                       <label className="block text-xs font-medium text-theme-muted mb-1.5">Clock Out</label>
-                       <input 
-                          type="time" 
-                          step="1"
-                          value={overrideForm.clock_out}
-                          onChange={(e) => setOverrideForm({...overrideForm, clock_out: e.target.value})}
-                          className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
-                       />
-                    </div>
+                    <TimePicker
+                       label="Clock In"
+                       value={overrideForm.clock_in}
+                       onChange={(time) => setOverrideForm({...overrideForm, clock_in: time})}
+                    />
+                    <TimePicker
+                       label="Clock Out"
+                       value={overrideForm.clock_out}
+                       onChange={(time) => setOverrideForm({...overrideForm, clock_out: time})}
+                    />
                  </div>
 
                  <div>
