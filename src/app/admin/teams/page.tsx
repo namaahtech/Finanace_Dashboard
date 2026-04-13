@@ -225,8 +225,8 @@ export default function TeamsPage() {
                 <Icon size={17} className={color} />
               </div>
               <div>
-                <p className="text-xs text-theme-muted font-bold tracking-tight">{label}</p>
-                <p className={cn("text-2xl font-black leading-tight", color)}>{value}</p>
+                <p className="text-[11px] text-theme-muted">{label}</p>
+                <p className={cn("text-xl font-black leading-tight", color)}>{value}</p>
               </div>
             </div>
           ))}
@@ -252,7 +252,7 @@ export default function TeamsPage() {
           <div className="flex items-center gap-3 flex-shrink-0">
              <div className="w-36">
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="h-8 text-[10px] bg-theme-raised border-theme-border font-black uppercase">
+                  <SelectTrigger className="h-8 text-xs bg-theme-raised border-theme-border font-semibold">
                     <SelectValue placeholder="All Units" />
                   </SelectTrigger>
                   <SelectContent>
@@ -286,7 +286,7 @@ export default function TeamsPage() {
         </div>
 
         {loading ? (
-          <div className="text-theme-muted text-sm text-center py-10 animate-pulse font-black uppercase tracking-widest">Hydrating Pulse Matrix...</div>
+          <div className="text-theme-muted text-sm text-center py-10 font-semibold animate-pulse">Loading Teams...</div>
         ) : (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {finalArrangement.map((item: any) => {
@@ -309,8 +309,8 @@ export default function TeamsPage() {
                         {isDept ? <Building2 size={16} /> : <Users size={16} />}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="truncate text-[13px] font-bold text-theme-fg">{item.name}</h4>
-                        <Badge variant={isDept ? "warning" : "default"} className="mt-1 text-[8px] tracking-widest px-1.5">
+                        <h4 className="truncate text-sm font-semibold text-theme-fg">{item.name}</h4>
+                        <Badge variant={isDept ? "warning" : "default"} className="mt-1 text-[10px] px-1.5">
                           {isDept ? 'Department' : 'Operational Unit'}
                         </Badge>
                       </div>
@@ -337,8 +337,8 @@ export default function TeamsPage() {
                       <Crown size={11} className="text-theme-muted" />
                     </div>
                     <div>
-                      <p className="text-[9px] uppercase font-black tracking-widest text-theme-muted opacity-60">Lead Designation</p>
-                      <p className="text-[11px] font-bold text-theme-fg truncate">{item.head_designation}</p>
+                      <p className="text-[11px] text-theme-muted">Lead Designation</p>
+                      <p className="text-xs font-semibold text-theme-fg truncate">{item.head_designation}</p>
                     </div>
                   </div>
 
@@ -359,16 +359,16 @@ export default function TeamsPage() {
       {showForm && (
         <div className="fixed inset-0 z-[1002] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-theme-surface shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="bg-theme-raised flex items-center justify-between border-b border-theme-border px-6 py-4">
+            <div className="bg-theme-surface flex items-center justify-between border-b border-theme-border px-6 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-black text-white shadow-md">
                    {editingItem ? <Edit2 size={14} /> : <Plus size={14} />}
                 </div>
                 <div>
-                  <h3 className="text-[13px] uppercase tracking-widest font-black text-theme-fg">
-                    {editingItem ? `Calibrate ${editingItem.name}` : `Establish New Node`}
+                  <h3 className="text-sm font-bold text-theme-fg">
+                    {editingItem ? `Edit ${editingItem.name}` : `Create New Unit`}
                   </h3>
-                  <p className="text-[10px] font-medium text-theme-muted mt-0.5">
+                  <p className="text-xs text-theme-muted mt-0.5">
                     Define the structural properties of this organizational unit.
                   </p>
                 </div>
@@ -380,9 +380,9 @@ export default function TeamsPage() {
               <div className="space-y-4">
                 <div className="bg-theme-surface border border-theme-border p-4 rounded-xl space-y-4 shadow-sm">
                   <div>
-                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-theme-muted">Unit Category</label>
+                    <label className="mb-2 block text-xs font-semibold text-theme-muted">Unit Type</label>
                     <Select onValueChange={(v) => setForm({ ...form, type: v, parent_id: "none" })} value={form.type} required>
-                      <SelectTrigger className="font-bold border-theme-border bg-theme-page h-9 text-xs"><SelectValue placeholder="Select type" /></SelectTrigger>
+                      <SelectTrigger className="font-semibold border-theme-border bg-theme-page h-9 text-xs"><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
                           <SelectItem value="department">Department</SelectItem>
@@ -394,9 +394,9 @@ export default function TeamsPage() {
 
                   {form.type === "team" && (
                     <div>
-                      <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-theme-muted">Hierarchical Parent</label>
+                      <label className="mb-2 block text-xs font-semibold text-theme-muted">Parent Department</label>
                       <Select onValueChange={(v) => setForm({ ...form, parent_id: v })} value={form.parent_id} required>
-                        <SelectTrigger className="font-bold border-theme-border bg-theme-page h-9 text-xs"><SelectValue placeholder="Attach to node" /></SelectTrigger>
+                        <SelectTrigger className="font-semibold border-theme-border bg-theme-page h-9 text-xs"><SelectValue placeholder="Select parent" /></SelectTrigger>
                         <SelectContent className="max-h-60">
                           <SelectGroup>
                             <SelectItem value="none">Set as Independent</SelectItem>
@@ -418,7 +418,7 @@ export default function TeamsPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
-                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-theme-muted">Entity Name</label>
+                    <label className="mb-2 block text-xs font-semibold text-theme-muted">Name</label>
                     <input
                       type="text"
                       required
@@ -429,7 +429,7 @@ export default function TeamsPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-theme-muted">Lead Designation</label>
+                    <label className="mb-2 block text-xs font-semibold text-theme-muted">Lead Designation</label>
                     <input
                       type="text"
                       required
@@ -441,10 +441,10 @@ export default function TeamsPage() {
                   </div>
                 </div>
 
-                <div className="bg-theme-raised flex items-center justify-end border-theme-border pt-4 gap-3">
-                  <Button variant="outline" size="sm" onClick={() => setShowForm(false)} className="font-bold border-theme-border">Cancel</Button>
-                  <Button variant="primary" size="sm" onClick={handleSaveEntity} className="font-bold bg-black text-white px-6">
-                    {editingItem ? 'Update Architecture' : 'Commit to Matrix'}
+                <div className="bg-theme-surface flex items-center justify-end border-t border-theme-border pt-4 gap-3 mt-4">
+                  <Button variant="secondary" size="sm" onClick={() => setShowForm(false)} className="font-semibold px-4">Cancel</Button>
+                  <Button variant="primary" size="sm" onClick={handleSaveEntity} className="font-semibold px-6">
+                    {editingItem ? 'Save Changes' : 'Create Unit'}
                   </Button>
                 </div>
               </div>
@@ -463,15 +463,15 @@ export default function TeamsPage() {
                    <Settings2 size={14} />
                 </div>
                 <div>
-                  <h3 className="text-[13px] uppercase tracking-widest font-black text-theme-fg">Root Node Identity</h3>
-                  <p className="text-[10px] font-medium text-theme-muted mt-0.5">Edit major company profile metadata.</p>
+                  <h3 className="text-sm font-bold text-theme-fg">Company Configuration</h3>
+                  <p className="text-xs text-theme-muted mt-0.5">Edit major company profile metadata.</p>
                 </div>
               </div>
               <button onClick={() => setShowConfigForm(false)} className="rounded-lg p-1.5 text-theme-muted hover:bg-theme-page hover:text-theme-fg transition-colors"><X size={16} /></button>
             </div>
             <div className="p-6 bg-theme-page/50 space-y-4">
                <div>
-                  <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-theme-muted">Company Name (Tree Root)</label>
+                  <label className="mb-2 block text-xs font-semibold text-theme-muted">Company Name</label>
                   <input
                     type="text"
                     value={configForm.company_name}
@@ -481,7 +481,7 @@ export default function TeamsPage() {
                </div>
                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-theme-muted">Founder / CEO</label>
+                    <label className="mb-2 block text-xs font-semibold text-theme-muted">Founder / CEO</label>
                     <input
                       type="text"
                       value={configForm.founder_name}
@@ -490,7 +490,7 @@ export default function TeamsPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-theme-muted">Designation</label>
+                    <label className="mb-2 block text-xs font-semibold text-theme-muted">Designation</label>
                     <input
                       type="text"
                       value={configForm.founder_designation}
@@ -499,41 +499,34 @@ export default function TeamsPage() {
                     />
                   </div>
                </div>
-               <div className="bg-theme-raised flex items-center justify-end pt-4 gap-3">
-                  <Button variant="outline" size="sm" onClick={() => setShowConfigForm(false)} className="font-bold border-theme-border">Cancel</Button>
-                  <Button variant="primary" size="sm" onClick={handleUpdateConfig} className="font-bold bg-black text-white px-8">Save Identity</Button>
+               <div className="bg-theme-surface flex items-center justify-end border-t border-theme-border pt-4 gap-3 mt-4">
+                  <Button variant="secondary" size="sm" onClick={() => setShowConfigForm(false)} className="font-semibold px-4">Cancel</Button>
+                  <Button variant="primary" size="sm" onClick={handleUpdateConfig} className="font-semibold px-6">Save</Button>
                </div>
             </div>
           </div>
         </div>
       )}
-      {/* DELETE CONFIRMATION TOAST (PILL DESIGN) */}
       {deleteConfirm && (
         <div className="fixed inset-x-0 top-8 z-[9000] flex justify-center px-4 animate-in slide-in-from-top-8 duration-300">
-           <div className="flex items-center gap-6 bg-white px-8 py-3.5 shadow-[0_20px_50px_rgba(0,0,0,0.15)] rounded-full border border-zinc-200 min-w-[420px]">
+           <div className="flex items-center gap-6 bg-theme-surface px-6 py-4 shadow-xl rounded-2xl border border-theme-border min-w-[400px]">
               <div className="flex items-center gap-4">
-                 <div className="h-10 w-10 flex items-center justify-center bg-rose-50 text-rose-600 rounded-full">
+                 <div className="h-10 w-10 flex items-center justify-center bg-rose-500/10 text-rose-500 rounded-xl">
                     <Trash2 size={20} />
                  </div>
                  <div className="flex flex-col">
-                    <p className="text-sm font-bold text-zinc-900">Delete <span className="text-red-600">"{deleteConfirm.name}"</span> node?</p>
-                    <p className="text-[11px] font-medium text-zinc-500">This action cannot be undone.</p>
+                    <p className="text-sm font-semibold text-theme-fg tracking-tight">Delete <span className="text-rose-500 font-bold">"{deleteConfirm.name}"</span>?</p>
+                    <p className="text-xs text-theme-muted mt-0.5">This action cannot be undone.</p>
                  </div>
               </div>
               
-              <div className="flex items-center gap-2 ml-auto">
-                 <button 
-                    onClick={() => setDeleteConfirm(null)}
-                    className="px-5 py-2 text-sm font-bold text-zinc-500 hover:text-zinc-900 transition-colors"
-                 >
-                    Cancel
-                 </button>
-                 <button 
-                    onClick={handleDelete}
-                    className="px-7 py-2.5 bg-red-600 hover:bg-red-700 text-sm font-bold text-white rounded-full shadow-lg shadow-red-200 transition-all"
-                 >
-                    Delete Now
-                 </button>
+              <div className="flex items-center gap-3 ml-auto">
+                 <Button onClick={() => setDeleteConfirm(null)} variant="secondary" size="sm" className="px-4">
+                   Cancel
+                 </Button>
+                 <Button onClick={handleDelete} variant="primary" size="sm" className="bg-rose-600 hover:bg-rose-700 text-white px-5 border-rose-600">
+                   Delete
+                 </Button>
               </div>
            </div>
         </div>

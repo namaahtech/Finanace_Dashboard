@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
 
-    const { name, email, role, department, designation, team_id, shift_id, monthly_leave_quota, joining_date } = body;
+    const { name, email, role, department, designation, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary } = body;
 
     if (!name || !email || !role) {
       return NextResponse.json({ error: "Missing highly critical parameters (Name, Email, Role)" }, { status: 400 });
@@ -47,7 +47,10 @@ export async function POST(req: Request) {
         shift_id: shift_id || null,
         monthly_leave_quota: monthly_leave_quota || 1.5,
         leave_balance: monthly_leave_quota || 1.5,
-        joining_date: joining_date || new Date().toISOString()
+        joining_date: joining_date || new Date().toISOString(),
+        employment_type: employment_type || 'full_time',
+        salary_structure: salary_structure || 'fixed_monthly',
+        base_salary: base_salary ? Number(base_salary) : 0
       });
 
     if (dbError) {

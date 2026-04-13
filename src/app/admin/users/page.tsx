@@ -40,6 +40,9 @@ interface User {
   shift_id: string | null;
   team_id: string | null;
   monthly_leave_quota: number;
+  employment_type: string;
+  salary_structure: string;
+  base_salary: number;
 }
 
 const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger"> = {
@@ -192,29 +195,31 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm }: {
 
       {showCustomMail && (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-[28px] bg-theme-surface border border-theme-border shadow-[0_20px_60px_rgba(0,0,0,0.5)] p-8 space-y-5 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-theme-fg italic uppercase tracking-tighter">Mail Target: {user.name}</h3>
-              <button onClick={() => setShowCustomMail(false)} className="text-theme-muted hover:text-theme-fg"><X size={15} /></button>
+          <div className="w-full max-w-md rounded-2xl bg-theme-surface border border-theme-border shadow-2xl p-6 space-y-4 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between border-b border-theme-border pb-3">
+              <h3 className="text-sm font-bold text-theme-fg">Message: {user.name}</h3>
+              <button onClick={() => setShowCustomMail(false)} className="text-theme-muted hover:text-theme-fg p-1 rounded-lg hover:bg-theme-raised transition-colors"><X size={15} /></button>
             </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-theme-muted">Subject</label>
-              <input value={mailSubject} onChange={(e) => setMailSubject(e.target.value)}
-                placeholder="Enter subject..."
-                className="w-full rounded-2xl border border-theme-border bg-theme-page px-4 py-3 text-sm font-bold text-theme-fg outline-none focus:border-theme-strong" />
+            <div className="space-y-3 pt-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Subject</label>
+                <input value={mailSubject} onChange={(e) => setMailSubject(e.target.value)}
+                  placeholder="Enter subject..."
+                  className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Message</label>
+                <textarea value={mailBody} onChange={(e) => setMailBody(e.target.value)}
+                  rows={4} placeholder="Type message..."
+                  className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm resize-none" />
+              </div>
             </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-theme-muted">Message</label>
-              <textarea value={mailBody} onChange={(e) => setMailBody(e.target.value)}
-                rows={4} placeholder="Type message..."
-                className="w-full rounded-2xl border border-theme-border bg-theme-page px-4 py-3 text-sm font-bold text-theme-fg outline-none focus:border-theme-strong resize-none" />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={() => setShowCustomMail(false)} className="rounded-xl h-10 px-6 font-bold text-[10px] uppercase">Cancel</Button>
+            <div className="flex gap-3 justify-end pt-3 border-t border-theme-border">
+              <Button variant="secondary" size="sm" onClick={() => setShowCustomMail(false)} className="font-semibold px-4">Cancel</Button>
               <Button variant="primary" size="sm" onClick={() => {
                 doAction("send_custom", { subject: mailSubject, message: mailBody });
                 setShowCustomMail(false);
-              }} className="rounded-xl h-10 px-8 font-bold text-[10px] uppercase shadow-lg">Send mail</Button>
+              }} className="font-semibold px-6">Send Mail</Button>
             </div>
           </div>
         </div>
@@ -241,7 +246,8 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState({
     name: "", email: "", role: "employee",
     employeeId: "", department: "", designation: "", joiningDate: "",
-    shift_id: "", team_id: "", monthly_leave_quota: "1"
+    shift_id: "", team_id: "", monthly_leave_quota: "1",
+    employment_type: "full_time", salary_structure: "fixed_monthly", base_salary: ""
   });
 
   async function load(q?: string) {
@@ -288,7 +294,8 @@ export default function AdminUsersPage() {
     setForm({ 
       name: "", email: "", role: "employee", employeeId: "", 
       department: "", designation: "", shift_id: "", team_id: "",
-      monthly_leave_quota: "1",
+      monthly_leave_quota: "1", employment_type: "full_time",
+      salary_structure: "fixed_monthly", base_salary: "",
       joiningDate: new Date().toISOString() 
     });
     setShowForm(true);
@@ -307,7 +314,10 @@ export default function AdminUsersPage() {
       joiningDate: user.joiningDate,
       shift_id: user.shift_id || "",
       team_id: user.team_id || "",
-      monthly_leave_quota: String(user.monthly_leave_quota || "1")
+      monthly_leave_quota: String(user.monthly_leave_quota || "1"),
+      employment_type: user.employment_type || "full_time",
+      salary_structure: user.salary_structure || "fixed_monthly",
+      base_salary: String(user.base_salary || "")
     });
     setShowForm(true);
   }
@@ -403,13 +413,13 @@ export default function AdminUsersPage() {
             { label: "Inactive",      value: inactiveCount,         icon: UserX,     color: "text-rose-500",    bg: "bg-rose-500/10" },
             { label: "Global Roles",   value: new Set(users.map((u) => u.role)).size, icon: ShieldCheck, color: "text-sky-500", bg: "bg-sky-500/10" },
           ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="page-card flex items-center gap-4 border-b-2 border-transparent hover:border-theme-primary transition-all">
-              <div className={cn("flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl", bg)}>
-                <Icon size={20} className={color} />
+            <div key={label} className="page-card flex items-center gap-3">
+              <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
+                <Icon size={16} className={color} />
               </div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-theme-muted">{label}</p>
-                <p className={cn("text-2xl font-black tabular-nums tracking-tighter", color)}>{value}</p>
+                <p className="text-xs text-theme-muted">{label}</p>
+                <p className={cn("text-xl font-bold leading-tight", color)}>{value}</p>
               </div>
             </div>
           ))}
@@ -424,19 +434,19 @@ export default function AdminUsersPage() {
                 { id: "inactive", label: "Inactive",    count: inactiveCount },
               ] as { id: "all" | "active" | "inactive"; label: string; count: number }[]).map((t) => (
                 <button key={t.id} onClick={() => setActiveTab(t.id)}
-                  className={cn("rounded-xl px-5 py-2 text-[10px] font-black uppercase tracking-widest transition-all",
-                    activeTab === t.id ? "bg-theme-surface text-theme-fg shadow-xl" : "text-theme-muted hover:text-theme-fg"
+                  className={cn("rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
+                    activeTab === t.id ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
                   )}>
-                  {t.label} <span className="ml-1 opacity-40 tabular-nums">[{t.count}]</span>
+                  {t.label} <span className="ml-1 opacity-40">({t.count})</span>
                 </button>
               ))}
             </div>
 
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-theme-muted" size={14} />
-              <input type="text" placeholder="Search operational personnel..." value={search}
+              <input type="text" placeholder="Search personnel..." value={search}
                 onChange={(e) => { setSearch(e.target.value); load(e.target.value); }}
-                className="h-11 w-72 rounded-2xl border border-theme-border bg-theme-page pl-11 pr-4 text-xs font-bold text-theme-fg outline-none focus:border-theme-strong transition-all shadow-inner" />
+                className="h-10 w-72 rounded-lg border border-theme-border bg-theme-page pl-10 pr-4 text-xs text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
             </div>
           </div>
 
@@ -444,32 +454,32 @@ export default function AdminUsersPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-theme-border/50 bg-theme-page/30 text-left text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">
-                    <th className="px-8 py-5">Personnel</th>
-                    <th className="px-8 py-5">Corporate ID</th>
-                    <th className="px-8 py-5">Org Entity / Hierarchy</th>
-                    <th className="px-8 py-5">Commencement</th>
-                    <th className="px-8 py-5 text-center">Status</th>
-                    <th className="px-8 py-5 text-right italic">Action Matrix</th>
+                  <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
+                    <th className="px-5 py-3">Personnel</th>
+                    <th className="px-5 py-3">Corporate ID</th>
+                    <th className="px-5 py-3">Org Entity / Hierarchy</th>
+                    <th className="px-5 py-3">Commencement</th>
+                    <th className="px-5 py-3 text-center">Status</th>
+                    <th className="px-5 py-3 text-right">Action Matrix</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-theme-border/30">
                   {filteredUsers.map((u, idx) => (
                     <tr key={u.id} className="group hover:bg-theme-raised/30 transition-all duration-300">
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-theme-primary text-theme-surface text-[11px] font-black shadow-lg shadow-theme-primary/20">{getInitials(u.name)}</div>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-bold shadow-sm">{getInitials(u.name)}</div>
                           <div>
-                            <p className="text-xs font-black text-theme-fg tracking-tight">{u.name}</p>
-                            <p className="text-[10px] text-theme-muted font-bold tracking-tight">{u.email}</p>
+                            <p className="text-xs font-semibold text-theme-fg">{u.name}</p>
+                            <p className="text-xs text-theme-muted font-normal">{u.email}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-8 py-5 font-mono text-xs font-black text-theme-muted tracking-tighter opacity-70"># {u.employeeId}</td>
-                      <td className="px-8 py-5">
-                        <p className="text-xs font-black text-theme-fg uppercase">{u.department || 'General Nodes'}</p>
+                      <td className="px-5 py-3 text-xs text-theme-muted">{u.employeeId}</td>
+                      <td className="px-5 py-3">
+                        <p className="text-xs font-semibold text-theme-fg">{u.department || 'General Nodes'}</p>
                         <div className="flex items-center gap-2 mt-1.5!">
-                          <Badge variant={ROLE_BADGE[u.role] ?? "default"} className="text-[9px] font-black px-2.5 py-0.5 uppercase tracking-widest bg-opacity-20 transition-all group-hover:bg-theme-primary group-hover:text-white">
+                          <Badge variant={ROLE_BADGE[u.role] ?? "default"} className="text-[10px] px-2 py-0.5 transition-all group-hover:bg-theme-primary group-hover:text-white">
                             {ROLE_LABEL[u.role] ?? u.role}
                           </Badge>
                           <span className="flex items-center gap-1 text-[9px] font-black text-theme-muted px-2 py-0.5 border border-theme-border rounded-lg bg-theme-page">
@@ -477,16 +487,16 @@ export default function AdminUsersPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-8 py-5 text-[11px] font-black text-theme-fg italic uppercase tracking-widest">{formatDate(u.joiningDate)}</td>
-                      <td className="px-8 py-5 text-center">
+                      <td className="px-5 py-3 text-xs text-theme-fg">{formatDate(u.joiningDate)}</td>
+                      <td className="px-5 py-3 text-center">
                         <button onClick={() => toggleActive(u.id, u.isActive ?? (u as any).is_active)}
-                          className={cn("rounded-xl px-4 py-1.5 text-[9px] font-black uppercase tracking-[0.2em] border transition-all",
-                            (u.isActive || (u as any).is_active) ? "text-emerald-500 border-emerald-500/30 bg-emerald-500/5 shadow-lg shadow-emerald-500/5" : "text-theme-muted border-theme-border grayscale opacity-60"
+                          className={cn("rounded-md px-2 py-0.5 text-xs font-semibold transition-all",
+                            (u.isActive || (u as any).is_active) ? "bg-emerald-500/10 text-emerald-600" : "bg-theme-raised text-theme-muted"
                           )}>
                           {(u.isActive || (u as any).is_active) ? "Active" : "Inactive"}
                         </button>
                       </td>
-                      <td className="px-8 py-5 text-right">
+                      <td className="px-5 py-3 text-right">
                         <RowMenu user={u} onRefresh={() => load(search || undefined)} onEdit={() => handleEdit(u)} isLast={idx >= filteredUsers.length - 2} setDeleteConfirm={setDeleteConfirm} />
                       </td>
                     </tr>
@@ -500,38 +510,38 @@ export default function AdminUsersPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-          <div className="w-full max-w-2xl rounded-[40px] bg-theme-surface shadow-2xl border border-theme-border relative animate-in zoom-in-95 duration-400 overflow-visible">
-            <div className="flex items-center justify-between border-b border-theme-border bg-theme-raised/30 px-10 py-8 rounded-t-[40px]">
-              <div className="flex items-center gap-5">
-                <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-theme-primary text-theme-surface shadow-2xl shadow-theme-primary/30">
-                  {editingId ? <Edit2 size={24} /> : <UserPlus size={24} />}
+          <div className="w-full max-w-2xl rounded-2xl bg-theme-surface shadow-2xl border border-theme-border relative animate-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-theme-border bg-theme-surface px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary text-theme-surface shadow-sm">
+                  {editingId ? <Edit2 size={16} /> : <UserPlus size={16} />}
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-theme-fg uppercase italic tracking-tighter">{editingId ? "Re-index Personnel" : "Deploy New Personnel"}</h3>
-                  <p className="text-[10px] text-theme-muted font-black uppercase tracking-[0.2em] opacity-60">Human Capital Records System</p>
+                  <h3 className="text-sm font-bold text-theme-fg">{editingId ? "Edit Personnel" : "Add Personnel"}</h3>
+                  <p className="text-xs text-theme-muted mt-0.5">Human Capital Records System</p>
                 </div>
               </div>
-              <button onClick={() => setShowForm(false)} className="rounded-[20px] p-3 text-theme-muted hover:bg-theme-raised active:scale-90 transition-all">
-                <X size={24} strokeWidth={3} />
+              <button onClick={() => setShowForm(false)} className="rounded-lg p-2 text-theme-muted hover:bg-theme-raised transition-all">
+                <X size={18} />
               </button>
             </div>
 
-            <div className="p-10">
-              <form onSubmit={handleSubmit} className="space-y-8 max-h-[70vh] overflow-y-auto px-1 pr-4 custom-scrollbar">
-                <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
+            <div className="p-6">
+              <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto px-1 pr-3 custom-scrollbar">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><Users size={13} strokeWidth={3} /> Full Legal Name</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Full Legal Name</label>
                     <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      className="h-[52px] w-full rounded-2xl border border-theme-border bg-theme-page px-5 text-sm font-black text-theme-fg outline-none focus:border-theme-primary transition-all shadow-inner" />
+                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
                   </div>
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><Mail size={13} strokeWidth={3} /> Operational Inbox</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Operational Inbox</label>
                     <input required type="email" value={form.email} disabled={!!editingId} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      className="h-[52px] w-full rounded-2xl border border-theme-border bg-theme-page px-5 text-sm font-black text-theme-fg outline-none focus:border-theme-primary transition-all disabled:opacity-50 shadow-inner" />
+                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm disabled:opacity-50" />
                   </div>
                   
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><Building size={13} strokeWidth={3} /> Architecture node (Dept)</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Architecture node (Dept)</label>
                     <CustomSelect 
                       icon={<Building size={14} className="text-theme-primary" />}
                       placeholder="Select Department"
@@ -544,7 +554,7 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><LayoutGrid size={13} strokeWidth={3} /> Operational Unit (Team)</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Operational Unit (Team)</label>
                     <CustomSelect 
                       icon={<LayoutGrid size={14} className="text-theme-primary" />}
                       placeholder="Global/No Team"
@@ -557,13 +567,13 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><Zap size={13} strokeWidth={3} /> Professional Designation</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Professional Designation</label>
                     <input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })}
-                      className="h-[52px] w-full rounded-2xl border border-theme-border bg-theme-page px-5 text-sm font-black text-theme-fg outline-none focus:border-theme-primary transition-all shadow-inner" />
+                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><ShieldCheck size={13} strokeWidth={3} /> Matrix Role</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Matrix Role</label>
                     <CustomSelect 
                       icon={<ShieldCheck size={14} className="text-theme-primary" />}
                       placeholder="Select Role"
@@ -574,7 +584,7 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-primary"><Clock size={13} strokeWidth={3} /> Temporal Protocol (Shift)</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-primary">Temporal Protocol (Shift)</label>
                     <CustomSelect 
                       icon={<Clock size={14} className="text-theme-primary" />}
                       placeholder="SELECT SHIFT..."
@@ -588,7 +598,7 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-emerald-500"><Coffee size={13} strokeWidth={3} /> Leave Entitlement (Monthly)</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600">Leave Entitlement</label>
                     <CustomSelect 
                       icon={<Coffee size={14} className="text-emerald-500" />}
                       placeholder="Select Quota"
@@ -605,16 +615,51 @@ export default function AdminUsersPage() {
                     />
                   </div>
 
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Employment Type</label>
+                    <CustomSelect 
+                      placeholder="Select Type"
+                      value={form.employment_type} 
+                      onChange={(v) => setForm({...form, employment_type: v})} 
+                      options={[
+                        { label: "Full Time", value: "full_time" },
+                        { label: "Part Time", value: "part_time" },
+                        { label: "Internship", value: "internship" },
+                      ]}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Salary Structure</label>
+                    <CustomSelect 
+                      placeholder="Select Structure"
+                      value={form.salary_structure} 
+                      onChange={(v) => setForm({...form, salary_structure: v})} 
+                      options={[
+                        { label: "Fixed Monthly", value: "fixed_monthly" },
+                        { label: "Hourly Pay", value: "hourly" },
+                        { label: "Daily Pay", value: "daily" },
+                        { label: "Stipend", value: "stipend" },
+                      ]}
+                    />
+                  </div>
+
                   <div className="sm:col-span-2 space-y-2">
-                    <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><CalendarDays size={13} strokeWidth={3} /> Commencement Date</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Base Salary / Rate (Amount)</label>
+                    <input type="number" required value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })}
+                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                  </div>
+
+                  <div className="sm:col-span-2 space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Commencement Date</label>
                     <DatePicker value={form.joiningDate} onChange={(d) => setForm({ ...form, joiningDate: d })} label="" />
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-3 border-t border-theme-border pt-10 mt-4">
-                  <Button type="button" variant="secondary" onClick={() => setShowForm(false)} className="rounded-[20px] px-10 h-14 font-black uppercase tracking-[0.1em] text-[10px] opacity-60 hover:opacity-100 italic">Abort</Button>
-                  <Button type="submit" loading={submitting} className="rounded-[20px] px-14 h-14 font-black uppercase tracking-[0.1em] text-[10px] shadow-2xl shadow-theme-primary/30 italic">
-                    {editingId ? "Update Record" : "Deploy Personnel"}
+                <div className="bg-theme-surface flex justify-end gap-3 border-t border-theme-border pt-4 mt-6">
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setShowForm(false)} className="px-6">Cancel</Button>
+                  <Button type="submit" size="sm" loading={submitting} className="px-6">
+                    {editingId ? "Save Changes" : "Create Profile"}
                   </Button>
                 </div>
               </form>
@@ -626,26 +671,24 @@ export default function AdminUsersPage() {
       {/* DELETE CONFIRMATION TOAST (PILL DESIGN) */}
       {deleteConfirm && (
         <div className="fixed inset-x-0 top-8 z-[9000] flex justify-center px-4 animate-in slide-in-from-top-8 duration-300">
-           <div className="flex items-center gap-6 bg-white px-8 py-3.5 shadow-2xl rounded-full border border-zinc-200 min-w-[480px]">
+           <div className="flex items-center gap-6 bg-theme-surface px-6 py-4 shadow-xl rounded-2xl border border-theme-border min-w-[400px]">
               <div className="flex items-center gap-4">
-                 <div className="h-10 w-10 flex items-center justify-center bg-rose-50 text-rose-600 rounded-full shadow-inner">
+                 <div className="h-10 w-10 flex items-center justify-center bg-rose-500/10 text-rose-500 rounded-xl">
                     <Trash2 size={20} />
                  </div>
                  <div className="flex flex-col">
-                    <p className="text-sm font-black text-zinc-900 tracking-tight">Purge <span className="text-rose-600 italic">"{deleteConfirm.name}"</span> record?</p>
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest opacity-60">This action is irreversible in the identity matrix.</p>
+                    <p className="text-sm font-semibold text-theme-fg tracking-tight">Delete <span className="text-rose-500 font-bold">"{deleteConfirm.name}"</span>?</p>
+                    <p className="text-xs text-theme-muted mt-0.5">This action cannot be undone.</p>
                  </div>
               </div>
               
               <div className="flex items-center gap-3 ml-auto">
-                 <button onClick={() => setDeleteConfirm(null)} disabled={submitting}
-                   className="px-5 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-900 transition-colors">
-                   Abort
-                 </button>
-                 <button onClick={handleDelete} disabled={submitting}
-                   className="px-7 py-2.5 bg-rose-600 hover:bg-rose-700 text-[10px] font-black uppercase tracking-widest text-white rounded-full shadow-xl shadow-rose-200 transition-all active:scale-95">
-                   {submitting ? "PURGING..." : "CONFIRM PURGE"}
-                 </button>
+                 <Button onClick={() => setDeleteConfirm(null)} disabled={submitting} variant="secondary" size="sm" className="px-4">
+                   Cancel
+                 </Button>
+                 <Button onClick={handleDelete} disabled={submitting} variant="primary" size="sm" className="bg-rose-600 hover:bg-rose-700 text-white px-5 border-rose-600">
+                   {submitting ? "Deleting..." : "Delete"}
+                 </Button>
               </div>
            </div>
         </div>

@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getSupabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/layout/AuthProvider";
 
 export function useMessaging(channelId: string) {
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const supabase = getSupabase();
   const { user } = useAuth();
 
   const fetchMessages = useCallback(async () => {
@@ -38,7 +37,7 @@ export function useMessaging(channelId: string) {
           table: "messages",
           filter: `channel_id=eq.${channelId}`,
         },
-        (payload) => {
+        (payload: any) => {
           setMessages((current) => [...current, payload.new]);
         }
       )
@@ -73,7 +72,6 @@ export function useMessaging(channelId: string) {
 
 export function usePresence(orgId: string) {
   const [onlineUsers, setOnlineUsers] = useState<any>({});
-  const supabase = getSupabase();
   const { user } = useAuth();
 
   useEffect(() => {
@@ -86,13 +84,13 @@ export function usePresence(orgId: string) {
         const newState = channel.presenceState();
         setOnlineUsers(newState);
       })
-      .on("presence", { event: "join" }, ({ key, newPresences }) => {
+      .on("presence", { event: "join" }, ({ key, newPresences }: { key: string; newPresences: any[] }) => {
         console.log("join", key, newPresences);
       })
-      .on("presence", { event: "leave" }, ({ key, leftPresences }) => {
+      .on("presence", { event: "leave" }, ({ key, leftPresences }: { key: string; leftPresences: any[] }) => {
         console.log("leave", key, leftPresences);
       })
-      .subscribe(async (status) => {
+      .subscribe(async (status: string) => {
         if (status === "SUBSCRIBED") {
           await channel.track({
             id: user.id,

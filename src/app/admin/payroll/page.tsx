@@ -14,23 +14,25 @@ import {
   ChevronDown,
   FileText,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const YEARS = [2026, 2025];
+import { useApi } from "@/hooks/useApi";
+import { useToast } from "@/components/ui/Toast";
 
-const PAYROLL_DATA = [
-  { id: 1,  emp: "Rahul Mehta",   empId: "NP001", dept: "Engineering", base: 85000, incentive: 12400, deductions: 8500, gross: 97400,  net: 88900,  status: "processed" },
-  { id: 2,  emp: "Sneha Patel",   empId: "NP002", dept: "Engineering", base: 72000, incentive: 9800,  deductions: 7200, gross: 81800,  net: 74600,  status: "processed" },
-  { id: 3,  emp: "Amit Verma",    empId: "NP003", dept: "Sales",       base: 65000, incentive: 18500, deductions: 6500, gross: 83500,  net: 77000,  status: "processed" },
-  { id: 4,  emp: "Priya Sharma",  empId: "NP004", dept: "Product",     base: 78000, incentive: 11200, deductions: 7800, gross: 89200,  net: 81400,  status: "processed" },
-  { id: 5,  emp: "Deepa Nair",    empId: "NP005", dept: "Sales",       base: 62000, incentive: 15600, deductions: 6200, gross: 77600,  net: 71400,  status: "draft" },
-  { id: 6,  emp: "Arjun Singh",   empId: "NP006", dept: "Engineering", base: 90000, incentive: 13500, deductions: 9000, gross: 103500, net: 94500,  status: "draft" },
-  { id: 7,  emp: "Neha Kapoor",   empId: "NP007", dept: "Marketing",   base: 58000, incentive: 7200,  deductions: 5800, gross: 65200,  net: 59400,  status: "draft" },
-  { id: 8,  emp: "Vikram Joshi",  empId: "NP008", dept: "Operations",  base: 55000, incentive: 6800,  deductions: 5500, gross: 61800,  net: 56300,  status: "draft" },
-  { id: 9,  emp: "Kiran Reddy",   empId: "NP009", dept: "Operations",  base: 60000, incentive: 8400,  deductions: 6000, gross: 68400,  net: 62400,  status: "paid" },
-  { id: 10, emp: "Pooja Sharma",  empId: "NP010", dept: "People",      base: 68000, incentive: 9600,  deductions: 6800, gross: 77600,  net: 70800,  status: "paid" },
-];
+interface PayrollRecord {
+  id: string;
+  empId: string;
+  empName: string;
+  empCode: string;
+  dept: string;
+  empType: string;
+  base: number;
+  incentive: number;
+  deductions: number;
+  gross: number;
+  net: number;
+  status: "draft" | "processed" | "paid";
+}
 
 function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase();
@@ -48,18 +50,82 @@ const STATUS_ICON: Record<string, React.ElementType> = {
   paid:      CheckCircle2,
 };
 
-export default function PayrollPage() {
-  const [month, setMonth] = useState(3);
-  const [year, setYear] = useState(2026);
-  const [filter, setFilter] = useState("all");
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const YEARS = [2026, 2025];
 
-  const filtered = filter === "all" ? PAYROLL_DATA : PAYROLL_DATA.filter((r) => r.status === filter);
+export default function PayrollPage() {
+  const { request } = useApi();
+  const { showToast } = useToast();
+  
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [filter, setFilter] = useState("all");
+  const [records, setRecords] = useState<PayrollRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [acting, setActing] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<PayrollRecord | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+       const res = await request<{ payrolls: PayrollRecord[] }>({ url: `/api/payroll?month=${month}&year=${year}` });
+       setRecords(res.payrolls || []);
+    } catch(err: any) {
+       showToast(err.message, "error");
+    } finally {
+       setLoading(false);
+    }
+  }
+
+  // Reload automatically when month/year changes
+  useEffect(() => { load(); }, [month, year]);
+
+  async function handleRunPayroll() {
+    setActing(true);
+    try {
+      const drafts = records.filter(r => r.status === "draft");
+      if (drafts.length === 0) return showToast("No drafted payrolls available to process.", "info");
+
+      await request({ url: "/api/payroll", method: "POST", data: { action: "generate_drafts", payrolls: drafts, month, year } });
+      showToast("Payroll dynamically processed successfully.", "success");
+      load();
+    } catch(e: any) {
+      showToast(e.message, "error");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function handleDisburse(id: string) {
+    try {
+      await request({ url: "/api/payroll", method: "POST", data: { action: "disburse", employee_id: id } });
+      showToast("Salary successfully disbursed.", "success");
+      load();
+    } catch(e: any) {
+       showToast(e.message, "error");
+    }
+  }
+
+  async function saveManualOverride(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingRecord) return;
+    try {
+      await request({ url: "/api/payroll", method: "POST", data: { action: "manual_override", record: editingRecord, month, year } });
+      showToast("Manual override applied successfully.", "success");
+      setEditingRecord(null);
+      load();
+    } catch (err: any) {
+      showToast(err.message, "error");
+    }
+  }
+
+  const filtered = filter === "all" ? records : records.filter((r) => r.status === filter);
 
   const totalGross      = filtered.reduce((s, r) => s + r.gross, 0);
   const totalNet        = filtered.reduce((s, r) => s + r.net, 0);
   const totalDeductions = filtered.reduce((s, r) => s + r.deductions, 0);
-  const draft           = PAYROLL_DATA.filter((r) => r.status === "draft").length;
-  const processed       = PAYROLL_DATA.filter((r) => r.status === "processed").length;
+  const draft           = records.filter((r) => r.status === "draft").length;
+  const processed       = records.filter((r) => r.status === "processed").length;
 
   return (
     <DashboardShell
@@ -92,7 +158,7 @@ export default function PayrollPage() {
           <Button variant="secondary" size="sm">
             <Download size={13} className="mr-1.5" /> Export
           </Button>
-          <Button variant="primary" size="sm">
+          <Button variant="primary" size="sm" onClick={handleRunPayroll} loading={acting} disabled={draft === 0}>
             <Play size={12} className="mr-1.5" /> Run Payroll
           </Button>
         </div>
@@ -178,11 +244,11 @@ export default function PayrollPage() {
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-black">
-                            {getInitials(row.emp)}
+                            {getInitials(row.empName)}
                           </div>
                           <div>
-                            <p className="text-xs font-semibold text-theme-fg">{row.emp}</p>
-                            <p className="text-[10px] text-theme-subtle">{row.empId}</p>
+                            <p className="text-xs font-semibold text-theme-fg">{row.empName}</p>
+                            <p className="text-[10px] text-theme-subtle">{row.empCode} • {row.empType.replace('_', ' ')}</p>
                           </div>
                         </div>
                       </td>
@@ -203,8 +269,13 @@ export default function PayrollPage() {
                           <button className="flex items-center gap-1 rounded-lg border border-theme-border bg-theme-raised px-2.5 py-1 text-[11px] font-semibold text-theme-muted hover:text-theme-fg transition-colors">
                             <FileText size={11} /> Payslip
                           </button>
+                          {row.status === "draft" && (
+                            <Button size="sm" variant="secondary" onClick={() => setEditingRecord(row)}>
+                              Edit
+                            </Button>
+                          )}
                           {row.status === "processed" && (
-                            <Button size="sm" variant="success">
+                            <Button size="sm" variant="success" onClick={() => handleDisburse(row.id)}>
                               Disburse
                             </Button>
                           )}
@@ -218,13 +289,55 @@ export default function PayrollPage() {
           </div>
 
           <div className="flex items-center justify-between border-t border-theme-border bg-theme-page px-5 py-2.5">
-            <span className="text-xs text-theme-subtle">{filtered.length} of {PAYROLL_DATA.length} employees</span>
+            <span className="text-xs text-theme-subtle">{filtered.length} of {records.length} employees</span>
             <span className="text-xs text-theme-subtle">
               Net total: <span className="font-bold text-theme-fg">{formatCurrency(totalNet)}</span>
             </span>
           </div>
         </div>
       </div>
+
+      {/* Manual Edit Modal */}
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-theme-surface shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
+              <div>
+                <h3 className="text-base font-bold text-theme-fg">Manual Payroll Override</h3>
+                <p className="text-xs text-theme-muted">{editingRecord.empName} ({editingRecord.empCode})</p>
+              </div>
+              <button onClick={() => setEditingRecord(null)} className="rounded-full p-2 text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-colors">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            
+            <form onSubmit={saveManualOverride} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-theme-muted">Base Salary (₹)</label>
+                  <input type="number" required value={editingRecord.base} onChange={(e) => setEditingRecord({ ...editingRecord, base: Number(e.target.value), gross: Number(e.target.value) + editingRecord.incentive, net: (Number(e.target.value) + editingRecord.incentive) - editingRecord.deductions })} className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm outline-none focus:border-theme-primary" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-emerald-600">Incentive (+)</label>
+                  <input type="number" required value={editingRecord.incentive} onChange={(e) => setEditingRecord({ ...editingRecord, incentive: Number(e.target.value), gross: editingRecord.base + Number(e.target.value), net: (editingRecord.base + Number(e.target.value)) - editingRecord.deductions })} className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm outline-none focus:border-theme-primary" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-red-500">Deductions (−)</label>
+                  <input type="number" required value={editingRecord.deductions} onChange={(e) => setEditingRecord({ ...editingRecord, deductions: Number(e.target.value), net: editingRecord.gross - Number(e.target.value) })} className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm outline-none focus:border-theme-primary" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-theme-fg">Net Pay</label>
+                  <input type="number" readOnly value={editingRecord.net} className="w-full rounded-lg border border-transparent bg-theme-raised px-3 py-2 text-sm font-bold opacity-70" />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" variant="primary" className="w-full">Apply Adjustments</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </DashboardShell>
   );
 }

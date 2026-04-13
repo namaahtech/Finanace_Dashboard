@@ -1,33 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticate, requireRole } from "@/middleware/auth";
+import { getSupabaseAdmin } from "@/lib/supabase";
+import { authenticate } from "@/middleware/auth";
 
-// GET /api/priority — list priority requests
 export async function GET(req: NextRequest) {
   try {
-    // await requireRole(req, "accounts", "super_admin");
-    const requests = [
-      {
-        id: "pri-1",
-        employee: { name: "Sarah Jenkins", employeeId: "EMP002" },
-        amount: 75000,
-        reason: "Medical Emergency",
-        status: "pending",
-        created_at: new Date().toISOString()
-      }
-    ];
+    const supabase = getSupabaseAdmin();
+    const { searchParams } = new URL(req.url);
+    const status = searchParams.get("status");
+
+    let query = supabase.from("priority_payouts").select(`
+      *,
+      employee:employees(name, employee_id, department)
+    `);
+    
+    if (status && status !== "all") query = query.eq("status", status);
+
+    const { data: requests, error } = await query;
+    if (error) throw new Error(error.message);
+
     return NextResponse.json({ requests });
-  } catch (err) {
-    return NextResponse.json({ error: "Dummy error" }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
-// POST /api/priority — submit a priority request
 export async function POST(req: NextRequest) {
   try {
-    const authUser = await authenticate();
+    const supabase = getSupabaseAdmin();
     const body = await req.json();
-    return NextResponse.json({ ...body, status: "pending", id: "new-pri-uuid" }, { status: 201 });
-  } catch (err) {
-    return NextResponse.json({ error: "Dummy error" }, { status: 500 });
+
+    if (body.action === "review") {
+       await supabase.from("priority_payouts").update({ 
+         status: body.decision,
+         reason: body.decision === "rejected" ? body.rejectReason : undefined 
+       }).eq("id", body.requestId);
+       return NextResponse.json({ message: `Payout ${body.decision}` });
+    }
+
+    const { employee, amount, urgency, reason } = body;
+    const { data } = await supabase.from("priority_payouts").insert({
+       employee_id: employee,
+       amount, urgency, reason, status: "pending"
+    }).select().single();
+
+    return NextResponse.json(data);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

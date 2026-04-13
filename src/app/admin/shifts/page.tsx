@@ -323,19 +323,19 @@ export default function ShiftManagementPage() {
               </div>
 
               <div className="mt-5">
-                <h3 className="text-[15px] font-black text-theme-fg uppercase italic tracking-tight">{shift.name}</h3>
-                <p className="text-[11px] font-black text-theme-muted mt-1 uppercase tracking-widest tabular-nums opacity-60">
+                <h3 className="text-sm font-bold text-theme-fg">{shift.name}</h3>
+                <p className="text-xs text-theme-muted mt-1 tabular-nums">
                    {dayjs(`2000-01-01 ${shift.start_time}`).format("hh:mm A")} — {dayjs(`2000-01-01 ${shift.end_time}`).format("hh:mm A")}
                 </p>
               </div>
               
               <div className="mt-6 pt-4 border-t border-theme-border/50 flex flex-col gap-2">
                 {shift.department && (
-                  <div className="flex items-center gap-2 text-[10px] font-black text-theme-subtle uppercase tracking-wider">
-                    <Building2 size={11} className="text-theme-muted" /> {shift.department}
+                  <div className="flex items-center gap-2 text-xs text-theme-muted">
+                    <Building2 size={13} className="text-theme-muted" /> {shift.department}
                   </div>
                 )}
-                <div className="flex items-center gap-2 text-[10px] font-black text-theme-muted uppercase tracking-wider">
+                <div className="flex items-center gap-2 text-xs text-theme-muted">
                   <Calendar size={11} className="opacity-40" /> {dayjs(shift.valid_from).format("MMM DD, YYYY")} — {dayjs(shift.valid_to).format("MMM DD")}
                 </div>
               </div>
@@ -347,8 +347,8 @@ export default function ShiftManagementPage() {
               selectedShiftFilter === "unassigned" ? "border-amber-500 bg-amber-500/5 shadow-inner" : "border-theme-border opacity-50 opacity-40"
             )}>
             <AlertCircle size={24} className="text-amber-500 mb-3" />
-            <h3 className="text-xs font-black text-theme-fg tracking-widest uppercase">Unassigned Pool</h3>
-            <p className="text-[10px] font-bold text-theme-muted mt-1 uppercase opacity-60">Pending Temporal Assignment</p>
+            <h3 className="text-sm font-semibold text-theme-fg">Unassigned Pool</h3>
+            <p className="text-xs text-theme-muted mt-1">Pending Assignment</p>
           </div>
         </div>
 
@@ -358,8 +358,8 @@ export default function ShiftManagementPage() {
             <div className="flex items-center gap-4">
               <div className="h-5 w-1.5 bg-theme-primary rounded-full shadow-lg shadow-theme-primary/20" />
               <div>
-                <h3 className="text-sm font-black text-theme-fg tracking-tighter uppercase italic">Operational Manning Registry</h3>
-                <p className="text-[10px] text-theme-muted font-bold uppercase tracking-widest opacity-60">Session: {dayjs().format("DD MMM YYYY")}</p>
+                <h3 className="text-sm font-semibold text-theme-fg">Operational Manning Registry</h3>
+                <p className="text-xs text-theme-muted mt-0.5">Session: {dayjs().format("DD MMM YYYY")}</p>
               </div>
             </div>
             <div className="relative">
@@ -372,12 +372,12 @@ export default function ShiftManagementPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-theme-border bg-theme-page/30 text-left text-[10px] font-black uppercase tracking-widest text-theme-muted">
-                  <th className="px-8 py-5">Personnel</th>
-                  <th className="px-8 py-5">Architecture Entity</th>
-                  <th className="px-8 py-5 text-center">Assigned Protocol</th>
-                  <th className="px-8 py-5 text-center">Temporal Rules</th>
-                  <th className="px-8 py-5 text-right">Deployment Update</th>
+                <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
+                  <th className="px-5 py-3">Personnel</th>
+                  <th className="px-5 py-3">Architecture Entity</th>
+                  <th className="px-5 py-3 text-center">Assigned Protocol</th>
+                  <th className="px-5 py-3 text-center">Temporal Rules</th>
+                  <th className="px-5 py-3 text-right">Deployment Update</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-theme-border/50">
@@ -389,37 +389,37 @@ export default function ShiftManagementPage() {
                   const currentShift = shifts.find(s => s.id === emp.shift_id);
                   return (
                     <tr key={emp.id} className="group hover:bg-theme-raised/30 transition-all duration-300">
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-theme-primary text-theme-surface text-[11px] font-black shadow-lg">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-bold shadow-sm">
                              {emp.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-xs font-black text-theme-fg">{emp.name}</p>
-                            <p className="text-[10px] text-theme-muted font-mono font-bold">{emp.employee_id}</p>
+                            <p className="text-sm font-semibold text-theme-fg">{emp.name}</p>
+                            <p className="text-xs text-theme-muted mt-0.5 whitespace-nowrap text-ellipsis overflow-hidden">{emp.employee_id}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-8 py-5 text-[11px] font-bold text-theme-fg uppercase tracking-tight">
-                         {emp.department} <span className="mx-2 text-theme-border">/</span> <span className="text-theme-muted font-normal italic lowercase">{emp.designation}</span>
+                      <td className="px-5 py-3 text-xs text-theme-fg">
+                         {emp.department} <span className="mx-1 text-theme-border">•</span> <span className="text-theme-muted">{emp.designation}</span>
                       </td>
-                      <td className="px-8 py-5 text-center">
+                      <td className="px-5 py-3 text-center">
                         {currentShift ? (
                           <span style={{ backgroundColor: `${currentShift.color_code}15`, color: currentShift.color_code, borderColor: `${currentShift.color_code}30` }} 
-                            className="inline-flex items-center rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest shadow-sm">
+                            className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm">
                             {currentShift.name}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-2 text-rose-500 font-black text-[9px] uppercase tracking-widest opacity-60">
-                             <XCircle size={12} /> Unassigned
+                          <span className="inline-flex items-center gap-1 text-theme-muted text-xs font-medium">
+                             <XCircle size={14} /> Unassigned
                           </span>
                         )}
                       </td>
-                      <td className="px-8 py-5 text-center tabular-nums text-[11px] font-black text-theme-fg italic">
+                      <td className="px-5 py-3 text-center tabular-nums text-sm text-theme-fg">
                         {currentShift ? <span>{dayjs(`2000-01-01 ${currentShift.start_time}`).format("hh:mm A")} — {dayjs(`2000-01-01 ${currentShift.end_time}`).format("hh:mm A")}</span> : "—"}
                       </td>
-                      <td className="px-8 py-5 text-right">
-                        <select className="bg-theme-raised/50 text-[10px] font-black uppercase text-theme-primary border-none outline-none cursor-pointer hover:bg-theme-primary hover:text-white px-3 py-2 rounded-xl transition-all shadow-sm"
+                      <td className="px-5 py-3 text-right">
+                        <select className="bg-theme-page border border-theme-border text-xs text-theme-fg outline-none cursor-pointer hover:bg-theme-raised px-3 py-2 rounded-lg transition-all"
                           value={emp.shift_id || ""} onChange={(e) => {
                              const sid = e.target.value || null;
                              supabase.from("employees").update({ shift_id: sid }).eq("id", emp.id).then(() => {
@@ -427,9 +427,9 @@ export default function ShiftManagementPage() {
                                loadData();
                              });
                           }}>
-                          <option value="">CHANGE SLOT...</option>
-                          {shifts.map(s => <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>)}
-                          <option value="">RECALL TO POOL</option>
+                          <option value="">Change slot...</option>
+                          {shifts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          <option value="">Remove assignment</option>
                         </select>
                       </td>
                     </tr>
@@ -444,38 +444,38 @@ export default function ShiftManagementPage() {
       {/* DEFINE/EDIT SHIFT MODAL */}
       {showDefineModal && (
         <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-           <div className="w-full max-w-2xl bg-theme-surface rounded-[40px] shadow-[0_32px_120px_-20px_rgba(0,0,0,0.6)] border border-theme-border animate-in zoom-in-95 duration-400">
-              <div className="flex items-center justify-between border-b border-theme-border bg-theme-raised/30 px-10 py-8 rounded-t-[40px]">
-                 <div className="flex items-center gap-5">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-theme-primary text-theme-surface shadow-2xl">
-                      {editingShiftId ? <Edit2 size={24} /> : <Timer size={28} />}
+           <div className="w-full max-w-lg bg-theme-surface rounded-2xl shadow-2xl border border-theme-border animate-in zoom-in-95 duration-400">
+              <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
+                 <div className="flex items-center gap-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary text-theme-surface shadow-sm">
+                      {editingShiftId ? <Edit2 size={18} /> : <Timer size={18} />}
                     </div>
                     <div>
-                       <h3 className="text-xl font-black text-theme-fg tracking-tighter uppercase italic">{editingShiftId ? 'Edit Shift Protocol' : 'Deploy New Protocol'}</h3>
-                       <p className="text-[10px] text-theme-muted font-black uppercase tracking-[0.2em] opacity-60">Temporal Configuration Matrix</p>
+                       <h3 className="text-sm font-bold text-theme-fg">{editingShiftId ? 'Edit Shift Protocol' : 'Deploy New Protocol'}</h3>
+                       <p className="text-xs text-theme-muted mt-0.5">Configure operational timings</p>
                     </div>
                  </div>
-                 <button onClick={() => setShowDefineModal(false)} className="rounded-[20px] p-3 text-theme-muted hover:bg-theme-raised active:scale-90 transition-all">
-                    <X size={24} strokeWidth={3} />
+                 <button onClick={() => setShowDefineModal(false)} className="rounded-lg p-2 text-theme-muted hover:bg-theme-raised transition-all">
+                    <X size={18} />
                  </button>
               </div>
               
-              <div className="p-10">
-                 <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
+              <div className="p-6">
+                 <div className="grid grid-cols-1 gap-5">
                     <div className="space-y-2">
-                       <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><Target size={13} strokeWidth={3} /> Protocol Alias</label>
+                       <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Protocol Alias</label>
                        <input type="text" placeholder="e.g. Night Vanguard" value={shiftForm.name} onChange={(e) => setShiftForm({...shiftForm, name: e.target.value})}
-                          className="h-[52px] w-full rounded-2xl border border-theme-border bg-theme-page px-5 text-sm font-black text-theme-fg outline-none focus:border-theme-primary transition-all shadow-inner" />
+                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                        <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><Clock size={13} /> Commencement</label>
-                          <input type="time" value={shiftForm.start_time} onChange={(e) => setShiftForm({...shiftForm, start_time: e.target.value})} className="h-[52px] w-full rounded-2xl border border-theme-border bg-theme-page px-5 text-sm font-black text-theme-fg outline-none shadow-inner" />
+                          <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Commencement</label>
+                          <input type="time" value={shiftForm.start_time} onChange={(e) => setShiftForm({...shiftForm, start_time: e.target.value})} className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none shadow-sm" />
                        </div>
                        <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><Clock size={13} /> Termination</label>
-                          <input type="time" value={shiftForm.end_time} onChange={(e) => setShiftForm({...shiftForm, end_time: e.target.value})} className="h-[52px] w-full rounded-2xl border border-theme-border bg-theme-page px-5 text-sm font-black text-theme-fg outline-none shadow-inner" />
+                          <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Termination</label>
+                          <input type="time" value={shiftForm.end_time} onChange={(e) => setShiftForm({...shiftForm, end_time: e.target.value})} className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none shadow-sm" />
                        </div>
                     </div>
 
@@ -495,22 +495,23 @@ export default function ShiftManagementPage() {
                       options={[{ label: "Global/Any Squad", value: "" }, ...teams.filter(t => !shiftForm.department_id || t.parent_id === shiftForm.department_id).map(t => ({ label: t.name, value: t.id }))]}
                     />
 
-                    <div className="space-y-2">
-                       <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><CalendarDays size={13} /> Active From</label>
-                       <DatePicker value={shiftForm.valid_from} onChange={(d) => setShiftForm({...shiftForm, valid_from: d})} label="" />
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Active From</label>
+                          <DatePicker value={shiftForm.valid_from} onChange={(d) => setShiftForm({...shiftForm, valid_from: d})} label="" />
+                       </div>
+                       <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Active Until</label>
+                          <DatePicker value={shiftForm.valid_to} onChange={(d) => setShiftForm({...shiftForm, valid_to: d})} label="" />
+                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                       <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><CalendarDays size={13} /> Active Until</label>
-                       <DatePicker value={shiftForm.valid_to} onChange={(d) => setShiftForm({...shiftForm, valid_to: d})} label="" />
-                    </div>
-
-                    <div className="sm:col-span-2 space-y-3">
-                       <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-theme-muted"><Palette size={13} /> Protocol Signature Color</label>
-                       <div className="flex flex-wrap gap-4 pt-1">
+                    <div className="space-y-3">
+                       <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Protocol Signature Color</label>
+                       <div className="flex flex-wrap gap-3 pt-1">
                           {['#10b981', '#0ea5e9', '#f59e0b', '#6366f1', '#f43f5e', '#8b5cf6', '#000000'].map(c => (
                              <button key={c} onClick={() => setShiftForm({...shiftForm, color_code: c})}
-                                className={cn("h-11 w-11 rounded-[18px] border-4 transition-all hover:scale-110 shadow-lg", shiftForm.color_code === c ? "border-theme-primary scale-110 shadow-2xl" : "border-white/50")}
+                                className={cn("h-8 w-8 rounded-full border-2 transition-all hover:scale-110 shadow-sm", shiftForm.color_code === c ? "border-theme-primary scale-110 shadow-md" : "border-white/50")}
                                 style={{ backgroundColor: c }}>
                                {shiftForm.color_code === c && <Check size={14} className="mx-auto text-white drop-shadow-lg" strokeWidth={4} />}
                              </button>
@@ -519,10 +520,10 @@ export default function ShiftManagementPage() {
                     </div>
                  </div>
 
-                 <div className="flex justify-end gap-4 border-t border-theme-border pt-10 mt-10">
-                    <Button type="button" variant="secondary" onClick={() => setShowDefineModal(false)} className="rounded-[20px] px-10 h-14 font-black uppercase tracking-[0.1em] text-[10px] opacity-60 hover:opacity-100 italic">Abort</Button>
-                    <Button onClick={handleSaveShift} loading={submitting} className="rounded-[20px] px-12 h-14 font-black uppercase tracking-[0.1em] text-[10px] shadow-2xl shadow-theme-primary/40 italic">
-                      {editingShiftId ? 'Update Protocol' : 'Deploy Protocol'}
+                 <div className="bg-theme-surface flex items-center justify-end border-t border-theme-border pt-4 gap-3 mt-4">
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setShowDefineModal(false)}>Cancel</Button>
+                    <Button onClick={handleSaveShift} size="sm" loading={submitting}>
+                      {editingShiftId ? 'Save Changes' : 'Create Protocol'}
                     </Button>
                  </div>
               </div>
@@ -530,29 +531,26 @@ export default function ShiftManagementPage() {
         </div>
       )}
 
-      {/* DELETE CONFIRMATION PILL (MATCHING PLATFORM STYLE) */}
       {deleteConfirm && (
         <div className="fixed inset-x-0 top-8 z-[9000] flex justify-center px-4 animate-in slide-in-from-top-8 duration-300">
-           <div className="flex items-center gap-6 bg-white px-8 py-3.5 shadow-[0_20px_50px_rgba(0,0,0,0.15)] rounded-full border border-zinc-200 min-w-[460px]">
+           <div className="flex items-center gap-6 bg-theme-surface px-6 py-4 shadow-xl rounded-2xl border border-theme-border min-w-[400px]">
               <div className="flex items-center gap-4">
-                 <div className="h-10 w-10 flex items-center justify-center bg-rose-50 text-rose-600 rounded-full shadow-inner">
+                 <div className="h-10 w-10 flex items-center justify-center bg-rose-500/10 text-rose-500 rounded-xl">
                     <Trash2 size={20} />
                  </div>
                  <div className="flex flex-col">
-                    <p className="text-sm font-black text-zinc-900 tracking-tight">Decommission <span className="text-rose-600 italic">"{deleteConfirm.name}"</span>?</p>
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest opacity-60">All personnel will be recalled to pool.</p>
+                    <p className="text-sm font-semibold text-theme-fg tracking-tight">Delete <span className="text-rose-500 font-bold">"{deleteConfirm.name}"</span>?</p>
+                    <p className="text-xs text-theme-muted mt-0.5">All personnel will be recalled to pool.</p>
                  </div>
               </div>
               
               <div className="flex items-center gap-3 ml-auto">
-                 <button onClick={() => setDeleteConfirm(null)} disabled={submitting}
-                    className="px-5 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-900 transition-colors">
-                    Abort
-                 </button>
-                 <button onClick={handleDeleteConfirm} disabled={submitting}
-                    className="px-7 py-2.5 bg-rose-600 hover:bg-rose-700 text-[10px] font-black uppercase tracking-widest text-white rounded-full shadow-xl shadow-rose-200 transition-all active:scale-95">
-                    {submitting ? "PURGING..." : "CONFIRM DECOMMISSION"}
-                 </button>
+                 <Button onClick={() => setDeleteConfirm(null)} disabled={submitting} variant="secondary" size="sm" className="px-4">
+                   Cancel
+                 </Button>
+                 <Button onClick={handleDeleteConfirm} disabled={submitting} variant="primary" size="sm" className="bg-rose-600 hover:bg-rose-700 text-white px-5 border-rose-600">
+                   {submitting ? "Deleting..." : "Delete"}
+                 </Button>
               </div>
            </div>
         </div>
