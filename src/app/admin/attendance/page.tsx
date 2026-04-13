@@ -769,48 +769,55 @@ export default function AdminAttendancePage() {
       {/* ADMIN OVERRIDE MODAL */}
       {showOverride && targetEmp && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-           <div className="w-full max-w-md bg-theme-surface rounded-2xl shadow-2xl overflow-hidden border border-theme-border animate-in zoom-in-95 duration-200">
-              <div className="p-6 border-b border-theme-border flex items-center justify-between">
+           <div className="w-full max-w-2xl bg-theme-surface rounded-2xl shadow-2xl overflow-hidden border border-theme-border animate-in zoom-in-95 duration-200">
+              <div className="p-7 border-b border-theme-border flex items-center justify-between">
                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 flex items-center justify-center bg-theme-primary text-theme-surface rounded-full font-bold text-sm">
+                    <div className="h-12 w-12 flex items-center justify-center bg-gradient-to-br from-theme-primary to-theme-primary/80 text-theme-surface rounded-full font-bold text-base">
                        {getInitials(targetEmp.name)}
                     </div>
                     <div>
-                       <h3 className="text-sm font-semibold text-theme-fg">{targetEmp.name}</h3>
+                       <h3 className="text-base font-bold text-theme-fg">{targetEmp.name}</h3>
                        <p className="text-xs text-theme-muted font-medium">{targetEmp.employee_id} • {targetEmp.designation}</p>
                     </div>
                  </div>
-                 <button onClick={() => setShowOverride(false)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg">
-                    <X size={18} />
+                 <button onClick={() => setShowOverride(false)} className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg">
+                    <X size={20} />
                  </button>
               </div>
-              
-              <div className="p-6 space-y-5">
-                 <div className="grid grid-cols-2 gap-4">
-                    <TimePicker
-                       label="Clock In"
-                       value={overrideForm.clock_in}
-                       onChange={(time) => setOverrideForm({...overrideForm, clock_in: time})}
-                    />
-                    <TimePicker
-                       label="Clock Out"
-                       value={overrideForm.clock_out}
-                       onChange={(time) => setOverrideForm({...overrideForm, clock_out: time})}
-                    />
+
+              <div className="p-8 space-y-7">
+                 {/* Time Pickers - Full Width */}
+                 <div className="grid grid-cols-2 gap-6">
+                    <div>
+                       <label className="block text-sm font-semibold text-theme-fg mb-3">Clock In</label>
+                       <TimePicker
+                          value={overrideForm.clock_in}
+                          onChange={(time) => setOverrideForm({...overrideForm, clock_in: time})}
+                       />
+                    </div>
+                    <div>
+                       <label className="block text-sm font-semibold text-theme-fg mb-3">Clock Out</label>
+                       <TimePicker
+                          value={overrideForm.clock_out}
+                          onChange={(time) => setOverrideForm({...overrideForm, clock_out: time})}
+                       />
+                    </div>
                  </div>
 
+                 <div className="h-px bg-gradient-to-r from-transparent via-theme-border to-transparent"></div>
+
                  <div>
-                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Attendance Status</label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <label className="block text-sm font-semibold text-theme-fg mb-4">Attendance Status</label>
+                    <div className="grid grid-cols-3 gap-3">
                        {(['present', 'late', 'absent', 'on_duty', 'half_day', 'leave'] as AttStatus[]).map(s => (
-                          <button 
+                          <button
                              key={s}
                              onClick={() => setOverrideForm({...overrideForm, status: s})}
                              className={cn(
-                                "h-10 text-xs font-semibold capitalize rounded-lg border transition-all",
-                                overrideForm.status === s 
-                                   ? "bg-theme-primary text-theme-surface border-theme-primary" 
-                                   : "bg-theme-page text-theme-muted border-theme-border hover:bg-theme-raised"
+                                "h-11 text-xs font-bold capitalize rounded-lg border transition-all",
+                                overrideForm.status === s
+                                   ? "bg-theme-primary text-theme-surface border-theme-primary shadow-md"
+                                   : "bg-theme-page text-theme-muted border-theme-border hover:bg-theme-raised hover:border-theme-primary/50"
                              )}
                           >
                              {s.replace('_', ' ')}
@@ -820,24 +827,24 @@ export default function AdminAttendancePage() {
                  </div>
 
                  <div>
-                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Reason for Override</label>
-                    <textarea 
-                       placeholder="e.g. Forgot to sign in, System downtime..."
+                    <label className="block text-sm font-semibold text-theme-fg mb-3">Reason for Override</label>
+                    <textarea
+                       placeholder="e.g. Forgot to sign in, System downtime, Technical issue..."
                        value={overrideForm.reason}
                        onChange={(e) => setOverrideForm({...overrideForm, reason: e.target.value})}
-                       className="w-full h-24 p-4 bg-theme-page border border-theme-border rounded-xl text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all resize-none shadow-sm"
+                       className="w-full h-28 p-4 bg-theme-page border border-theme-border rounded-xl text-sm font-medium text-theme-fg outline-none focus:border-theme-primary focus:ring-2 focus:ring-theme-primary/20 transition-all resize-none shadow-sm"
                     />
                  </div>
               </div>
 
-              <div className="p-6 bg-theme-page border-t border-theme-border flex items-center justify-end gap-3">
-                 <button 
+              <div className="p-7 bg-theme-page border-t border-theme-border flex items-center justify-end gap-3">
+                 <button
                     onClick={() => setShowOverride(false)}
-                    className="px-6 py-2.5 text-sm font-semibold text-theme-muted hover:text-theme-fg rounded-lg transition-colors"
+                    className="px-7 py-3 text-sm font-semibold text-theme-muted hover:text-theme-fg hover:bg-theme-raised rounded-lg transition-colors"
                  >
                     Cancel
                  </button>
-                 <Button 
+                 <Button
                     onClick={handleAdminOverride}
                     disabled={checking}
                  >

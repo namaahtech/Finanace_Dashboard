@@ -8,22 +8,22 @@ import { ToastProvider } from "@/components/ui/Toast";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
- title: "Namaah Panel",
- description: "Performance, Incentive & Payout Management System",
+  title: "Namaah Panel",
+  description: "Performance, Incentive & Payout Management System",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
- return (
- <html lang="en" suppressHydrationWarning>
- <body className={inter.className}>
- <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-  <AuthProvider>
-    <ToastProvider>
-      {children}
-    </ToastProvider>
-  </AuthProvider>
- </ThemeProvider>
- </body>
- </html>
- );
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+          <AuthProvider>
+            <ToastProvider>
+              {children}
+            </ToastProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </body>
+    </html>
+  );
 }

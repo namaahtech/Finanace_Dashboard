@@ -1,24 +1,21 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { ChevronDown, Clock } from "lucide-react";
+import { ChevronDown, Clock, Plus, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TimePickerProps {
   value: string; // HH:MM:SS format
   onChange: (time: string) => void;
-  label?: string;
   disabled?: boolean;
 }
 
-export function TimePicker({ value, onChange, label, disabled = false }: TimePickerProps) {
+export function TimePicker({ value, onChange, disabled = false }: TimePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [hours, setHours] = useState("09");
   const [minutes, setMinutes] = useState("00");
   const [period, setPeriod] = useState("AM");
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const hoursRef = useRef<HTMLDivElement>(null);
-  const minutesRef = useRef<HTMLDivElement>(null);
 
   // Parse incoming value
   useEffect(() => {
@@ -44,14 +41,22 @@ export function TimePicker({ value, onChange, label, disabled = false }: TimePic
     onChange(formattedTime);
   };
 
-  const handleHourChange = (h: string) => {
-    setHours(h);
-    handleTimeChange(h, minutes, period);
+  const adjustHour = (delta: number) => {
+    let newHour = parseInt(hours) + delta;
+    if (newHour > 12) newHour = 1;
+    if (newHour < 1) newHour = 12;
+    const newHourStr = String(newHour).padStart(2, "0");
+    setHours(newHourStr);
+    handleTimeChange(newHourStr, minutes, period);
   };
 
-  const handleMinuteChange = (m: string) => {
-    setMinutes(m);
-    handleTimeChange(hours, m, period);
+  const adjustMinute = (delta: number) => {
+    let newMinute = parseInt(minutes) + delta;
+    if (newMinute > 59) newMinute = 0;
+    if (newMinute < 0) newMinute = 59;
+    const newMinuteStr = String(newMinute).padStart(2, "0");
+    setMinutes(newMinuteStr);
+    handleTimeChange(hours, newMinuteStr, period);
   };
 
   const handlePeriodChange = (p: string) => {
@@ -59,54 +64,52 @@ export function TimePicker({ value, onChange, label, disabled = false }: TimePic
     handleTimeChange(hours, minutes, p);
   };
 
-  // Auto-scroll to selected value
-  useEffect(() => {
-    if (isOpen && hoursRef.current) {
-      const selected = hoursRef.current.querySelector(`[data-value="${hours}"]`) as HTMLElement;
-      if (selected) {
-        selected.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }
-    }
-  }, [isOpen, hours]);
+  const setToCurrentTime = () => {
+    const now = new Date();
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const isPM = h >= 12;
+    const display12h = h === 0 ? 12 : h > 12 ? h - 12 : h;
 
-  useEffect(() => {
-    if (isOpen && minutesRef.current) {
-      const selected = minutesRef.current.querySelector(`[data-value="${minutes}"]`) as HTMLElement;
-      if (selected) {
-        selected.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }
-    }
-  }, [isOpen, minutes]);
+    setHours(String(display12h).padStart(2, "0"));
+    setMinutes(String(m).padStart(2, "0"));
+    setPeriod(isPM ? "PM" : "AM");
+    handleTimeChange(String(display12h).padStart(2, "0"), String(m).padStart(2, "0"), isPM ? "PM" : "AM");
+  };
 
   // Close on outside click
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+    if (!isOpen) return;
+
+    const handleClick = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (dropdownRef.current && target && !dropdownRef.current.contains(target)) {
         setIsOpen(false);
       }
     };
-    if (isOpen) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+
+    document.addEventListener("mousedown", handleClick);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+    };
   }, [isOpen]);
 
   const displayTime = `${hours}:${minutes} ${period}`;
 
   return (
     <div className="w-full">
-      {label && <label className="block text-xs font-medium text-theme-muted mb-2">{label}</label>}
-
       <div ref={dropdownRef} className="relative">
-        {/* Main Time Display Button */}
+        {/* Main Time Display Button - Compact */}
         <button
           onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
           className={cn(
-            "w-full h-11 px-4 rounded-xl border transition-all flex items-center justify-between",
+            "w-full h-11 px-3 rounded-lg border transition-all flex items-center justify-between",
             "font-mono text-sm font-semibold",
             disabled
               ? "bg-theme-page/50 border-theme-border/50 text-theme-muted cursor-not-allowed"
               : "bg-theme-page border-theme-border hover:border-theme-primary/50 text-theme-fg",
-            isOpen && "border-theme-primary bg-theme-raised shadow-lg"
+            isOpen && "border-theme-primary bg-theme-raised shadow-lg ring-2 ring-theme-primary/20"
           )}
         >
           <div className="flex items-center gap-2">
@@ -122,109 +125,84 @@ export function TimePicker({ value, onChange, label, disabled = false }: TimePic
           />
         </button>
 
-        {/* Dropdown Menu */}
+        {/* Compact Dropdown Menu */}
         {isOpen && !disabled && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-theme-surface border border-theme-border rounded-xl shadow-xl overflow-hidden z-50">
+          <div className="absolute top-full left-0 right-0 mt-2 bg-theme-surface border border-theme-border rounded-xl shadow-xl overflow-hidden z-[10001]">
             {/* Header */}
-            <div className="bg-gradient-to-r from-theme-primary/10 to-theme-primary/5 px-4 py-3 border-b border-theme-border">
-              <p className="text-xs font-semibold text-theme-muted uppercase tracking-wider">Select Time</p>
+            <div className="bg-gradient-to-r from-theme-primary/10 to-theme-primary/5 px-4 py-3 border-b border-theme-border flex items-center justify-between">
+              <p className="text-xs font-bold text-theme-muted uppercase">Time</p>
+              <button
+                onClick={setToCurrentTime}
+                title="Set to current time"
+                className="p-1.5 rounded-md bg-theme-primary/20 hover:bg-theme-primary/30 text-theme-primary transition-all"
+              >
+                <Clock size={14} />
+              </button>
             </div>
 
-            {/* Time Picker Grid */}
-            <div className="grid grid-cols-3 gap-0 p-4">
-              {/* Hours */}
-              <div className="flex flex-col">
-                <p className="text-xs font-bold text-theme-muted mb-2 text-center">Hour</p>
-                <div
-                  ref={hoursRef}
-                  className="flex flex-col gap-1 max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-theme-border scrollbar-track-theme-page"
-                >
-                  {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map((h) => (
-                    <button
-                      key={h}
-                      data-value={h}
-                      onClick={() => handleHourChange(h)}
-                      className={cn(
-                        "h-8 text-sm font-semibold rounded-lg transition-all",
-                        hours === h
-                          ? "bg-theme-primary text-theme-surface shadow-md scale-105"
-                          : "bg-theme-page text-theme-fg hover:bg-theme-raised"
-                      )}
-                    >
-                      {h}
-                    </button>
-                  ))}
+            {/* Compact Time Controls */}
+            <div className="p-4 space-y-3">
+              {/* Hour Control */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-theme-muted w-12">Hour</span>
+                <div className="flex items-center gap-2 flex-1">
+                  <button
+                    onClick={() => adjustHour(-1)}
+                    className="p-1.5 rounded-md bg-theme-page hover:bg-theme-raised border border-theme-border text-theme-fg transition-all"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <div className="flex-1 h-9 flex items-center justify-center bg-gradient-to-br from-theme-primary/10 to-theme-primary/5 rounded-lg border border-theme-primary">
+                    <span className="text-xl font-bold text-theme-fg">{hours}</span>
+                  </div>
+                  <button
+                    onClick={() => adjustHour(1)}
+                    className="p-1.5 rounded-md bg-theme-page hover:bg-theme-raised border border-theme-border text-theme-fg transition-all"
+                  >
+                    <Plus size={14} />
+                  </button>
                 </div>
               </div>
 
-              {/* Divider */}
-              <div className="flex items-center justify-center">
-                <div className="h-32 w-0.5 bg-theme-border rounded-full"></div>
-              </div>
-
-              {/* Minutes */}
-              <div className="flex flex-col">
-                <p className="text-xs font-bold text-theme-muted mb-2 text-center">Min</p>
-                <div
-                  ref={minutesRef}
-                  className="flex flex-col gap-1 max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-theme-border scrollbar-track-theme-page"
-                >
-                  {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0")).map((m) => (
-                    <button
-                      key={m}
-                      data-value={m}
-                      onClick={() => handleMinuteChange(m)}
-                      className={cn(
-                        "h-8 text-sm font-semibold rounded-lg transition-all",
-                        minutes === m
-                          ? "bg-theme-primary text-theme-surface shadow-md scale-105"
-                          : "bg-theme-page text-theme-fg hover:bg-theme-raised"
-                      )}
-                    >
-                      {m}
-                    </button>
-                  ))}
+              {/* Minute Control */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-theme-muted w-12">Min</span>
+                <div className="flex items-center gap-2 flex-1">
+                  <button
+                    onClick={() => adjustMinute(-1)}
+                    className="p-1.5 rounded-md bg-theme-page hover:bg-theme-raised border border-theme-border text-theme-fg transition-all"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <div className="flex-1 h-9 flex items-center justify-center bg-gradient-to-br from-theme-primary/10 to-theme-primary/5 rounded-lg border border-theme-primary">
+                    <span className="text-xl font-bold text-theme-fg">{minutes}</span>
+                  </div>
+                  <button
+                    onClick={() => adjustMinute(1)}
+                    className="p-1.5 rounded-md bg-theme-page hover:bg-theme-raised border border-theme-border text-theme-fg transition-all"
+                  >
+                    <Plus size={14} />
+                  </button>
                 </div>
               </div>
             </div>
 
             {/* AM/PM Toggle */}
-            <div className="border-t border-theme-border px-4 py-3 flex gap-2">
+            <div className="border-t border-theme-border px-4 py-2 flex gap-2">
               {["AM", "PM"].map((p) => (
                 <button
                   key={p}
                   onClick={() => handlePeriodChange(p)}
                   className={cn(
-                    "flex-1 h-9 rounded-lg font-bold text-sm transition-all",
+                    "flex-1 h-8 rounded-md font-bold text-xs transition-all",
                     period === p
-                      ? "bg-theme-primary text-theme-surface shadow-md"
+                      ? "bg-theme-primary text-theme-surface shadow-sm"
                       : "bg-theme-page text-theme-muted hover:bg-theme-raised border border-theme-border"
                   )}
                 >
                   {p}
                 </button>
               ))}
-            </div>
-
-            {/* Now Button */}
-            <div className="border-t border-theme-border px-4 py-2">
-              <button
-                onClick={() => {
-                  const now = new Date();
-                  const h = now.getHours();
-                  const m = now.getMinutes();
-                  const isPM = h >= 12;
-                  const display12h = h === 0 ? 12 : h > 12 ? h - 12 : h;
-
-                  setHours(String(display12h).padStart(2, "0"));
-                  setMinutes(String(m).padStart(2, "0"));
-                  setPeriod(isPM ? "PM" : "AM");
-                  handleTimeChange(String(display12h).padStart(2, "0"), String(m).padStart(2, "0"), isPM ? "PM" : "AM");
-                }}
-                className="w-full h-8 text-xs font-bold text-theme-primary hover:bg-theme-primary/10 rounded-lg transition-all"
-              >
-                ↺ Set to Current Time
-              </button>
             </div>
           </div>
         )}

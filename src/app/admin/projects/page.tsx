@@ -356,7 +356,7 @@ export default function AdminProjectsPage() {
         showToast(`Project "${form.name}" initialized in records.`, "success");
       }
       setShowForm(false);
-      // loadData is handled by real-time subscription
+      loadData(search || undefined);
     } catch (err: any) {
       showToast(err.response?.data?.error || err.message, "error");
     } finally {
@@ -371,6 +371,7 @@ export default function AdminProjectsPage() {
       await axios.delete(`/api/projects/${deleteConfirm.id}`);
       showToast(`Project unit "${deleteConfirm.name}" has been decommissioned.`, "success");
       setDeleteConfirm(null);
+      loadData(search || undefined);
     } catch (err: any) {
       showToast(err.response?.data?.error || err.message, "error");
     } finally {
