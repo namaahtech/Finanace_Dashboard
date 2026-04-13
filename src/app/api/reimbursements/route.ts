@@ -1,47 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticate, requireRole } from "@/middleware/auth";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
-// GET /api/reimbursements
 export async function GET(req: NextRequest) {
   try {
-    const authUser = await authenticate();
+    const supabase = getSupabaseAdmin();
     const { searchParams } = new URL(req.url);
-    const employeeId = authUser.role === "employee" ? authUser.userId : searchParams.get("employeeId");
+    const status = searchParams.get("status");
 
-    const reimbursements = [
-      {
-        id: "rem-1",
-        employee: { name: "Alex Rivera", employeeId: "EMP005" },
-        amount: 4500.00,
-        description: "AWS Training Certification",
-        category: "Learning",
-        status: "approved",
-        created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-      },
-      {
-        id: "rem-2",
-        employee: { name: "Alex Rivera", employeeId: "EMP005" },
-        amount: 1200.00,
-        description: "Office Ergonomic Mouse",
-        category: "Equipment",
-        status: "pending",
-        created_at: new Date(Date.now() - 86400000).toISOString(),
-      }
-    ];
+    let query = supabase.from("reimbursements").select(`
+      *,
+      employee:employees(name, employee_id, department)
+    `);
+    
+    if (status && status !== "all") query = query.eq("status", status);
 
-    return NextResponse.json({ reimbursements });
-  } catch (err) {
-    return NextResponse.json({ error: "Dummy error" }, { status: 500 });
+    const { data: claims, error } = await query;
+    if (error) throw new Error(error.message);
+
+    return NextResponse.json({ claims });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
-// POST /api/reimbursements
 export async function POST(req: NextRequest) {
   try {
-    const authUser = await authenticate();
+    const supabase = getSupabaseAdmin();
     const body = await req.json();
-    return NextResponse.json({ ...body, status: "pending", id: "new-rem-uuid" }, { status: 201 });
-  } catch (err) {
-    return NextResponse.json({ error: "Dummy error" }, { status: 500 });
+
+    if (body.action === "approve") {
+       await supabase.from("reimbursements").update({ status: "approved" }).eq("id", body.reimbursementId);
+       return NextResponse.json({ message: "Reimbursement approved" });
+    }
+    if (body.action === "reject") {
+       await supabase.from("reimbursements").update({ status: "rejected", reason: body.reason }).eq("id", body.reimbursementId);
+       return NextResponse.json({ message: "Reimbursement rejected" });
+    }
+    if (body.action === "pay") {
+       await supabase.from("reimbursements").update({ status: "paid" }).eq("id", body.reimbursementId);
+       return NextResponse.json({ message: "Reimbursement paid" });
+    }
+
+    const { employeeId, amount, reason, receipt_url } = body;
+    const { data } = await supabase.from("reimbursements").insert({
+       employee_id: employeeId,
+       amount, reason, receipt_url, status: "pending"
+    }).select().single();
+
+    return NextResponse.json(data);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

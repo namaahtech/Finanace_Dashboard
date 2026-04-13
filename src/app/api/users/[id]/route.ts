@@ -57,6 +57,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (body.shift_id !== undefined) updates.shift_id = body.shift_id;
   if (body.team_id !== undefined) updates.team_id = body.team_id;
   if (body.monthly_leave_quota !== undefined) updates.monthly_leave_quota = body.monthly_leave_quota;
+  if (body.employment_type !== undefined) updates.employment_type = body.employment_type;
+  if (body.salary_structure !== undefined) updates.salary_structure = body.salary_structure;
+  if (body.base_salary !== undefined) updates.base_salary = Number(body.base_salary);
 
   const { data, error } = await supabase
     .from("employees")

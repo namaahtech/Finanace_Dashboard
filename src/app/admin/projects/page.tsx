@@ -239,52 +239,52 @@ export default function ProjectsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-black/[0.02] border-b border-black/5">
-                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black/40 whitespace-nowrap">Project Name</th>
-                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black/40 whitespace-nowrap">Client</th>
-                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black/40 whitespace-nowrap">Budget</th>
-                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black/40 whitespace-nowrap">Assigned Teams</th>
-                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black/40 whitespace-nowrap">Project Phase</th>
-                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black/40 whitespace-nowrap text-right">Due Date</th>
-                  <th className="px-2 py-3"></th>
+                <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
+                  <th className="px-5 py-3 whitespace-nowrap">Project Name</th>
+                  <th className="px-5 py-3 whitespace-nowrap">Client</th>
+                  <th className="px-5 py-3 whitespace-nowrap">Budget</th>
+                  <th className="px-5 py-3 whitespace-nowrap">Assigned Teams</th>
+                  <th className="px-5 py-3 whitespace-nowrap">Project Phase</th>
+                  <th className="px-5 py-3 whitespace-nowrap text-right">Due Date</th>
+                  <th className="px-5 py-3"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-black/5">
+              <tbody className="divide-y divide-theme-border">
                 {filtered.map(project => {
                   const phaseData = PHASE_CONFIG[project.phase];
                   const PhaseIcon = phaseData.icon;
                   return (
                     <tr key={project.id} className={cn("transition-colors group", ROW_HOVER)}>
-                      <td className="px-4 py-3">
-                        <p className="text-[13px] font-black text-black/80">{project.name}</p>
-                        <p className="text-[10px] text-black/40 font-bold tracking-widest whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">{project.description}</p>
+                      <td className="px-5 py-3">
+                        <p className="text-sm font-semibold text-theme-fg">{project.name}</p>
+                        <p className="text-xs text-theme-muted mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">{project.description}</p>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/[0.03] text-black/60 text-[10px] font-bold border border-black/5 uppercase tracking-widest">
-                          <Building2 size={10} /> {getClientName(project.clientId)}
+                      <td className="px-5 py-3">
+                        <span className="inline-flex items-center gap-1.5 text-xs text-theme-muted font-medium">
+                          <Building2 size={13} /> {getClientName(project.clientId)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <p className="text-[12px] font-mono font-bold tracking-tight text-black/70">{formatCurrency(project.budget)}</p>
+                      <td className="px-5 py-3">
+                        <p className="text-sm font-semibold text-theme-fg">{formatCurrency(project.budget)}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3">
                         <div className="flex flex-wrap gap-1">
                           {project.teamIds.map(tid => (
-                            <span key={tid} className="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-100 text-[9px] font-black uppercase tracking-widest">
+                            <span key={tid} className="px-2 py-0.5 rounded-md bg-theme-raised text-theme-muted text-xs font-medium">
                               {getTeamName(tid)}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className={cn("inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded border", phaseData.bg, phaseData.text)}>
-                          <PhaseIcon size={10} /> {phaseData.label}
+                      <td className="px-5 py-3">
+                        <div className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-md border", phaseData.bg, phaseData.text)}>
+                          <PhaseIcon size={12} /> {phaseData.label}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <p className="text-[11px] font-bold text-black/60">{new Date(project.dueDate).toLocaleDateString()}</p>
+                      <td className="px-5 py-3 text-right">
+                        <p className="text-xs text-theme-muted">{new Date(project.dueDate).toLocaleDateString()}</p>
                       </td>
-                      <td className="px-2 py-3 text-right">
+                      <td className="px-5 py-3 text-right">
                         <ProjectActions project={project} />
                       </td>
                     </tr>

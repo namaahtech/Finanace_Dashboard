@@ -39,7 +39,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CORPORATE_TEAMS } from "@/constants/teams";
 import { useMessaging, usePresence } from "@/hooks/useMessaging";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { getSupabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import Picker from "emoji-picker-react";
 
 // --- Types ---
@@ -213,7 +213,6 @@ export default function MessagingPage() {
 
     setIsUploading(true);
     try {
-      const supabase = getSupabase();
       const filePath = `${user.id}/${Date.now()}_${file.name}`;
       
       const { data, error } = await supabase.storage

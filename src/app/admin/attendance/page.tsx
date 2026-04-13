@@ -116,23 +116,23 @@ function DigitalClock({ clockIn, clockOut }: { clockIn?: string | null, clockOut
   return (
     <div className="flex items-center gap-8 mr-8 border-r border-theme-border pr-8">
       <div className="flex flex-col items-end">
-        <div className={cn("text-3xl font-black tabular-nums leading-none tracking-tighter", clockIn ? "text-theme-fg" : "text-theme-subtle/30")}>
+        <div className={cn("text-3xl font-bold tabular-nums leading-none tracking-tight", clockIn ? "text-theme-fg" : "text-theme-subtle/30")}>
           {clockIn ? dayjs(`2000-01-01 ${clockIn}`).format("hh:mm:ss") : "00:00:00"} 
-          <span className="text-[10px] ml-1 opacity-50 uppercase">{clockIn ? dayjs(`2000-01-01 ${clockIn}`).format("A") : "AM"}</span>
+          <span className="text-xs ml-1 opacity-50 uppercase">{clockIn ? dayjs(`2000-01-01 ${clockIn}`).format("A") : "AM"}</span>
         </div>
-        <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted mt-1">START PROTOCOL</p>
+        <p className="text-xs font-medium text-theme-muted mt-1">Start Time</p>
       </div>
       
       <div className="flex flex-col items-end">
         <div className={cn(
-          "text-3xl font-black tabular-nums leading-none tracking-tighter transition-colors duration-500", 
+          "text-3xl font-bold tabular-nums leading-none tracking-tight transition-colors duration-500", 
           clockIn && !clockOut ? "text-emerald-500" : "text-theme-fg",
           !clockIn && "text-theme-subtle/30"
         )}>
           {getExactSessionTimer()}
         </div>
-        <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted mt-1">
-          {clockOut ? "TOTAL DURATION" : "RUNNING SESSION"}
+        <p className="text-xs font-medium text-theme-muted mt-1">
+          {clockOut ? "Total Duration" : "Running Session"}
         </p>
       </div>
     </div>
@@ -484,14 +484,14 @@ export default function AdminAttendancePage() {
                  <div className="overflow-x-auto">
                    <table className="w-full text-sm">
                      <thead>
-                       <tr className="border-b border-theme-border bg-theme-page/30 text-left text-[11px] font-bold text-theme-muted uppercase tracking-widest">
-                         <th className="px-6 py-4">Employee</th>
-                         <th className="px-6 py-4">Department / Designation</th>
-                         <th className="px-6 py-4">Check In</th>
-                         <th className="px-6 py-4">Check Out</th>
-                         <th className="px-6 py-4">Hours</th>
-                         <th className="px-6 py-4">Leave Quota</th>
-                         <th className="px-6 py-4 text-right">Audit Status</th>
+                       <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
+                         <th className="px-5 py-3">Employee</th>
+                         <th className="px-5 py-3">Department / Designation</th>
+                         <th className="px-5 py-3">Check In</th>
+                         <th className="px-5 py-3">Check Out</th>
+                         <th className="px-5 py-3">Hours</th>
+                         <th className="px-5 py-3">Leave Quota</th>
+                         <th className="px-5 py-3 text-right">Status</th>
                        </tr>
                      </thead>
                      <tbody className="divide-y divide-theme-border">
@@ -502,27 +502,27 @@ export default function AdminAttendancePage() {
                          const isAdmin = userRole === "super_admin";
                          return (
                            <tr key={emp.id} className="group hover:bg-theme-raised/30 transition-colors">
-                             <td className="px-6 py-4"><div className="flex items-center gap-3">
-                               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-black">{getInitials(emp.name)}</div>
-                               <span className="text-xs font-bold text-theme-fg">{emp.name}</span>
-                               {emp.id === userId && <Badge variant="default" className="text-[8px] h-4">YOU</Badge>}
+                             <td className="px-5 py-3"><div className="flex items-center gap-3">
+                               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-bold">{getInitials(emp.name)}</div>
+                               <span className="text-sm font-semibold text-theme-fg">{emp.name}</span>
+                               {emp.id === userId && <Badge variant="default" className="text-[10px] h-5 rounded-md">YOU</Badge>}
                              </div></td>
-                             <td className="px-6 py-4"><p className="text-xs font-medium text-theme-fg">{emp.department}</p><p className="text-[10px] text-theme-subtle">{emp.designation}</p></td>
-                             <td className="px-6 py-4 font-mono text-xs text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}</td>
-                             <td className="px-6 py-4 font-mono text-xs text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}</td>
-                             <td className="px-6 py-4 text-xs font-bold text-theme-fg tabular-nums">{log?.clock_in ? formatDurationDisplay(log.clock_in, log.clock_out) : "—"}</td>
-                             <td className="px-6 py-4">
-                                <div className="flex items-center gap-1.5 text-[10px] font-black text-theme-muted bg-theme-raised/30 px-2.5 py-1.5 rounded-lg w-fit border border-theme-border/50 transition-all hover:bg-emerald-500/5 hover:text-emerald-600 group/quota">
-                                  <Coffee size={11} className="transition-transform group-hover/quota:scale-110" />
-                                  <span className="tabular-nums tracking-tighter">{emp.monthly_leave_quota || 0} L/M</span>
+                             <td className="px-5 py-3"><p className="text-xs font-semibold text-theme-fg">{emp.department}</p><p className="text-xs text-theme-muted">{emp.designation}</p></td>
+                             <td className="px-5 py-3 font-mono text-xs text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}</td>
+                             <td className="px-5 py-3 font-mono text-xs text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}</td>
+                             <td className="px-5 py-3 text-xs font-semibold text-theme-fg tabular-nums">{log?.clock_in ? formatDurationDisplay(log.clock_in, log.clock_out) : "—"}</td>
+                             <td className="px-5 py-3">
+                                <div className="flex items-center gap-1.5 text-xs font-semibold text-theme-muted">
+                                  <Coffee size={13} />
+                                  <span className="tabular-nums tracking-tight">{emp.monthly_leave_quota || 0} L/M</span>
                                 </div>
                               </td>
-                             <td className="px-6 py-4 text-right">
+                             <td className="px-5 py-3 text-right">
                                 <div className="flex items-center justify-end gap-3">
                                    <div className="flex flex-col items-end">
-                                      <Badge variant={STATUS_BADGE[log?.status || 'absent']}>{log?.status ? log.status.toUpperCase().replace('_', ' ') : "ABSENT"}</Badge>
+                                      <Badge variant={STATUS_BADGE[log?.status || 'absent']}>{log?.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1).replace('_', ' ') : "Absent"}</Badge>
                                       {log?.modified_by_name && (
-                                        <span className="text-[8px] font-black uppercase text-amber-600 mt-1 opacity-60">Modified by {log.modified_by_name}</span>
+                                        <span className="text-xs font-medium text-amber-600 mt-1 opacity-80">Modified by {log.modified_by_name}</span>
                                       )}
                                    </div>
                                    {isAdmin && (
@@ -568,8 +568,8 @@ export default function AdminAttendancePage() {
           {tab === "logsheet" && (
             <div className="page-card overflow-hidden p-0">
               <div className="border-b border-theme-border px-5 py-4 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-theme-fg">Monthly Log Sheet — {dayjs(selectedDate).format("MMMM YYYY")}</h3>
-                <div className="flex items-center gap-4 text-[9px] font-black tracking-widest text-theme-muted uppercase">
+                <h3 className="text-sm font-semibold text-theme-fg">Monthly Log Sheet — {dayjs(selectedDate).format("MMMM YYYY")}</h3>
+                <div className="flex items-center gap-4 text-xs font-medium text-theme-muted">
                   {["P: Present", "L: Late", "A: Absent", "Le: Leave"].map(l => <span key={l}>{l}</span>)}
                 </div>
               </div>
@@ -612,12 +612,12 @@ export default function AdminAttendancePage() {
                  <Target size={14} className="text-theme-muted" />
                </div>
                <table className="w-full text-sm">
-                  <thead><tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted font-bold">
-                    <th className="px-6 py-4">Employee</th>
-                    <th className="px-6 py-4 text-center">Present</th>
-                    <th className="px-6 py-4 text-center">Late</th>
-                    <th className="px-6 py-4 text-center">Absent</th>
-                    <th className="px-6 py-4 text-right">Total Duration</th>
+                  <thead><tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted font-semibold">
+                    <th className="px-5 py-3">Employee</th>
+                    <th className="px-5 py-3 text-center">Present</th>
+                    <th className="px-5 py-3 text-center">Late</th>
+                    <th className="px-5 py-3 text-center">Absent</th>
+                    <th className="px-5 py-3 text-right">Total Duration</th>
                   </tr></thead>
                   <tbody className="divide-y divide-theme-border">
                     {filtered.map(emp => {
@@ -633,11 +633,11 @@ export default function AdminAttendancePage() {
                       });
                       return (
                         <tr key={emp.id} className="hover:bg-theme-raised/40 transition-colors">
-                          <td className="px-6 py-4 font-bold text-theme-fg">{emp.name}</td>
-                          <td className="px-6 py-4 text-center font-bold text-emerald-600">{p}</td>
-                          <td className="px-6 py-4 text-center font-bold text-amber-600">{l}</td>
-                          <td className="px-6 py-4 text-center font-bold text-red-500">{a}</td>
-                          <td className="px-6 py-4 text-right font-black tabular-nums">{Math.floor(totalMin/60)} hr {totalMin%60} min</td>
+                          <td className="px-5 py-3 font-semibold text-theme-fg">{emp.name}</td>
+                          <td className="px-5 py-3 text-center font-semibold text-emerald-600">{p}</td>
+                          <td className="px-5 py-3 text-center font-semibold text-amber-600">{l}</td>
+                          <td className="px-5 py-3 text-center font-semibold text-red-500">{a}</td>
+                          <td className="px-5 py-3 text-right font-medium tabular-nums">{Math.floor(totalMin/60)} hr {totalMin%60} min</td>
                         </tr>
                       )
                     })}
@@ -660,30 +660,30 @@ export default function AdminAttendancePage() {
               <div className="page-card p-0 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-theme-border bg-theme-page/30 text-left text-[11px] font-bold text-theme-muted uppercase tracking-widest">
-                      <th className="px-6 py-4">Employee</th>
-                      <th className="px-6 py-4">Type</th>
-                      <th className="px-6 py-4">Duration</th>
-                      <th className="px-6 py-4">Reason</th>
-                      <th className="px-6 py-4 text-right">Action</th>
-                    </tr>
+                    <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
+                      <th className="px-5 py-3">Employee</th>
+                      <th className="px-5 py-3">Type</th>
+                      <th className="px-5 py-3">Duration</th>
+                      <th className="px-5 py-3">Reason</th>
+                      <th className="px-5 py-3 text-right">Action</th>
+                     </tr>
                   </thead>
                   <tbody className="divide-y divide-theme-border">
                     {leaves.length === 0 ? (
                       <tr><td colSpan={5} className="px-6 py-12 text-center text-xs text-theme-muted">No pending protocols found.</td></tr>
                     ) : leaves.map(req => (
                       <tr key={req.id} className="hover:bg-theme-raised/30 transition-colors">
-                        <td className="px-6 py-4">
-                           <p className="text-xs font-bold text-theme-fg">{req.employee?.name}</p>
-                           <p className="text-[10px] text-theme-muted">{req.employee?.department}</p>
+                        <td className="px-5 py-3">
+                           <p className="text-sm font-semibold text-theme-fg">{req.employee?.name}</p>
+                           <p className="text-xs text-theme-muted mt-0.5">{req.employee?.department}</p>
                         </td>
-                        <td className="px-6 py-4 uppercase text-[10px] font-black text-theme-fg">{req.type}</td>
-                        <td className="px-6 py-4">
-                          <p className="text-xs font-bold text-theme-fg">{dayjs(req.from_date).format("D MMM")} — {dayjs(req.to_date).format("D MMM")}</p>
-                          <p className="text-[10px] text-theme-muted">{dayjs(req.to_date).diff(dayjs(req.from_date), 'day') + 1} Days</p>
+                        <td className="px-5 py-3 text-xs font-semibold text-theme-fg capitalize">{req.type}</td>
+                        <td className="px-5 py-3">
+                          <p className="text-sm font-semibold text-theme-fg">{dayjs(req.from_date).format("D MMM")} — {dayjs(req.to_date).format("D MMM")}</p>
+                          <p className="text-xs text-theme-muted">{dayjs(req.to_date).diff(dayjs(req.from_date), 'day') + 1} Days</p>
                         </td>
-                        <td className="px-6 py-4 text-xs text-theme-muted max-w-xs truncate">{req.reason || "—"}</td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-5 py-3 text-sm text-theme-muted max-w-xs truncate">{req.reason || "—"}</td>
+                        <td className="px-5 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
                             {req.status === "pending" ? (
                               <>
@@ -708,21 +708,21 @@ export default function AdminAttendancePage() {
       {/* MANUAL LEAVE MODAL */}
       {showLeaveModal && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-           <div className="w-full max-w-md bg-white rounded-[32px] shadow-2xl overflow-hidden border border-zinc-200 animate-in zoom-in-95 duration-200">
-              <div className="p-8 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
-                 <h3 className="text-lg font-black text-zinc-900 tracking-tight">Manual Leave Entry</h3>
-                 <button onClick={() => setShowLeaveModal(false)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-zinc-200 transition-colors text-zinc-400">
+           <div className="w-full max-w-md bg-theme-surface rounded-2xl shadow-2xl overflow-hidden border border-theme-border animate-in zoom-in-95 duration-200">
+              <div className="p-6 border-b border-theme-border flex items-center justify-between">
+                 <h3 className="text-lg font-semibold text-theme-fg">Manual Leave Entry</h3>
+                 <button onClick={() => setShowLeaveModal(false)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg">
                     <X size={18} />
                  </button>
               </div>
               
-              <div className="p-8 space-y-6">
+              <div className="p-6 space-y-5">
                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Select Employee</label>
+                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Select Employee</label>
                     <select 
                        value={leaveForm.empId}
                        onChange={(e) => setLeaveForm({...leaveForm, empId: e.target.value})}
-                       className="w-full h-12 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 text-sm font-bold text-zinc-900 outline-none focus:border-theme-primary transition-all"
+                       className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
                     >
                        <option value="">Choose Employee...</option>
                        {employees.map(e => <option key={e.id} value={e.id}>{e.name} ({e.employee_id})</option>)}
@@ -731,20 +731,20 @@ export default function AdminAttendancePage() {
 
                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                       <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">From Date</label>
-                       <input type="date" value={leaveForm.from} onChange={(e) => setLeaveForm({...leaveForm, from: e.target.value})} className="w-full h-12 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 text-sm font-bold text-zinc-900 outline-none" />
+                       <label className="block text-xs font-medium text-theme-muted mb-1.5">From Date</label>
+                       <input type="date" value={leaveForm.from} onChange={(e) => setLeaveForm({...leaveForm, from: e.target.value})} className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none shadow-sm" />
                     </div>
                     <div>
-                       <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">To Date</label>
-                       <input type="date" value={leaveForm.to} onChange={(e) => setLeaveForm({...leaveForm, to: e.target.value})} className="w-full h-12 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 text-sm font-bold text-zinc-900 outline-none" />
+                       <label className="block text-xs font-medium text-theme-muted mb-1.5">To Date</label>
+                       <input type="date" value={leaveForm.to} onChange={(e) => setLeaveForm({...leaveForm, to: e.target.value})} className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none shadow-sm" />
                     </div>
                  </div>
 
                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Leave Type</label>
+                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Leave Type</label>
                     <div className="grid grid-cols-2 gap-2">
                        {['sick', 'casual', 'earned', 'unpaid'].map(t => (
-                          <button key={t} onClick={() => setLeaveForm({...leaveForm, type: t})} className={cn("h-10 text-[10px] font-bold uppercase rounded-xl border transition-all", leaveForm.type === t ? "bg-theme-primary text-white border-theme-primary" : "bg-white text-zinc-500 border-zinc-200")}>
+                          <button key={t} onClick={() => setLeaveForm({...leaveForm, type: t})} className={cn("h-10 text-xs font-semibold capitalize rounded-lg border transition-all", leaveForm.type === t ? "bg-theme-primary text-theme-surface border-theme-primary" : "bg-theme-page text-theme-muted border-theme-border hover:bg-theme-raised")}>
                              {t}
                           </button>
                        ))}
@@ -752,14 +752,14 @@ export default function AdminAttendancePage() {
                  </div>
 
                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Reason (Optional)</label>
-                    <textarea value={leaveForm.reason} onChange={(e) => setLeaveForm({...leaveForm, reason: e.target.value})} className="w-full h-24 p-4 bg-zinc-50 border border-zinc-200 rounded-2xl text-sm font-medium text-zinc-900 outline-none focus:border-theme-primary resize-none" />
+                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Reason (Optional)</label>
+                    <textarea value={leaveForm.reason} onChange={(e) => setLeaveForm({...leaveForm, reason: e.target.value})} className="w-full h-24 p-4 bg-theme-page border border-theme-border rounded-xl text-sm font-medium text-theme-fg outline-none focus:border-theme-primary resize-none shadow-sm" />
                  </div>
               </div>
 
-              <div className="p-6 bg-zinc-50 border-t border-zinc-100 flex items-center justify-end gap-3">
-                 <button onClick={() => setShowLeaveModal(false)} className="px-6 py-2.5 text-sm font-bold text-zinc-500">Cancel</button>
-                 <button onClick={handleManualLeave} className="px-8 py-2.5 bg-black text-white rounded-full text-sm font-bold shadow-xl">Apply Protocol</button>
+              <div className="p-6 bg-theme-page border-t border-theme-border flex items-center justify-end gap-3">
+                 <button onClick={() => setShowLeaveModal(false)} className="px-6 py-2.5 text-sm font-semibold text-theme-muted hover:text-theme-fg rounded-lg transition-colors">Cancel</button>
+                 <Button onClick={handleManualLeave}>Apply Protocol</Button>
               </div>
            </div>
         </div>
@@ -768,58 +768,58 @@ export default function AdminAttendancePage() {
       {/* ADMIN OVERRIDE MODAL */}
       {showOverride && targetEmp && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-           <div className="w-full max-w-md bg-white rounded-[32px] shadow-2xl overflow-hidden border border-zinc-200 animate-in zoom-in-95 duration-200">
-              <div className="p-8 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+           <div className="w-full max-w-md bg-theme-surface rounded-2xl shadow-2xl overflow-hidden border border-theme-border animate-in zoom-in-95 duration-200">
+              <div className="p-6 border-b border-theme-border flex items-center justify-between">
                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 flex items-center justify-center bg-black text-white rounded-full font-black text-sm">
+                    <div className="h-10 w-10 flex items-center justify-center bg-theme-primary text-theme-surface rounded-full font-bold text-sm">
                        {getInitials(targetEmp.name)}
                     </div>
                     <div>
-                       <h3 className="text-base font-bold text-zinc-900">{targetEmp.name}</h3>
-                       <p className="text-xs text-zinc-500 font-medium">{targetEmp.employee_id} • {targetEmp.designation}</p>
+                       <h3 className="text-sm font-semibold text-theme-fg">{targetEmp.name}</h3>
+                       <p className="text-xs text-theme-muted font-medium">{targetEmp.employee_id} • {targetEmp.designation}</p>
                     </div>
                  </div>
-                 <button onClick={() => setShowOverride(false)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-zinc-200 transition-colors text-zinc-400">
+                 <button onClick={() => setShowOverride(false)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg">
                     <X size={18} />
                  </button>
               </div>
               
-              <div className="p-8 space-y-6">
+              <div className="p-6 space-y-5">
                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                       <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Clock In Time</label>
+                       <label className="block text-xs font-medium text-theme-muted mb-1.5">Clock In</label>
                        <input 
                           type="time" 
                           step="1"
                           value={overrideForm.clock_in}
                           onChange={(e) => setOverrideForm({...overrideForm, clock_in: e.target.value})}
-                          className="w-full h-12 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 text-sm font-bold text-zinc-900 outline-none focus:border-emerald-500 transition-all"
+                          className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
                        />
                     </div>
                     <div>
-                       <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Clock Out Time</label>
+                       <label className="block text-xs font-medium text-theme-muted mb-1.5">Clock Out</label>
                        <input 
                           type="time" 
                           step="1"
                           value={overrideForm.clock_out}
                           onChange={(e) => setOverrideForm({...overrideForm, clock_out: e.target.value})}
-                          className="w-full h-12 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 text-sm font-bold text-zinc-900 outline-none focus:border-emerald-500 transition-all"
+                          className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
                        />
                     </div>
                  </div>
 
                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Attendance Status</label>
+                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Attendance Status</label>
                     <div className="grid grid-cols-3 gap-2">
                        {(['present', 'late', 'absent', 'on_duty', 'half_day', 'leave'] as AttStatus[]).map(s => (
                           <button 
                              key={s}
                              onClick={() => setOverrideForm({...overrideForm, status: s})}
                              className={cn(
-                                "h-10 text-[10px] font-bold uppercase rounded-xl border transition-all",
+                                "h-10 text-xs font-semibold capitalize rounded-lg border transition-all",
                                 overrideForm.status === s 
-                                   ? "bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100" 
-                                   : "bg-white text-zinc-500 border-zinc-200 hover:border-zinc-300"
+                                   ? "bg-theme-primary text-theme-surface border-theme-primary" 
+                                   : "bg-theme-page text-theme-muted border-theme-border hover:bg-theme-raised"
                              )}
                           >
                              {s.replace('_', ' ')}
@@ -829,30 +829,29 @@ export default function AdminAttendancePage() {
                  </div>
 
                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Reason for Override</label>
+                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Reason for Override</label>
                     <textarea 
                        placeholder="e.g. Forgot to sign in, System downtime..."
                        value={overrideForm.reason}
                        onChange={(e) => setOverrideForm({...overrideForm, reason: e.target.value})}
-                       className="w-full min-h-[100px] p-4 bg-zinc-50 border border-zinc-200 rounded-2xl text-sm font-medium text-zinc-900 outline-none focus:border-emerald-500 transition-all resize-none"
+                       className="w-full h-24 p-4 bg-theme-page border border-theme-border rounded-xl text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all resize-none shadow-sm"
                     />
                  </div>
               </div>
 
-              <div className="p-6 bg-zinc-50 border-t border-zinc-100 flex items-center justify-end gap-3">
+              <div className="p-6 bg-theme-page border-t border-theme-border flex items-center justify-end gap-3">
                  <button 
                     onClick={() => setShowOverride(false)}
-                    className="px-6 py-2.5 text-sm font-bold text-zinc-500 hover:text-zinc-900"
+                    className="px-6 py-2.5 text-sm font-semibold text-theme-muted hover:text-theme-fg rounded-lg transition-colors"
                  >
                     Cancel
                  </button>
-                 <button 
+                 <Button 
                     onClick={handleAdminOverride}
                     disabled={checking}
-                    className="px-8 py-2.5 bg-black text-white rounded-full text-sm font-bold hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-200 disabled:opacity-50"
                  >
                     {checking ? "Applying..." : "Confirm Override"}
-                 </button>
+                 </Button>
               </div>
            </div>
         </div>

@@ -20,6 +20,9 @@ export type Database = {
           team_id: string | null;
           joining_date: string | null;
           is_active: boolean;
+          employment_type: "full_time" | "part_time" | "internship";
+          salary_structure: "fixed_monthly" | "hourly" | "daily" | "stipend";
+          base_salary: number;
           created_at: string;
           updated_at: string;
         };
