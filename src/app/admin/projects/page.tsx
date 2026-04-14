@@ -38,6 +38,7 @@ interface Project {
   clientId: string;
   teamIds: string[];
   phase: ProjectPhase;
+  issued_date: string;
   dueDate: string;
   is_active: boolean;
   client?: Client;
@@ -265,7 +266,9 @@ export default function AdminProjectsPage() {
   
   const [form, setForm] = useState({
     name: "", description: "", budget: "",
-    client_id: "", phase: "SCOPING", due_date: "",
+    client_id: "", phase: "SCOPING", 
+    issued_date: dayjs().format("YYYY-MM-DD"),
+    due_date: "",
     team_ids: [] as string[]
   });
 
@@ -324,6 +327,7 @@ export default function AdminProjectsPage() {
     setForm({ 
       name: "", description: "", budget: "", 
       client_id: "", phase: "SCOPING",
+      issued_date: dayjs().format("YYYY-MM-DD"),
       due_date: dayjs().add(3, "month").format("YYYY-MM-DD"),
       team_ids: []
     });
@@ -338,6 +342,7 @@ export default function AdminProjectsPage() {
       budget: String(p.budget),
       client_id: p.clientId,
       phase: p.phase,
+      issued_date: p.issued_date || "",
       due_date: p.dueDate,
       team_ids: p.teamIds || []
     });
@@ -550,6 +555,11 @@ export default function AdminProjectsPage() {
                     <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Financial Allocation (Budget)</label>
                     <input type="number" required value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })}
                       className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Project Cycle Start (Issue Date)</label>
+                    <DatePicker value={form.issued_date} onChange={(d) => setForm({ ...form, issued_date: d })} label="" />
                   </div>
 
                   <div className="space-y-2">

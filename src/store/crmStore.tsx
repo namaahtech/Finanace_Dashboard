@@ -15,6 +15,10 @@ export interface ConvertedClient {
   status: "Active" | "Pending" | "Churned";
   tier: "Strategic" | "Key Account" | "Standard";
   fromPipeline: boolean;
+  gstin?: string;
+  pan?: string;
+  email?: string;
+  address?: string;
 }
 
 interface CRMStoreType {
@@ -25,7 +29,6 @@ interface CRMStoreType {
 
 const CRMStoreContext = createContext<CRMStoreType | null>(null);
 
-// Seed data — matches existing CLIENTS_DATA
 const SEED_CLIENTS: ConvertedClient[] = [
   { id: "CL-001", company: "Zomato Private Limited", leadName: "Rahul Jain", leadPhone: "+91 98765 43210", value: 4500000, empName: "Vijay Kumar", empId: "EMP-402", convertedDate: "Apr 05, 2026", status: "Active", tier: "Key Account", fromPipeline: false },
   { id: "CL-002", company: "Rivian Automotive", leadName: "Sarah M.", leadPhone: "+1 415 555-0100", value: 1250000, empName: "Ananya Sharma", empId: "EMP-215", convertedDate: "Apr 08, 2026", status: "Active", tier: "Strategic", fromPipeline: false },
@@ -35,7 +38,7 @@ const SEED_CLIENTS: ConvertedClient[] = [
   { id: "CL-006", company: "Swiggy Limited", leadName: "Sriharsha M.", leadPhone: "+91 95000 00000", value: 1500000, empName: "Vijay Kumar", empId: "EMP-402", convertedDate: "Mar 15, 2026", status: "Churned", tier: "Standard", fromPipeline: false },
 ];
 
-export function CRMProvider({ children }: { children: ReactNode }): React.JSX.Element {
+export function CRMProvider({ children }: { children: ReactNode }) {
   const [convertedClients, setConvertedClients] = useState<ConvertedClient[]>(SEED_CLIENTS);
 
   const addConvertedClient = (client: ConvertedClient) => {
@@ -46,10 +49,10 @@ export function CRMProvider({ children }: { children: ReactNode }): React.JSX.El
     setConvertedClients(prev => prev.filter(c => c.id !== id));
   };
 
-  return React.createElement(
-    CRMStoreContext.Provider,
-    { value: { convertedClients, addConvertedClient, removeClient } },
-    children
+  return (
+    <CRMStoreContext.Provider value={{ convertedClients, addConvertedClient, removeClient }}>
+      {children}
+    </CRMStoreContext.Provider>
   );
 }
 

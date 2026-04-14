@@ -5,26 +5,25 @@ import { useAuth } from "@/components/layout/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Mail, Lock, ShieldCheck, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { useToast } from "@/components/ui/Toast";
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { showToast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError("");
     try {
       await login(email, password);
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        "Authentication failed. Please check your credentials.";
-      setError(msg);
+      showToast("Access Granted. Welcome back to Namaah Pulse.", "success");
+    } catch (err: any) {
+      const msg = err.message || "Authentication failed. Please check your credentials.";
+      showToast(msg, "error");
     } finally {
       setLoading(false);
     }
@@ -52,12 +51,7 @@ export default function LoginPage() {
             <p className="text-[11px] text-theme-muted mt-1 font-medium">Access your financial administration dashboard</p>
           </div>
 
-          {error && (
-            <div className="mb-6 flex items-start gap-3 rounded-xl bg-theme-danger-bg border border-red-100/50 p-3.5 text-xs font-semibold text-theme-danger-fg animate-in fade-in slide-in-from-top-1">
-              <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500 text-white text-[10px]">!</div>
-              <p>{error}</p>
-            </div>
-          )}
+
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">

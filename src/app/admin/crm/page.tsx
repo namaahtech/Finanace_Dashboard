@@ -22,12 +22,16 @@ import {
   Tag,
   Briefcase,
   UserCheck,
-  ChevronUp
+  ChevronUp,
+  Mail,
+  Zap
 } from "lucide-react";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/Toast";
+import { validateGSTIN, extractPANFromGSTIN } from "@/lib/gst";
+import { AlertTriangle } from "lucide-react";
 import { 
   DragDropContext, 
   Droppable, 
@@ -178,6 +182,10 @@ interface DealItem {
   empId: string;
   stage: string;
   date: string;
+  email: string;
+  gstin: string;
+  pan: string;
+  address: string;
 }
 
 const ActionMenu = ({ children, align = "end", onRename, onDuplicate, onDelete, onConvert, deleteLabel = "Delete" }: any) => (
@@ -240,6 +248,10 @@ export default function CRMPipelinePage() {
     value: 0,
     leadName: "",
     leadPhone: "",
+    email: "",
+    gstin: "",
+    pan: "",
+    address: "",
     empId: "",
     empName: "",
     priority: "Medium",
@@ -305,7 +317,11 @@ export default function CRMPipelinePage() {
           priority: lead.priority as any,
           priorityColor: lead.priority === 'Critical' ? 'bg-rose-100 text-rose-600' : lead.priority === 'High' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500',
           empName: lead.emp_name || "Unassigned",
-          empId: lead.emp_id || "", // This is the UUID from DB
+          empId: lead.emp_id || "", 
+          email: lead.email || "",
+          gstin: lead.gstin || "",
+          pan: lead.pan || "",
+          address: lead.address || "",
           date: new Date(lead.created_at).toLocaleDateString('en-IN', { month: 'short', day: '2-digit' })
         };
         const boardStage = lead.stage.toLowerCase();
@@ -330,7 +346,20 @@ export default function CRMPipelinePage() {
   const startInlineAdd = (columnId: string | null = null) => {
     setAddingToColumn(columnId);
     setAddingToTable(columnId === null && view === 'database');
-    setInlineForm({ company: "", value: 0, leadName: "", leadPhone: "", empId: "", empName: "", priority: "Medium", priorityColor: "bg-blue-100 text-blue-700" });
+    setInlineForm({ 
+      company: "", 
+      value: 0, 
+      leadName: "", 
+      leadPhone: "", 
+      email: "",
+      gstin: "",
+      pan: "",
+      address: "",
+      empId: "", 
+      empName: "", 
+      priority: "Medium", 
+      priorityColor: "bg-blue-100 text-blue-700" 
+    });
   };
 
   const cancelInlineAdd = () => {
@@ -364,6 +393,10 @@ export default function CRMPipelinePage() {
         value: inlineForm.value,
         lead_name: inlineForm.leadName,
         lead_phone: inlineForm.leadPhone,
+        email: inlineForm.email,
+        gstin: inlineForm.gstin,
+        pan: inlineForm.pan,
+        address: inlineForm.address,
         stage: colId,
         priority: inlineForm.priority,
         emp_id: database_emp_id,
@@ -431,6 +464,10 @@ export default function CRMPipelinePage() {
         value: item.value,
         emp_id: database_emp_id,
         status: 'Active',
+        email: item.email,
+        gstin: item.gstin,
+        pan: item.pan,
+        address: item.address,
         tier: item.priority === 'Critical' ? 'Strategic' : item.priority === 'High' ? 'Key Account' : 'Standard',
         from_pipeline: true,
         converted_at: new Date().toISOString()
@@ -468,6 +505,10 @@ export default function CRMPipelinePage() {
         lead_name: editValues.leadName,
         lead_phone: editValues.leadPhone,
         priority: editValues.priority,
+        email: editValues.email,
+        gstin: editValues.gstin,
+        pan: editValues.pan,
+        address: editValues.address,
         emp_id: database_emp_id,
         emp_name: editValues.empName
       })
@@ -495,6 +536,9 @@ export default function CRMPipelinePage() {
       value: item.value,
       lead_name: item.leadName,
       lead_phone: item.leadPhone,
+      email: item.email,
+      gstin: item.gstin,
+      pan: item.pan,
       stage: columnId,
       priority: item.priority,
       emp_id: database_emp_id,
@@ -692,6 +736,25 @@ export default function CRMPipelinePage() {
                                            <div className="flex items-center gap-2"><span className="text-[10px] uppercase font-black text-black/30 w-16">Value</span><input type="number" value={editValues.value} onChange={(e) => setEditValues({ ...editValues, value: Number(e.target.value) })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 flex-grow" /></div>
                                            <div className="flex items-center gap-2"><span className="text-[10px] uppercase font-black text-black/30 w-16">Contact</span><input value={editValues.leadName} onChange={(e) => setEditValues({ ...editValues, leadName: e.target.value })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 flex-grow" /></div>
                                            <div className="flex items-center gap-2"><span className="text-[10px] uppercase font-black text-black/30 w-16">Phone</span><input value={editValues.leadPhone} onChange={(e) => setEditValues({ ...editValues, leadPhone: e.target.value })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 flex-grow" /></div>
+                                           <div className="flex items-center gap-2"><span className="text-[10px] uppercase font-black text-black/30 w-16">Email</span><input value={editValues.email} onChange={(e) => setEditValues({ ...editValues, email: e.target.value })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 flex-grow" /></div>
+                                           <div className="flex items-center gap-2">
+                                             <span className="text-[10px] uppercase font-black text-black/30 w-16">GSTIN</span>
+                                             <div className="relative flex-grow">
+                                               <input 
+                                                 value={editValues.gstin} 
+                                                 onChange={(e) => {
+                                                   const v = e.target.value.toUpperCase();
+                                                   setEditValues({ ...editValues, gstin: v, pan: extractPANFromGSTIN(v) || editValues.pan });
+                                                 }} 
+                                                 className={cn("bg-transparent text-[11px] font-bold outline-none border-b w-full uppercase", 
+                                                   editValues.gstin && !validateGSTIN(editValues.gstin) ? "border-rose-500" : "border-black/10"
+                                                 )} 
+                                               />
+                                               {editValues.gstin && !validateGSTIN(editValues.gstin) && <AlertTriangle size={10} className="absolute right-0 top-1 text-rose-500" />}
+                                             </div>
+                                           </div>
+                                           <div className="flex items-center gap-2"><span className="text-[10px] uppercase font-black text-black/30 w-16">PAN</span><input value={editValues.pan} onChange={(e) => setEditValues({ ...editValues, pan: e.target.value.toUpperCase() })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 flex-grow uppercase" /></div>
+                                           <div className="flex items-center gap-2"><span className="text-[10px] uppercase font-black text-black/30 w-16">Address</span><input placeholder="Billing Address" value={editValues.address} onChange={(e) => setEditValues({ ...editValues, address: e.target.value })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 flex-grow" /></div>
                                            <div className="flex items-center gap-2 pt-1"><span className="text-[10px] uppercase font-black text-black/30 w-16">Priority</span><CustomSelect value={editValues.priority} onChange={(v: string) => handlePriorityChange(v, true)} placeholder="Rank" options={[{value: 'Medium', label: 'Medium Rank'}, {value: 'High', label: 'High Rank'}, {value: 'Critical', label: 'Critical Rank'}]} /></div>
                                            <div className="flex items-center gap-2 pt-1"><span className="text-[10px] uppercase font-black text-black/30 w-16">Assign</span><div className="flex flex-col gap-1 flex-grow"><CustomSelect value={editValues.empId} onChange={(v: string) => handleEmpIdChange(v, true)} placeholder="Select ID" options={employees.map(e => ({ value: e.employee_id, label: e.name }))} /></div></div>
                                         </div>
@@ -734,6 +797,26 @@ export default function CRMPipelinePage() {
                                   </div>
                                   <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">Contact</span><input placeholder="Person Name" value={inlineForm.leadName} onChange={(e) => setInlineForm({...inlineForm, leadName: e.target.value})} className="w-full text-[10px] font-bold border-b border-black/5 outline-none" /></div>
                                   <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">Phone</span><input placeholder="+91 ..." value={inlineForm.leadPhone} onChange={(e) => setInlineForm({...inlineForm, leadPhone: validatePhone(e.target.value)})} className="w-full text-[10px] font-bold border-b border-black/5 outline-none" /></div>
+                                  <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">Email</span><input placeholder="mail@example.com" value={inlineForm.email} onChange={(e) => setInlineForm({...inlineForm, email: e.target.value})} className="w-full text-[10px] font-bold border-b border-black/5 outline-none" /></div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black text-black/30 uppercase w-12">GSTIN</span>
+                                    <div className="relative flex-grow">
+                                      <input 
+                                        placeholder="27AAAAA0000A1Z5" 
+                                        value={inlineForm.gstin} 
+                                        onChange={(e) => {
+                                          const v = e.target.value.toUpperCase();
+                                          setInlineForm({...inlineForm, gstin: v, pan: extractPANFromGSTIN(v) || inlineForm.pan});
+                                        }} 
+                                        className={cn("w-full text-[10px] font-bold border-b outline-none uppercase", 
+                                          inlineForm.gstin && !validateGSTIN(inlineForm.gstin) ? "border-rose-500" : "border-black/5"
+                                        )} 
+                                      />
+                                      {inlineForm.gstin && !validateGSTIN(inlineForm.gstin) && <AlertTriangle size={10} className="absolute right-0 top-1 text-rose-500" />}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">PAN</span><input placeholder="ABCDE1234F" value={inlineForm.pan} onChange={(e) => setInlineForm({...inlineForm, pan: e.target.value.toUpperCase()})} className="w-full text-[10px] font-bold border-b border-black/5 outline-none uppercase" /></div>
+                                   <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12">Address</span><input placeholder="Billing Address" value={inlineForm.address} onChange={(e) => setInlineForm({...inlineForm, address: e.target.value})} className="w-full text-[10px] font-bold border-b border-black/5 outline-none" /></div>
                                   <div className="flex items-center gap-2"><span className="text-[10px] font-black text-black/30 uppercase w-12 font-black">Rank</span><CustomSelect value={inlineForm.priority} onChange={(v: string) => handlePriorityChange(v)} placeholder="Rank" options={[{value: 'Medium', label: 'Medium Rank'}, {value: 'High', label: 'High Rank'}, {value: 'Critical', label: 'Critical Rank'}]} /></div>
                                   <div className="pt-1">
                                      <div className="flex items-center gap-2">
@@ -788,7 +871,7 @@ export default function CRMPipelinePage() {
         ) : (
           <div className="bg-white border border-black/10 rounded-lg flex-grow overflow-auto scrollbar-hide">
              <table className="w-full text-left border-collapse min-w-[1300px]">
-                <thead><tr className="border-b-2 border-black/5"><th className="px-4 py-3 text-xs font-black text-black/30 w-12 border-r border-black/5"></th>{['Deal/Company', 'Status', 'Value', 'Company Contact Person', 'Phone', 'Assigned Employee (ID)', 'Priority', 'Date'].map(header => (<th key={header} className="px-4 py-3 text-xs font-black text-black/30 border-r border-black/5 hover:bg-black/5 cursor-pointer group transition-colors"><div className="flex items-center justify-between">{header} <ChevronDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" /></div></th>))}</tr></thead>
+                <thead><tr className="border-b-2 border-black/5"><th className="px-4 py-3 text-xs font-black text-black/30 w-12 border-r border-black/5"></th>{['Deal/Company', 'Status', 'Value', 'Company Contact Person', 'Phone', 'Email', 'GSTIN', 'PAN', 'Address', 'Assigned Employee (ID)', 'Priority', 'Date'].map(header => (<th key={header} className="px-4 py-3 text-xs font-black text-black/30 border-r border-black/5 hover:bg-black/5 cursor-pointer group transition-colors"><div className="flex items-center justify-between">{header} <ChevronDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" /></div></th>))}</tr></thead>
                 <tbody>
                    {data.columnOrder.flatMap((colId: string) => data.columns[colId].items.map((item: any) => ({ ...item, column: data.columns[colId], colId }))).map((deal: any) => (
                       <tr key={deal.id} className={cn("border-b border-black/5 transition-colors group", editingId === deal.id ? "bg-black/[0.04]" : "hover:bg-black/[0.01]")}>
@@ -798,6 +881,20 @@ export default function CRMPipelinePage() {
                          <td className="px-4 py-3 border-r border-black/5 text-[13px] font-bold text-black/80">{editingId === deal.id ? (<input type="number" className="bg-transparent text-[13px] font-bold text-black outline-none w-full border-b border-black/20" value={editValues.value} onChange={(e) => setEditValues({ ...editValues, value: Number(e.target.value) })} />) : formatRupee(deal.value)}</td>
                          <td className="px-4 py-3 border-r border-black/5">{editingId === deal.id ? (<input className="bg-transparent text-[13px] font-bold text-black outline-none w-full border-b border-black/20" value={editValues.leadName} onChange={(e) => setEditValues({ ...editValues, leadName: e.target.value })} />) : (<span className="text-[12px] font-bold text-black/60">{deal.leadName}</span>)}</td>
                          <td className="px-4 py-3 border-r border-black/5">{editingId === deal.id ? (<input className="bg-transparent text-[13px] font-bold text-black outline-none w-full border-b border-black/20" value={editValues.leadPhone} onChange={(e) => setEditValues({ ...editValues, leadPhone: e.target.value })} />) : (<span className="text-[12px] font-bold text-black/60">{deal.leadPhone}</span>)}</td>
+                         <td className="px-4 py-3 border-r border-black/5">{editingId === deal.id ? (<input className="bg-transparent text-[13px] font-bold text-black outline-none w-full border-b border-black/20" value={editValues.email || ""} onChange={(e) => setEditValues({ ...editValues, email: e.target.value })} />) : (<span className="text-[12px] font-bold text-black/60">{deal.email || "—"}</span>)}</td>
+                         <td className="px-4 py-3 border-r border-black/5">
+                            {editingId === deal.id ? (
+                              <div className="relative">
+                                <input className={cn("bg-transparent text-[13px] font-bold text-black outline-none w-full border-b uppercase", editValues.gstin && !validateGSTIN(editValues.gstin) ? "border-rose-500" : "border-black/20")} value={editValues.gstin || ""} onChange={(e) => {
+                                  const v = e.target.value.toUpperCase();
+                                  setEditValues({ ...editValues, gstin: v, pan: extractPANFromGSTIN(v) || editValues.pan });
+                                }} />
+                                {editValues.gstin && !validateGSTIN(editValues.gstin) && <AlertTriangle size={10} className="absolute right-0 top-1 text-rose-500" />}
+                              </div>
+                            ) : (<span className="text-[12px] font-bold text-black/60">{deal.gstin || "—"}</span>)}
+                         </td>
+                         <td className="px-4 py-3 border-r border-black/5">{editingId === deal.id ? (<input className="bg-transparent text-[13px] font-bold text-black outline-none w-full border-b border-black/20 uppercase" value={editValues.pan || ""} onChange={(e) => setEditValues({ ...editValues, pan: e.target.value.toUpperCase() })} />) : (<span className="text-[12px] font-bold text-black/60">{deal.pan || "—"}</span>)}</td>
+                          <td className="px-4 py-3 border-r border-black/5">{editingId === deal.id ? (<input className="bg-transparent text-[13px] font-bold text-black outline-none w-full border-b border-black/20" value={editValues.address || ""} onChange={(e) => setEditValues({ ...editValues, address: e.target.value })} />) : (<span className="text-[12px] font-bold text-black/60">{deal.address || "—"}</span>)}</td>
                          <td className="px-4 py-3 border-r border-black/5"><div className="flex items-center gap-2"><div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-bold text-black/50 border border-black/5 flex-shrink-0">{deal.empName[0]}</div>{editingId === deal.id ? (<div className="flex flex-col gap-1 w-full"><CustomSelect value={editValues.empId} onChange={(v: string) => handleEmpIdChange(v, true)} placeholder="ID" options={employees.map(e => ({ value: e.employee_id, label: `${e.name} (${e.employee_id})` }))} /></div>) : (<EmployeeDisplay empId={deal.empId} empName={deal.empName} employees={employees} />)}</div></td>
                          <td className="px-4 py-3 border-r border-black/5">{editingId === deal.id ? (<CustomSelect value={editValues.priority} onChange={(v: string) => handlePriorityChange(v, true)} placeholder="Rank" options={[{value: 'Medium', label: 'Medium Rank'}, {value: 'High', label: 'High Rank'}, {value: 'Critical', label: 'Critical Rank'}]} />) : (<span className={cn("px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap uppercase tracking-tighter shadow-sm", deal.priorityColor)}>{deal.priority}</span>)}</td>
                          <td className="px-4 py-3 text-[12px] font-bold text-black/40 whitespace-nowrap">{deal.date}</td>
@@ -821,6 +918,18 @@ export default function CRMPipelinePage() {
                          </td>
                          <td className="px-4 py-3 border-r border-black/5"><input placeholder="Contact Person" value={inlineForm.leadName} onChange={(e) => setInlineForm({...inlineForm, leadName: e.target.value})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/10 w-full" /></td>
                          <td className="px-4 py-3 border-r border-black/5"><input placeholder="Phone" value={inlineForm.leadPhone} onChange={(e) => setInlineForm({...inlineForm, leadPhone: validatePhone(e.target.value)})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/10 w-full" /></td>
+                         <td className="px-4 py-3 border-r border-black/5"><input placeholder="Email" value={inlineForm.email} onChange={(e) => setInlineForm({...inlineForm, email: e.target.value})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/10 w-full" /></td>
+                         <td className="px-4 py-3 border-r border-black/5">
+                            <div className="relative">
+                               <input placeholder="GSTIN" value={inlineForm.gstin} onChange={(e) => {
+                                 const v = e.target.value.toUpperCase();
+                                 setInlineForm({...inlineForm, gstin: v, pan: extractPANFromGSTIN(v) || inlineForm.pan});
+                               }} className={cn("bg-transparent text-[13px] font-bold outline-none border-b w-full uppercase", inlineForm.gstin && !validateGSTIN(inlineForm.gstin) ? "border-rose-500" : "border-black/10")} />
+                               {inlineForm.gstin && !validateGSTIN(inlineForm.gstin) && <AlertTriangle size={10} className="absolute right-0 top-1 text-rose-500" />}
+                            </div>
+                         </td>
+                         <td className="px-4 py-3 border-r border-black/5"><input placeholder="PAN" value={inlineForm.pan} onChange={(e) => setInlineForm({...inlineForm, pan: e.target.value.toUpperCase()})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/10 w-full uppercase" /></td>
+                          <td className="px-4 py-3 border-r border-black/5"><input placeholder="Address" value={inlineForm.address} onChange={(e) => setInlineForm({...inlineForm, address: e.target.value})} className="bg-transparent text-[13px] font-bold outline-none border-b border-black/10 w-full" /></td>
                          <td className="px-4 py-3 border-r border-black/5"><div className="flex flex-col gap-1"><CustomSelect value={inlineForm.empId} onChange={(v: string) => handleEmpIdChange(v)} placeholder="Select ID" options={employees.map(e => ({ value: e.employee_id, label: e.name }))} /></div></td>
                          <td className="px-4 py-3 border-r border-black/5"><CustomSelect value={inlineForm.priority} onChange={(v: string) => handlePriorityChange(v)} placeholder="Rank" options={[{value: 'Medium', label: 'Medium Rank'}, {value: 'High', label: 'High Rank'}, {value: 'Critical', label: 'Critical Rank'}]} /></td>
                          <td className="px-4 py-3 text-[10px] text-black/30 font-bold uppercase italic animate-pulse">Draft Mode</td>

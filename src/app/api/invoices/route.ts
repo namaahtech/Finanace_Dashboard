@@ -41,6 +41,7 @@ export async function POST(req: Request) {
       billing_address, client_gstin, client_email, place_of_supply,
       subtotal, cgst, sgst, igst, tax, total, amount,
       status, type, items,
+      created_by_emp_id, created_by_name, created_by_dept, created_by_team, created_by_desig,
     } = body;
 
     // Generate invoice number
@@ -77,6 +78,11 @@ export async function POST(req: Request) {
         amount: Number(amount) || 0,
         status: status || "draft",
         type: type || "receivable",
+        created_by_emp_id:  created_by_emp_id  || null,
+        created_by_name:    created_by_name    || null,
+        created_by_dept:    created_by_dept    || null,
+        created_by_team:    created_by_team    || null,
+        created_by_desig:   created_by_desig   || null,
       })
       .select()
       .single();

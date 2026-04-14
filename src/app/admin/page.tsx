@@ -26,6 +26,7 @@ import {
   Users,
   ChevronRight,
 } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 import {
   BarChart,
   Bar,
@@ -156,6 +157,7 @@ const MOCK_CONFIG: ConfigShape = {
 
 export default function AdminOverview() {
   const { request } = useApi();
+  const { showToast } = useToast();
   const [config, setConfig] = useState<ConfigShape>(MOCK_CONFIG);
   const [employeeRows, setEmployeeRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -200,14 +202,14 @@ export default function AdminOverview() {
           })
         );
         setEmployeeRows(rows);
-      } catch {
-        // Use mock data on error
+      } catch (err: any) {
+        showToast("Synchronization failure. Displaying offline metrics.", "warning");
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [request]);
+  }, [request, showToast]);
 
   const companyScore = calculateCompanyScore(
     config.revenue_achievement_percentage,

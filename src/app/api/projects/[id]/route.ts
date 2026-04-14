@@ -7,7 +7,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const body = await req.json();
 
-    const { name, description, budget, client_id, phase, due_date, team_ids, is_active } = body;
+    const { name, description, budget, client_id, phase, issued_date, due_date, team_ids, is_active } = body;
 
     // 1. Update Project
     const { error: pError } = await supabase
@@ -18,6 +18,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         budget: budget !== undefined ? Number(budget) : undefined,
         client_id,
         phase,
+        issued_date,
         due_date,
         is_active,
         updated_at: new Date().toISOString()

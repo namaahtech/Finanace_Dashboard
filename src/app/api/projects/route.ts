@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   try {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
-    const { name, description, budget, client_id, phase, due_date, team_ids } = body;
+    const { name, description, budget, client_id, phase, issued_date, due_date, team_ids } = body;
 
     if (!name || !client_id) {
       return NextResponse.json({ error: "Name and Client are required" }, { status: 400 });
@@ -60,6 +60,7 @@ export async function POST(req: Request) {
         budget: Number(budget) || 0,
         client_id,
         phase: phase || "SCOPING",
+        issued_date,
         due_date,
         is_active: true
       })
