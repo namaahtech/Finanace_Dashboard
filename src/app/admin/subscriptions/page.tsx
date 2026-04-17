@@ -11,6 +11,8 @@ import {
   Zap, ChevronDown, MailCheck,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useAuth } from "@/components/layout/AuthProvider";
+import { useToast } from "@/components/ui/Toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -195,6 +197,8 @@ function daysUntilRenewal(date: string | null) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SubscriptionsPage() {
+  const { user } = useAuth();
+  const { showToast } = useToast();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -231,6 +235,7 @@ export default function SubscriptionsPage() {
   const [assignTeamId, setAssignTeamId] = useState("");
   const [assignEmpId, setAssignEmpId] = useState("");
   const [assignSeats, setAssignSeats] = useState("1");
+  const [assignAccessEmail, setAssignAccessEmail] = useState("");
   const [assignLogin, setAssignLogin] = useState("");
   const [assignNote, setAssignNote] = useState("");
   const [assignEmpSearch, setAssignEmpSearch] = useState("");
@@ -410,22 +415,33 @@ export default function SubscriptionsPage() {
         filed_by_desig: subForm.filed_by_desig || undefined,
         filed_by_uuid: subForm.filed_by_uuid || undefined,
       };
+
       if (editingSub) {
         const res = await fetch(`/api/subscriptions/${editingSub.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         const json = await res.json();
+        if (!res.ok) { showToast(json.error || "Failed to update subscription", "error"); return; }
         if (json.subscription) setSubscriptions(prev => prev.map(s => s.id === editingSub.id ? { ...s, ...json.subscription } : s));
+        showToast(`${subForm.name} updated successfully`, "success");
       } else {
-        await fetch("/api/subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const res = await fetch("/api/subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const json = await res.json();
+        if (!res.ok) { showToast(json.error || "Failed to add subscription", "error"); return; }
         loadSubscriptions();
+        showToast(`${subForm.name} added to subscriptions`, "success");
       }
+
       closeSubModal();
+    } catch {
+      showToast("Something went wrong. Please try again.", "error");
     } finally { setSaving(false); }
   }
 
   async function handleDeleteSub(s: Subscription) {
     setDeletingId(s.id);
-    try { await fetch(`/api/subscriptions/${s.id}`, { method: "DELETE" }); }
-    finally { setDeletingId(null); setConfirmDelete(null); }
+    try {
+      await fetch(`/api/subscriptions/${s.id}`, { method: "DELETE" });
+      setSubscriptions(prev => prev.filter(x => x.id !== s.id));
+    } finally { setDeletingId(null); setConfirmDelete(null); }
   }
 
   // ─── Assign Actions ────────────────────────────────────────────────────────
@@ -433,20 +449,34 @@ export default function SubscriptionsPage() {
   function openAssign(s: Subscription) {
     setAssignTarget(s);
     setAssignType("dept_team"); setAssignDept(""); setAssignTeamId("");
-    setAssignEmpId(""); setAssignSeats("1"); setAssignLogin(""); setAssignNote("");
+    setAssignEmpId(""); setAssignSeats("1");
+    setAssignAccessEmail(""); setAssignLogin(""); setAssignNote("");
     setAssignEmpSearch(""); setSelectedAssignEmp(null);
     setShowAssignModal(true);
   }
 
-  async function handleSaveAssign() {
+  async function handleSaveAssign(shouldSendEmail = false) {
     if (!assignTarget) return;
     setSaving(true);
     try {
       const payload = assignType === "employee"
         ? { assignment_type: "employee", employee_id: assignEmpId || null, seats_allocated: Number(assignSeats) || 1, access_email: selectedAssignEmp?.email || null, access_login: assignLogin, access_note: assignNote }
-        : { assignment_type: assignTeamId ? "team" : "department", department_name: assignDept || null, team_id: assignTeamId || null, seats_allocated: Number(assignSeats) || 1, access_login: assignLogin, access_note: assignNote };
+        : { assignment_type: assignTeamId ? "team" : "department", department_name: assignDept || null, team_id: assignTeamId || null, seats_allocated: Number(assignSeats) || 1, access_email: assignAccessEmail || null, access_login: assignLogin, access_note: assignNote };
 
-      await fetch(`/api/subscriptions/${assignTarget.id}/assign`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const res = await fetch(`/api/subscriptions/${assignTarget.id}/assign`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const json = await res.json();
+
+      if (!res.ok) {
+        showToast(json.error || "Failed to save assignment", "error");
+        return;
+      }
+
+      if (shouldSendEmail && json.assignment?.id) {
+        await handleSendAccess(assignTarget.id, [json.assignment.id]);
+      } else if (!shouldSendEmail) {
+        showToast("Assignment saved successfully", "success");
+      }
+
       loadSubscriptions();
       setShowAssignModal(false);
     } finally { setSaving(false); }
@@ -463,19 +493,31 @@ export default function SubscriptionsPage() {
     try {
       const res = await fetch(`/api/subscriptions/${subId}/send-access`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignment_ids: assignmentIds }),
+        body: JSON.stringify({
+          assignment_ids: assignmentIds,
+          sent_by_emp_id: user?.employee_id || null,
+          sent_by_name: user?.name || null,
+        }),
       });
       const json = await res.json();
+      if (json.error) { showToast(json.error, "error"); return; }
       if (json.sent > 0) {
+        showToast(`Credentials sent to ${json.sent} recipient${json.sent !== 1 ? "s" : ""}`, "success");
         setSendSuccess(prev => new Set([...prev, ...assignmentIds]));
         setTimeout(() => setSendSuccess(prev => { const n = new Set(prev); assignmentIds.forEach(i => n.delete(i)); return n; }), 3000);
         loadSubscriptions();
+      } else if (json.total > 0) {
+        showToast("No emails could be sent — check access email addresses", "warning");
       }
     } finally { setSendingIds(prev => { const n = new Set(prev); assignmentIds.forEach(i => n.delete(i)); return n; }); }
   }
 
   const subFormValid = !!subForm.name && !!subForm.cost_per_seat && !!subForm.total_seats && (editingSub || !!subForm.filed_by_uuid);
   const assignValid = assignType === "employee" ? !!assignEmpId : !!assignDept;
+  // "Save & Send" requires an email address to actually deliver credentials
+  const canSendEmail = assignType === "employee"
+    ? !!assignEmpId && !!(selectedAssignEmp?.email)
+    : !!assignDept && !!assignAccessEmail;
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -633,7 +675,7 @@ export default function SubscriptionsPage() {
                           </td>
                           {/* Monthly Cost */}
                           <td className="px-5 py-3 text-sm font-bold text-red-500">
-                            {mc > 0 ? `−${formatCurrency(mc)}` : <span className="text-theme-subtle text-xs">One-time</span>}
+                            {mc > 0 ? `−${formatCurrency(mc, s.currency)}` : <span className="text-theme-subtle text-xs">One-time</span>}
                           </td>
                           {/* Renewal */}
                           <td className="px-5 py-3">
@@ -816,302 +858,339 @@ export default function SubscriptionsPage() {
       ══════════════════════════════════════════════════════════════════ */}
       {showSubModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-[72vw] max-h-[90vh] flex flex-col rounded-2xl bg-theme-surface border border-theme-border shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-theme-border px-7 py-4 flex-shrink-0 bg-theme-raised/30">
+          <div className="w-[76vw] max-h-[88vh] flex flex-col rounded-2xl bg-theme-surface border border-theme-border shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+
+            {/* ── Modal Header ─────────────────────────────────────────────── */}
+            <div className="flex items-center justify-between border-b border-theme-border px-6 py-4 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <div className={cn("flex h-11 w-11 items-center justify-center rounded-2xl border",
-                  editingSub ? "bg-amber-500/10 border-amber-200/50" : "bg-sky-500/10 border-sky-200/50")}>
-                  {editingSub ? <Pencil size={20} className="text-amber-600" /> : <CreditCard size={20} className="text-sky-600" />}
+                <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl border",
+                  editingSub ? "bg-amber-500/10 border-amber-200/50" : "bg-theme-raised border-theme-border")}>
+                  {editingSub ? <Pencil size={17} className="text-amber-600" /> : <CreditCard size={17} className="text-theme-muted" />}
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-theme-fg">{editingSub ? "Edit Subscription" : "Add Subscription"}</h3>
-                  <p className="text-[10px] text-theme-muted font-bold uppercase tracking-widest mt-0.5 opacity-60">
-                    {editingSub ? `Editing ${editingSub.sub_number}` : "Register a new SaaS tool or license"}
+                  <h3 className="text-sm font-black text-theme-fg leading-none">
+                    {editingSub ? "Edit Subscription" : "Add Subscription"}
+                  </h3>
+                  <p className="text-[10px] text-theme-subtle mt-1">
+                    {editingSub ? `${editingSub.sub_number} · ${editingSub.name}` : "Register a new SaaS tool or license"}
                   </p>
                 </div>
               </div>
-              <button onClick={closeSubModal} className="rounded-xl p-2 text-theme-muted hover:bg-theme-raised transition-all"><X size={18} /></button>
+              <button onClick={closeSubModal} className="rounded-xl p-2 text-theme-muted hover:bg-theme-raised transition-all"><X size={16} /></button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-7">
-              {/* Sequential Loading: Authorization First */}
-              {!editingSub && (
-                <div className="mb-8 border-b border-theme-border pb-8">
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-2"><Shield size={12} />Audit Step 1: Authorization</p>
-                    {subForm.filed_by_uuid && (
-                      <button onClick={() => setSubForm(f => ({ ...f, filed_by_emp_id: "", filed_by_name: "", filed_by_dept: "", filed_by_desig: "", filed_by_uuid: "" }))}
-                        className="text-[10px] font-black text-red-500 uppercase hover:underline">Revoke signature</button>
-                    )}
-                  </div>
+            <div className="flex-1 overflow-y-auto">
 
-                  <div className="max-w-md">
+              {/* ── Authorization Strip (new subscriptions only) ───────────── */}
+              {!editingSub && (
+                <div className={cn("px-6 py-4 border-b border-theme-border transition-colors",
+                  subForm.filed_by_uuid ? "bg-emerald-500/[0.04]" : "bg-theme-raised/40")}>
+                  <div className="flex items-center gap-4">
+                    <div className={cn("flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors",
+                      subForm.filed_by_uuid ? "bg-emerald-500 text-white" : "bg-theme-raised text-theme-muted border border-theme-border")}>
+                      {subForm.filed_by_uuid ? <CheckCircle2 size={15} /> : <Shield size={14} />}
+                    </div>
+
                     {!subForm.filed_by_uuid ? (
-                      <div className="relative" ref={empFormDropRef}>
-                        <FLabel>Initiating Personnel (Select from Registry) *</FLabel>
+                      <div className="flex-1 min-w-0 relative" ref={empFormDropRef}>
                         <div className="relative">
-                          <User size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
+                          <User size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
                           <input value={empFormSearch} onFocus={() => setShowEmpFormDrop(true)}
                             onChange={e => { setEmpFormSearch(e.target.value); setShowEmpFormDrop(true); }}
-                            placeholder="Type Name or EMP ID…" className="w-full h-11 rounded-xl border-2 border-theme-border bg-theme-page pl-10 pr-4 text-sm font-black text-theme-fg outline-none focus:border-blue-500 transition-all font-mono" />
+                            placeholder="Select initiating personnel from registry to authorize…"
+                            className="w-full h-9 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs font-semibold text-theme-fg outline-none focus:border-theme-strong transition-all placeholder:font-normal placeholder:text-theme-subtle" />
                         </div>
                         {showEmpFormDrop && (
-                          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-theme-border bg-theme-surface shadow-2xl p-1 animate-in slide-in-from-top-2 duration-200">
+                          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-theme-border bg-theme-surface shadow-2xl p-1 animate-in slide-in-from-top-2 duration-200">
                             {filteredEmpForm.length === 0 ? (
-                              <div className="px-4 py-8 text-center"><p className="text-xs text-theme-muted font-bold">No registered personnel found</p></div>
-                            ) : (
-                              filteredEmpForm.map(e => (
-                                <button key={e.id} onClick={() => {
-                                  setSubForm(f => ({
-                                    ...f,
-                                    filed_by_emp_id: e.employee_id,
-                                    filed_by_name: e.name,
-                                    filed_by_dept: e.department,
-                                    filed_by_desig: e.designation,
-                                    filed_by_uuid: e.id,
-                                  }));
-                                  setShowEmpFormDrop(false);
-                                  setEmpFormSearch("");
-                                }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-theme-raised text-left transition-colors group">
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-theme-raised text-[10px] font-black text-theme-muted group-hover:bg-blue-500 group-hover:text-white transition-colors">
-                                    {e.name.slice(0, 2).toUpperCase()}
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-black text-theme-fg leading-none mb-0.5">{e.name}</p>
-                                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-tight font-mono">{e.employee_id} · {e.department}</p>
-                                  </div>
-                                </button>
-                              ))
-                            )}
+                              <div className="px-4 py-6 text-center"><p className="text-xs text-theme-muted">No registered personnel found</p></div>
+                            ) : filteredEmpForm.map(e => (
+                              <button key={e.id} onClick={() => {
+                                setSubForm(f => ({ ...f, filed_by_emp_id: e.employee_id, filed_by_name: e.name, filed_by_dept: e.department, filed_by_desig: e.designation, filed_by_uuid: e.id }));
+                                setShowEmpFormDrop(false); setEmpFormSearch("");
+                              }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 hover:bg-theme-raised text-left transition-colors group">
+                                <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-theme-raised text-[10px] font-black text-theme-muted group-hover:bg-theme-primary group-hover:text-theme-surface transition-colors">
+                                  {e.name.slice(0, 2).toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-theme-fg truncate">{e.name}</p>
+                                  <p className="text-[10px] text-theme-muted font-mono">{e.employee_id} · {e.department}</p>
+                                </div>
+                              </button>
+                            ))}
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50/10 p-5 shadow-sm ring-4 ring-emerald-500/5 animate-in zoom-in-95 duration-300">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-200">
-                          <CheckCircle2 size={24} />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">Verified Personnel</span>
-                            <span className="text-[9px] font-bold text-theme-muted font-mono">{subForm.filed_by_emp_id}</span>
+                      <div className="flex flex-1 items-center gap-3 min-w-0">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Authorized</span>
+                            <span className="text-[10px] text-theme-subtle font-mono">{subForm.filed_by_emp_id}</span>
                           </div>
-                          <p className="text-lg font-black text-theme-fg leading-none">{subForm.filed_by_name}</p>
-                          <p className="text-xs font-bold text-theme-muted mt-1 uppercase tracking-wider">{subForm.filed_by_desig} · {subForm.filed_by_dept}</p>
+                          <p className="text-sm font-bold text-theme-fg leading-tight truncate">{subForm.filed_by_name}</p>
+                          <p className="text-[10px] text-theme-muted">{subForm.filed_by_desig} · {subForm.filed_by_dept}</p>
                         </div>
+                        <button onClick={() => setSubForm(f => ({ ...f, filed_by_emp_id: "", filed_by_name: "", filed_by_dept: "", filed_by_desig: "", filed_by_uuid: "" }))}
+                          className="ml-auto flex-shrink-0 text-[10px] font-bold text-theme-muted hover:text-red-500 transition-colors uppercase tracking-wide">
+                          Change
+                        </button>
                       </div>
                     )}
+
+                    <p className={cn("flex-shrink-0 text-[10px] font-semibold", subForm.filed_by_uuid ? "text-emerald-600" : "text-theme-subtle")}>
+                      {subForm.filed_by_uuid ? "Ready to save" : "Required to proceed"}
+                    </p>
                   </div>
                 </div>
               )}
 
-              <div className={cn("transition-all duration-300", 
-                 !editingSub && !subForm.filed_by_uuid ? "opacity-30 pointer-events-none grayscale blur-[1px]" : "opacity-100")}>
-                <div className="grid grid-cols-2 gap-8">
-                  {/* LEFT */}
-                <div className="space-y-5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted flex items-center gap-2"><Layers size={11} />Tool Identity</p>
+              {/* ── Form Body ─────────────────────────────────────────────── */}
+              <div className={cn("p-6 transition-all duration-300",
+                !editingSub && !subForm.filed_by_uuid ? "opacity-40 pointer-events-none select-none" : "opacity-100")}>
+                <div className="grid grid-cols-2 gap-7">
 
-                  {/* Tool name with preset dropdown */}
-                  <div>
-                    <FLabel>Tool / Service Name *</FLabel>
-                    <div className="relative" ref={toolDropRef}>
-                      <CreditCard size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
+                  {/* ── LEFT: Tool Identity ─────────────────────────────── */}
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted flex items-center gap-1.5">
+                      <Layers size={10} />Tool Identity
+                    </p>
+
+                    {/* Name with preset dropdown */}
+                    <div>
+                      <FLabel>Tool / Service Name *</FLabel>
+                      <div className="relative" ref={toolDropRef}>
+                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
                         <input value={toolSearch} onFocus={() => setShowToolDrop(true)}
-                        onChange={e => { setToolSearch(e.target.value); setSubForm(f => ({ ...f, name: e.target.value })); setShowToolDrop(true); }}
-                        placeholder="Search presets or type custom name…"
-                        className="w-full rounded-lg border border-theme-border bg-theme-page pl-9 pr-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-fg transition-all" />
-                      {toolSearch && <button onClick={() => { setToolSearch(""); setSubForm(f => ({ ...f, name: "" })); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-fg"><X size={13} /></button>}
-                      {showToolDrop && (
-                        <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-52 overflow-y-auto rounded-xl border border-theme-border bg-theme-surface shadow-xl">
-                          {toolSearch && !PRESET_TOOLS.find(t => t.name.toLowerCase() === toolSearch.toLowerCase()) && (
-                            <button onClick={() => { setSubForm(f => ({ ...f, name: toolSearch })); setShowToolDrop(false); }}
-                              className="flex w-full items-center gap-2 px-4 py-2.5 hover:bg-theme-raised transition-colors">
-                              <Plus size={11} className="text-blue-500" /><span className="text-xs text-blue-600 font-semibold">Use &ldquo;{toolSearch}&rdquo; as custom tool</span>
-                            </button>
-                          )}
-                          {filteredPresets.map(t => (
-                            <button key={t.name} onClick={() => {
-                              setSubForm(f => ({ ...f, name: t.name, provider: t.provider, category: t.category, website_url: t.website }));
-                              setToolSearch(t.name); setShowToolDrop(false);
-                            }} className="flex w-full items-center justify-between px-4 py-2.5 hover:bg-theme-raised transition-colors">
-                              <div className="flex items-center gap-3">
-                                <div className={cn("flex h-7 w-7 items-center justify-center rounded-lg text-[10px] font-black uppercase", CATEGORY_COLORS[t.category] || "bg-theme-raised text-theme-muted")}>{t.name.slice(0, 2)}</div>
-                                <div className="text-left"><p className="text-xs font-bold text-theme-fg">{t.name}</p><p className="text-[10px] text-theme-muted">{t.provider}</p></div>
-                              </div>
-                              <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-semibold", CATEGORY_COLORS[t.category] || "")}>{t.category}</span>
-                            </button>
-                          ))}
+                          onChange={e => { setToolSearch(e.target.value); setSubForm(f => ({ ...f, name: e.target.value })); setShowToolDrop(true); }}
+                          placeholder="Search presets or type custom name…"
+                          className="w-full rounded-lg border border-theme-border bg-theme-page pl-9 pr-8 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all placeholder:text-theme-subtle" />
+                        {toolSearch && (
+                          <button onClick={() => { setToolSearch(""); setSubForm(f => ({ ...f, name: "" })); }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-fg transition-colors"><X size={13} /></button>
+                        )}
+                        {showToolDrop && (
+                          <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-52 overflow-y-auto rounded-xl border border-theme-border bg-theme-surface shadow-xl">
+                            {toolSearch && !PRESET_TOOLS.find(t => t.name.toLowerCase() === toolSearch.toLowerCase()) && (
+                              <button onClick={() => { setSubForm(f => ({ ...f, name: toolSearch })); setShowToolDrop(false); }}
+                                className="flex w-full items-center gap-2 border-b border-theme-border px-4 py-2.5 hover:bg-theme-raised transition-colors">
+                                <Plus size={11} className="text-sky-500" />
+                                <span className="text-xs text-sky-600 font-semibold">Use &ldquo;{toolSearch}&rdquo; as custom tool</span>
+                              </button>
+                            )}
+                            {filteredPresets.map(t => (
+                              <button key={t.name} onClick={() => {
+                                setSubForm(f => ({ ...f, name: t.name, provider: t.provider, category: t.category, website_url: t.website }));
+                                setToolSearch(t.name); setShowToolDrop(false);
+                              }} className="flex w-full items-center justify-between px-4 py-2.5 hover:bg-theme-raised transition-colors">
+                                <div className="flex items-center gap-3">
+                                  <div className={cn("flex h-7 w-7 items-center justify-center rounded-lg text-[10px] font-black uppercase flex-shrink-0", CATEGORY_COLORS[t.category] || "bg-theme-raised text-theme-muted")}>
+                                    {t.name.slice(0, 2)}
+                                  </div>
+                                  <div className="text-left">
+                                    <p className="text-xs font-semibold text-theme-fg">{t.name}</p>
+                                    <p className="text-[10px] text-theme-muted">{t.provider}</p>
+                                  </div>
+                                </div>
+                                <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-semibold flex-shrink-0", CATEGORY_COLORS[t.category] || "")}>{t.category}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Inline SaaS preview chip — shows once a name is selected */}
+                      {subForm.name && (
+                        <div className="mt-2 flex items-center gap-2 rounded-lg border border-theme-border bg-theme-raised/60 px-3 py-2">
+                          <div className={cn("flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-[10px] font-black uppercase", CATEGORY_COLORS[subForm.category] || "bg-theme-raised text-theme-muted")}>
+                            {subForm.name.slice(0, 2)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-theme-fg truncate">{subForm.name}</p>
+                            <p className="text-[10px] text-theme-muted truncate">{subForm.provider || "No provider set"}</p>
+                          </div>
+                          <span className={cn("flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold", CATEGORY_COLORS[subForm.category] || "bg-theme-raised text-theme-muted")}>
+                            {subForm.category}
+                          </span>
                         </div>
                       )}
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><FLabel>Provider / Vendor</FLabel><div className="relative"><Building2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" /><FInput value={subForm.provider} onChange={v => setSubForm(f => ({ ...f, provider: v }))} placeholder="e.g. Anthropic" className="pl-9" /></div></div>
-                    <div>
-                      <FLabel>Category</FLabel>
-                      <FSelect value={subForm.category} onChange={v => setSubForm(f => ({ ...f, category: v }))}>
-                        {SUB_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                      </FSelect>
-                    </div>
-                  </div>
-
-                  <div><FLabel>Website URL</FLabel><div className="relative"><Globe size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" /><FInput value={subForm.website_url} onChange={v => setSubForm(f => ({ ...f, website_url: v }))} placeholder="https://…" className="pl-9" /></div></div>
-
-                  <div>
-                    <FLabel>Status</FLabel>
-                    <div className="flex gap-2 flex-wrap">
-                      {(["active", "trial", "inactive", "cancelled"] as const).map(s => (
-                        <button key={s} onClick={() => setSubForm(f => ({ ...f, status: s }))}
-                          className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all capitalize",
-                            subForm.status === s ? `${STATUS_STYLES[s].bg} ${STATUS_STYLES[s].text} border-current` : "border-theme-border text-theme-muted hover:text-theme-fg")}>
-                          {STATUS_STYLES[s].label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div><FLabel>Notes</FLabel><div className="relative"><StickyNote size={13} className="absolute left-3 top-3 text-theme-muted pointer-events-none" /><textarea value={subForm.notes} onChange={e => setSubForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any extra notes…" rows={3} className="w-full rounded-lg border border-theme-border bg-theme-page pl-9 pr-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-fg transition-all resize-none placeholder:text-theme-subtle" /></div></div>
-                </div>
-
-                {/* RIGHT */}
-                <div className="space-y-5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted flex items-center gap-2"><IndianRupee size={11} />Billing & Seats</p>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <FLabel>Cost per Seat *</FLabel>
-                      <div className="relative flex">
-                        <select value={subForm.currency} onChange={e => setSubForm(f => ({ ...f, currency: e.target.value }))}
-                          className="h-[38px] w-20 rounded-l-lg border border-theme-border border-r-0 bg-theme-raised px-2 text-xs font-bold text-theme-fg outline-none transition-all">
-                          {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
-                        </select>
-                        <FInput type="number" value={subForm.cost_per_seat} onChange={v => setSubForm(f => ({ ...f, cost_per_seat: v }))} placeholder="0.00" className="rounded-l-none font-mono" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <FLabel>Provider / Vendor</FLabel>
+                        <div className="relative">
+                          <Building2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
+                          <FInput value={subForm.provider} onChange={v => setSubForm(f => ({ ...f, provider: v }))} placeholder="e.g. Anthropic" className="pl-9" />
+                        </div>
+                      </div>
+                      <div>
+                        <FLabel>Category</FLabel>
+                        <FSelect value={subForm.category} onChange={v => setSubForm(f => ({ ...f, category: v }))}>
+                          {SUB_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </FSelect>
                       </div>
                     </div>
-                    <div><FLabel>Total Seats *</FLabel><div className="relative"><Users size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" /><FInput type="number" value={subForm.total_seats} onChange={v => setSubForm(f => ({ ...f, total_seats: v }))} placeholder="1" className="pl-9 font-mono" /></div></div>
-                  </div>
 
-                  <div>
-                    <FLabel>Billing Cycle *</FLabel>
-                    <div className="flex gap-2 flex-wrap">
-                      {BILLING_CYCLES.map(c => (
-                        <button key={c} onClick={() => setSubForm(f => ({ ...f, billing_cycle: c }))}
-                          className={cn("rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all",
-                            subForm.billing_cycle === c ? "border-black bg-black/5 text-black" : "border-theme-border text-theme-muted hover:text-theme-fg")}>
-                          {c}
-                        </button>
-                      ))}
+                    <div>
+                      <FLabel>Website URL</FLabel>
+                      <div className="relative">
+                        <Globe size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
+                        <FInput value={subForm.website_url} onChange={v => setSubForm(f => ({ ...f, website_url: v }))} placeholder="https://…" className="pl-9" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <FLabel>Status</FLabel>
+                      <div className="flex gap-2 flex-wrap">
+                        {(["active", "trial", "inactive", "cancelled"] as const).map(s => (
+                          <button key={s} onClick={() => setSubForm(f => ({ ...f, status: s }))}
+                            className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all",
+                              subForm.status === s
+                                ? `${STATUS_STYLES[s].bg} ${STATUS_STYLES[s].text} border-current`
+                                : "border-theme-border text-theme-muted hover:text-theme-fg")}>
+                            {STATUS_STYLES[s].label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <FLabel>Notes</FLabel>
+                      <div className="relative">
+                        <StickyNote size={13} className="absolute left-3 top-3 text-theme-muted pointer-events-none" />
+                        <textarea value={subForm.notes} onChange={e => setSubForm(f => ({ ...f, notes: e.target.value }))}
+                          placeholder="Vendor notes, contract terms, special access instructions…" rows={3}
+                          className="w-full rounded-lg border border-theme-border bg-theme-page pl-9 pr-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all resize-none placeholder:text-theme-subtle" />
+                      </div>
                     </div>
                   </div>
 
-                  <div><FLabel>Renewal Date</FLabel><div className="relative"><Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" /><FInput type="date" value={subForm.renewal_date} onChange={v => setSubForm(f => ({ ...f, renewal_date: v }))} className="pl-9" /></div></div>
+                  {/* ── RIGHT: Billing & Cost Analysis ──────────────────── */}
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted flex items-center gap-1.5">
+                      <CreditCard size={10} />Billing & Seats
+                    </p>
 
-                  {/* Live summary with currency converter from Frankfurter */}
-                  {subFormValid && (
-                    <div className="rounded-xl border border-theme-border bg-theme-page p-4 space-y-3 shadow-sm border-t-2 border-t-black">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Realtime Cost Analysis</p>
-                        <div className="relative w-44">
-                          <select value={displayCurrency} onChange={(e) => setDisplayCurrency(e.target.value)}
-                            className="h-7 w-full appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-[11px] font-black text-theme-fg outline-none focus:border-theme-fg transition-all cursor-pointer">
-                            {CURRENCIES.map(c => <option key={c.code} value={c.code}>Estimate in {c.code} ({c.symbol})</option>)}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <FLabel>Cost per Seat *</FLabel>
+                        <div className="flex">
+                          <select value={subForm.currency} onChange={e => setSubForm(f => ({ ...f, currency: e.target.value }))}
+                            className="h-[38px] w-[72px] rounded-l-lg border border-theme-border border-r-0 bg-theme-raised px-2 text-xs font-bold text-theme-fg outline-none focus:border-theme-strong transition-all flex-shrink-0">
+                            {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
                           </select>
-                          <ChevronDown size={10} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted" />
+                          <FInput type="number" value={subForm.cost_per_seat} onChange={v => setSubForm(f => ({ ...f, cost_per_seat: v }))} placeholder="0.00" className="rounded-l-none font-mono" />
                         </div>
                       </div>
-
-                      <div className="space-y-2.5 text-xs">
-                        {(() => {
-                          const base = CURRENCIES.find(c => c.code === subForm.currency) || { code: "INR", symbol: "₹" };
-                          const target = CURRENCIES.find(c => c.code === displayCurrency) || { code: "USD", symbol: "$" };
-                          const rate = exchangeRates[displayCurrency] || 1;
-                          
-                          const costPerSeatBase = Number(subForm.cost_per_seat) || 0;
-                          const totalS = Number(subForm.total_seats) || 1;
-                          const costPerSeatTarget = costPerSeatBase * rate;
-                          
-                          const monthlyBase = subForm.billing_cycle === "Annual" ? (costPerSeatBase * totalS) / 12 :
-                                            subForm.billing_cycle === "Quarterly" ? (costPerSeatBase * totalS) / 3 :
-                                            subForm.billing_cycle === "One-time" ? 0 :
-                                            costPerSeatBase * totalS;
-
-                          const monthlyTarget = monthlyBase * rate;
-
-                          return (
-                            <>
-                              <div className="flex justify-between items-center text-theme-muted font-semibold">
-                                <span>Unit Price ({base.code})</span>
-                                <span className="font-bold text-theme-fg">{base.symbol}{costPerSeatBase.toLocaleString()}</span>
-                              </div>
-                              <div className="flex justify-between items-center text-theme-muted font-semibold">
-                                <span>Total Subscribed Seats</span>
-                                <span className="font-bold text-theme-fg">{totalS} units</span>
-                              </div>
-                              <div className="flex justify-between items-center text-theme-muted border-b border-theme-border pb-2.5 mb-1 font-semibold">
-                                <span>Billing Model</span>
-                                <span className="font-bold text-theme-fg uppercase tracking-wider text-[10px] bg-theme-raised px-2 py-0.5 rounded italic opacity-70">{subForm.billing_cycle}</span>
-                              </div>
-
-                              {displayCurrency !== subForm.currency && (
-                                <div className="rounded-xl bg-theme-raised/40 p-3 space-y-2 relative overflow-hidden ring-1 ring-theme-border/50">
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-theme-subtle">Frankfurter FX Rate</span>
-                                    <span className="font-black text-theme-fg text-[11px] font-mono">1 {base.code} = {rate.toFixed(4)} {target.code}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center border-t border-theme-border/50 pt-2">
-                                    <span className="text-theme-muted font-bold text-[11px]">Converted Unit Price</span>
-                                    <span className="font-black text-theme-fg">{target.symbol}{costPerSeatTarget.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-theme-muted font-bold text-[11px]">Converted Total</span>
-                                    <span className="font-black text-theme-fg">{target.symbol}{monthlyTarget.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                  </div>
-                                </div>
-                              )}
-
-                              <div className="flex justify-between border-t-2 border-theme-border/50 pt-4 mt-2">
-                                <div>
-                                  <p className="font-black text-theme-fg uppercase tracking-widest text-[9px] mb-0.5">Final Commitment ({base.code})</p>
-                                  <p className="text-[10px] font-bold text-theme-muted italic opacity-60 italic">Stored Value</p>
-                                </div>
-                                <div className="text-right">
-                                  <div className="font-black text-red-500 text-base leading-tight">
-                                    {subForm.billing_cycle === "One-time" ? "N/A" :
-                                      `${base.symbol}${monthlyBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                  </div>
-                                  <p className="text-[9px] font-black text-theme-muted uppercase tracking-tighter">{base.code} / MONTH</p>
-                                </div>
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                      {loadingRates && <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest animate-pulse mt-2 text-center">Syncing Localized Rates</p>}
-                    </div>
-                  )}
-
-                  {subForm.name && subForm.category && (
-                    <div className="rounded-xl border border-theme-border bg-theme-page p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted mb-3">SaaS Preview</p>
-                      <div className="flex items-center gap-3">
-                        <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl text-[11px] font-black uppercase", CATEGORY_COLORS[subForm.category] || "bg-theme-raised text-theme-muted")}>{subForm.name.slice(0, 2)}</div>
-                        <div>
-                          <p className="text-sm font-black text-theme-fg">{subForm.name}</p>
-                          <p className="text-[11px] text-theme-muted">{subForm.provider || "—"}</p>
+                      <div>
+                        <FLabel>Total Seats *</FLabel>
+                        <div className="relative">
+                          <Users size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
+                          <FInput type="number" value={subForm.total_seats} onChange={v => setSubForm(f => ({ ...f, total_seats: v }))} placeholder="1" className="pl-9 font-mono" />
                         </div>
-                        <span className={cn("ml-auto rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-tighter", CATEGORY_COLORS[subForm.category] || "")}>{subForm.category}</span>
                       </div>
                     </div>
-                  )}
-                </div> {/* Closes RIGHT column */}
-              </div> {/* Closes grid-cols-2 */}
-              </div> {/* Closes transition-all wrapper */}
+
+                    <div>
+                      <FLabel>Billing Cycle *</FLabel>
+                      <div className="flex gap-2">
+                        {BILLING_CYCLES.map(c => (
+                          <button key={c} onClick={() => setSubForm(f => ({ ...f, billing_cycle: c }))}
+                            className={cn("flex-1 rounded-lg border py-1.5 text-xs font-semibold transition-all text-center",
+                              subForm.billing_cycle === c
+                                ? "border-theme-primary bg-theme-primary/5 text-theme-primary"
+                                : "border-theme-border text-theme-muted hover:border-theme-strong hover:text-theme-fg")}>
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <FLabel>Renewal Date</FLabel>
+                      <div className="relative">
+                        <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
+                        <FInput type="date" value={subForm.renewal_date} onChange={v => setSubForm(f => ({ ...f, renewal_date: v }))} className="pl-9" />
+                      </div>
+                    </div>
+
+                    {/* Cost Analysis — visible as soon as cost + seats are entered */}
+                    {subForm.cost_per_seat && subForm.total_seats && (
+                      <div className="rounded-xl border border-theme-border bg-theme-page p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Cost Analysis</p>
+                          <div className="relative">
+                            <select value={displayCurrency} onChange={(e) => setDisplayCurrency(e.target.value)}
+                              className="h-6 appearance-none rounded-md border border-theme-border bg-theme-raised pl-2 pr-6 text-[10px] font-bold text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer">
+                              {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>)}
+                            </select>
+                            <ChevronDown size={9} className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-theme-muted" />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 text-xs">
+                          {(() => {
+                            const base = CURRENCIES.find(c => c.code === subForm.currency) || { code: "INR", symbol: "₹" };
+                            const target = CURRENCIES.find(c => c.code === displayCurrency) || { code: "INR", symbol: "₹" };
+                            const rate = exchangeRates[displayCurrency] || 1;
+                            const costPerSeatBase = Number(subForm.cost_per_seat) || 0;
+                            const totalS = Number(subForm.total_seats) || 1;
+                            const monthlyBase = subForm.billing_cycle === "Annual" ? (costPerSeatBase * totalS) / 12
+                              : subForm.billing_cycle === "Quarterly" ? (costPerSeatBase * totalS) / 3
+                              : subForm.billing_cycle === "One-time" ? 0
+                              : costPerSeatBase * totalS;
+                            const monthlyTarget = monthlyBase * rate;
+
+                            return (
+                              <>
+                                <div className="flex justify-between text-theme-muted">
+                                  <span>Unit Price</span>
+                                  <span className="font-semibold text-theme-fg font-mono">{base.symbol}{costPerSeatBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                                <div className="flex justify-between text-theme-muted">
+                                  <span>Seats</span>
+                                  <span className="font-semibold text-theme-fg">{totalS} × {subForm.billing_cycle}</span>
+                                </div>
+
+                                {displayCurrency !== subForm.currency && (
+                                  <div className="rounded-lg bg-theme-raised p-2.5 text-[10px] space-y-1.5 border border-theme-border/50">
+                                    <div className="flex justify-between text-theme-subtle">
+                                      <span>FX Rate (Frankfurter)</span>
+                                      <span className="font-mono font-semibold text-theme-muted">1 {base.code} = {rate.toFixed(4)} {target.code}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-theme-muted">Converted Monthly</span>
+                                      <span className="font-bold text-theme-fg">{target.symbol}{monthlyTarget.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="flex justify-between items-center border-t border-theme-border pt-2.5 mt-1">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Monthly Commitment</span>
+                                  <div className="text-right">
+                                    {subForm.billing_cycle === "One-time"
+                                      ? <span className="text-xs font-semibold text-theme-subtle">One-time only</span>
+                                      : <span className="text-base font-black text-red-500">{base.symbol}{monthlyBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    }
+                                    {subForm.billing_cycle !== "One-time" && <p className="text-[9px] font-bold text-theme-subtle uppercase">{base.code} / mo</p>}
+                                  </div>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                        {loadingRates && <p className="text-[9px] text-sky-500 font-semibold animate-pulse">Fetching live rates…</p>}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </div>
             </div> {/* Closes flex-1 scroll container */}
 
-            <div className="flex items-center justify-between border-t border-theme-border px-7 py-4 flex-shrink-0 bg-theme-page">
-              <p className="text-[10px] text-theme-subtle">After saving, assign this tool to departments, teams or employees</p>
+            <div className="flex items-center justify-between border-t border-theme-border px-6 py-3.5 flex-shrink-0 bg-theme-page">
+              <p className="text-[10px] text-theme-subtle">After saving, use Assign Access to grant tool access to employees or teams.</p>
               <div className="flex gap-2">
                 <Button variant="secondary" size="sm" onClick={closeSubModal}>Cancel</Button>
                 <Button variant="primary" size="sm" disabled={saving || !subFormValid} onClick={handleSaveSub}>
@@ -1170,28 +1249,38 @@ export default function SubscriptionsPage() {
 
               {/* Dept/Team flow */}
               {assignType === "dept_team" && (
-                <div className="grid grid-cols-2 gap-5">
-                  <div>
-                    <FLabel>Department *</FLabel>
-                    <FSelect value={assignDept} onChange={v => { setAssignDept(v); setAssignTeamId(""); }}>
-                      <option value="">Select department…</option>
-                      {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                    </FSelect>
-                    {assignDept && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {employees.filter(e => e.department === assignDept).slice(0, 6).map(e => (
-                          <div key={e.id} title={e.name} className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/10 text-[9px] font-black text-emerald-600 border border-emerald-200/60 uppercase">{e.name.slice(0, 2)}</div>
-                        ))}
-                        {employees.filter(e => e.department === assignDept).length > 6 && <span className="text-[10px] text-theme-muted self-center">+{employees.filter(e => e.department === assignDept).length - 6} more</span>}
-                      </div>
-                    )}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <FLabel>Department *</FLabel>
+                      <FSelect value={assignDept} onChange={v => { setAssignDept(v); setAssignTeamId(""); }}>
+                        <option value="">Select department…</option>
+                        {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                      </FSelect>
+                      {assignDept && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {employees.filter(e => e.department === assignDept).slice(0, 6).map(e => (
+                            <div key={e.id} title={e.name} className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/10 text-[9px] font-black text-emerald-600 border border-emerald-200/60 uppercase">{e.name.slice(0, 2)}</div>
+                          ))}
+                          {employees.filter(e => e.department === assignDept).length > 6 && <span className="text-[10px] text-theme-muted self-center">+{employees.filter(e => e.department === assignDept).length - 6} more</span>}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <FLabel>Team (optional)</FLabel>
+                      <FSelect value={assignTeamId} onChange={setAssignTeamId}>
+                        <option value="">All teams in dept</option>
+                        {filteredTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </FSelect>
+                    </div>
                   </div>
                   <div>
-                    <FLabel>Team (optional)</FLabel>
-                    <FSelect value={assignTeamId} onChange={setAssignTeamId}>
-                      <option value="">All teams in dept</option>
-                      {filteredTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </FSelect>
+                    <FLabel>Access Email (required to send credentials)</FLabel>
+                    <div className="relative">
+                      <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
+                      <FInput value={assignAccessEmail} onChange={setAssignAccessEmail} placeholder="shared-access@company.com or team DL…" className="pl-9" />
+                    </div>
+                    <p className="mt-1 text-[10px] text-theme-subtle">For dept/team assignments use a shared inbox or distribution list. Individual employee credentials use their profile email.</p>
                   </div>
                 </div>
               )}
@@ -1251,7 +1340,7 @@ export default function SubscriptionsPage() {
                     </div>
                   )}
                   {assignType === "dept_team" && assignDept && (
-                    employees.filter(e => e.department === assignDept && (!assignTeamId || teams.find(t => t.id === assignTeamId)?.name === e.department)).slice(0, 5).map(e => (
+                    employees.filter(e => e.department === assignDept).slice(0, 5).map(e => (
                       <div key={e.id} className="flex items-center gap-2 text-xs">
                         <MailCheck size={12} className="text-emerald-500 flex-shrink-0" />
                         <span className="font-semibold text-theme-fg">{e.name}</span>
@@ -1260,7 +1349,7 @@ export default function SubscriptionsPage() {
                     ))
                   )}
                   {assignType === "dept_team" && assignDept && employees.filter(e => e.department === assignDept).length > 5 && (
-                    <p className="text-[11px] text-theme-muted pl-5">+{employees.filter(e => e.department === assignDept).length - 5} more employees</p>
+                    <p className="text-[11px] text-theme-muted pl-5">+{employees.filter(e => e.department === assignDept).length - 5} more in dept</p>
                   )}
                   {((assignType === "dept_team" && !assignDept) || (assignType === "employee" && !selectedAssignEmp)) && (
                     <p className="text-[11px] text-theme-subtle">Select {assignType === "dept_team" ? "a department" : "an employee"} above to preview recipients</p>
@@ -1274,7 +1363,7 @@ export default function SubscriptionsPage() {
               <div className="flex gap-2">
                 <Button variant="secondary" size="sm" onClick={() => setShowAssignModal(false)}>Cancel</Button>
                 <Button variant="secondary" size="sm" disabled={saving || !assignValid} onClick={handleSaveAssign}>{saving ? "Saving…" : "Save Assignment"}</Button>
-                <Button variant="primary" size="sm" disabled={saving || !assignValid} onClick={async () => { await handleSaveAssign(); }}>
+                <Button variant="primary" size="sm" disabled={saving || !canSendEmail} onClick={() => handleSaveAssign(true)}>
                   <Send size={13} className="mr-1.5" />{saving ? "Saving…" : "Save & Send Access Email"}
                 </Button>
               </div>

@@ -37,6 +37,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "assignment_type is required" }, { status: 400 });
     }
 
+    // ── Seat capacity guard ──────────────────────────────────────────────────
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("total_seats, name")
+      .eq("id", id)
+      .single();
+
+    if (sub) {
+      const { data: existing } = await supabase
+        .from("subscription_assignments")
+        .select("seats_allocated")
+        .eq("subscription_id", id);
+
+      const usedSeats = (existing || []).reduce((sum: number, a: { seats_allocated: number }) => sum + (a.seats_allocated || 0), 0);
+      const requested = Number(seats_allocated) || 1;
+      const available = sub.total_seats - usedSeats;
+
+      if (requested > available) {
+        return NextResponse.json(
+          { error: `Only ${available} seat${available !== 1 ? "s" : ""} available for ${sub.name} (${usedSeats}/${sub.total_seats} already allocated)` },
+          { status: 400 }
+        );
+      }
+    }
+
     // Resolve access_email if not provided
     let resolvedEmail = access_email || null;
     if (!resolvedEmail && employee_id) {
