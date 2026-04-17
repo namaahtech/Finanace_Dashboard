@@ -1263,43 +1263,31 @@ function InvoiceModal({ onClose, onSaved, clients, projects, teams, settings }: 
             }
 
             if (el) {
-              const SCALE   = 4; // 4K quality - crystal clear text and images for professional PDFs
-              const A4_W_PX = 794;
-              const A4_H_PX = 1123;
-              const html2canvas = (await import("html2canvas")).default;
-              const jsPDF = (await import("jspdf")).default;
-
-              // Add timeout to prevent hanging
-              const canvasPromise = html2canvas(el, {
-                scale: SCALE, useCORS: true, backgroundColor: "#ffffff",
-                width: A4_W_PX, height: A4_H_PX, windowWidth: A4_W_PX,
-                allowTaint: true, logging: false, imageTimeout: 5000,
-              } as any);
-
-              const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("PDF generation timeout")), 30000)
-              );
-
-              console.log("[Email Flow] Starting canvas rendering (this may take 10-30 seconds)...");
+              console.log("[Email Flow] Starting Puppeteer PDF generation...");
               const startRender = performance.now();
 
-              const rawCanvas = await Promise.race([canvasPromise, timeoutPromise]) as HTMLCanvasElement;
+              // Get HTML content from the rendered element
+              const htmlContent = el.innerHTML;
 
+              // Call Puppeteer server-side PDF generation
+              const pdfRes = await fetch("/api/invoices/generate-pdf", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  htmlContent,
+                  invoiceNumber: createdInvoice.invoice_number,
+                }),
+              });
+
+              if (!pdfRes.ok) {
+                throw new Error("PDF generation failed: " + (await pdfRes.json()).error);
+              }
+
+              const pdfData = await pdfRes.json();
+              const pdfBase64 = pdfData.pdfBase64;
               const renderTime = performance.now() - startRender;
-              console.log(`[Email Flow] ✓ Canvas rendering complete (${(renderTime/1000).toFixed(2)}s)`);
 
-              const croppedCanvas = document.createElement("canvas");
-              croppedCanvas.width = A4_W_PX * SCALE;
-              croppedCanvas.height = A4_H_PX * SCALE;
-              croppedCanvas.getContext("2d")!.drawImage(rawCanvas, 0, 0, A4_W_PX * SCALE, A4_H_PX * SCALE, 0, 0, A4_W_PX * SCALE, A4_H_PX * SCALE);
-
-              const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-              const pageW = pdf.internal.pageSize.getWidth();
-              const pageH = pdf.internal.pageSize.getHeight();
-              const pngImage = croppedCanvas.toDataURL("image/png");
-              pdf.addImage(pngImage, "PNG", 0, 0, pageW, pageH);
-              const pdfBase64 = pdf.output("datauristring").split(",")[1];
-              console.log(`[Email Flow] PDF generated with PNG lossless compression (4K quality, file size: ${(pdfBase64?.length / 1024 / 1024).toFixed(2)}MB)`);
+              console.log(`[Email Flow] ✓ Puppeteer PDF generation complete (${(renderTime/1000).toFixed(2)}s, size: ${(pdfData.fileSize / 1024 / 1024).toFixed(2)}MB)`);
 
               // Send email with PDF
               console.log(`[Email Flow] Sending email to ${clientEmail} with ${pdfBase64?.length || 0} bytes of PDF...`);
@@ -1863,85 +1851,66 @@ function PreviewModal({ invoice, onClose, settings }: {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Shared helper — always produces exactly 1 A4 page PDF
-  const buildA4PDF = async () => {
+  // Shared helper — generates PDF via Puppeteer server-side (2-5 MB instead of 50-65 MB)
+  const buildA4PDF = async (): Promise<{ pdfBase64: string; fileSize: number }> => {
     const el = document.getElementById("a4-invoice-render");
     if (!el) throw new Error("Invoice render element not found");
 
-    const SCALE   = 4; // 4K quality - ultra crisp, clear text and sharp images for professional PDFs
-    const A4_W_PX = 794;
-    const A4_H_PX = 1123;
-
-    const html2canvas = (await import("html2canvas")).default;
-    const jsPDF       = (await import("jspdf")).default;
-
-    console.log("[buildA4PDF] Starting canvas render with SCALE=" + SCALE);
+    console.log("[buildA4PDF] Starting Puppeteer PDF generation...");
     const startTime = performance.now();
 
-    // Capture at exact A4 dimensions with quality settings
-    // Add timeout to prevent hanging if canvas rendering is slow
-    const canvasPromise = html2canvas(el, {
-      scale:             SCALE,
-      useCORS:           true,
-      backgroundColor:   "#ffffff",
-      width:             A4_W_PX,
-      height:            A4_H_PX,
-      windowWidth:       A4_W_PX,
-      allowTaint:        true,  // Handle CORS issues
-      logging:           false,
-      imageTimeout:      3000,  // 3 second timeout per image
-    } as any);
+    // Get HTML content from the rendered element
+    const htmlContent = el.innerHTML;
 
-    // Race against a timeout with proper cleanup
-    let timeoutId: NodeJS.Timeout | null = null;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        console.error("[buildA4PDF] Timeout after 20 seconds");
-        reject(new Error("PDF generation timeout - canvas rendering took too long"));
-      }, 20000);
+    // Call Puppeteer server-side PDF generation
+    const pdfRes = await fetch("/api/invoices/generate-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        htmlContent,
+        invoiceNumber: invoice.invoice_number,
+      }),
     });
 
-    console.log("[buildA4PDF] Waiting for canvas render...");
-    let rawCanvas: HTMLCanvasElement;
-    try {
-      rawCanvas = await Promise.race([canvasPromise, timeoutPromise]) as HTMLCanvasElement;
-      if (timeoutId) clearTimeout(timeoutId); // Clear timeout on success
-    } catch (err) {
-      if (timeoutId) clearTimeout(timeoutId);
-      throw err;
+    if (!pdfRes.ok) {
+      const errData = await pdfRes.json().catch(() => ({}));
+      throw new Error("PDF generation failed: " + (errData.error || pdfRes.statusText));
     }
 
+    const pdfData = await pdfRes.json();
     const renderTime = performance.now() - startTime;
-    console.log(`[buildA4PDF] ✓ Canvas rendered in ${(renderTime/1000).toFixed(2)}s`);
 
-    // Crop to exactly A4 size to guarantee no second page
-    const croppedCanvas = document.createElement("canvas");
-    croppedCanvas.width  = A4_W_PX * SCALE;
-    croppedCanvas.height = A4_H_PX * SCALE;
-    croppedCanvas.getContext("2d")!.drawImage(
-      rawCanvas,
-      0, 0, A4_W_PX * SCALE, A4_H_PX * SCALE,
-      0, 0, A4_W_PX * SCALE, A4_H_PX * SCALE,
-    );
+    console.log(`[buildA4PDF] ✓ PDF generated via Puppeteer in ${(renderTime/1000).toFixed(2)}s (size: ${(pdfData.fileSize / 1024 / 1024).toFixed(2)}MB)`);
 
-    const pdf   = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    const pageW = pdf.internal.pageSize.getWidth();   // 210 mm
-    const pageH = pdf.internal.pageSize.getHeight();  // 297 mm
-
-    // Use PNG lossless compression for crystal clear 4K text and images
-    // No blur, no noise reduction - maximum quality for professional documents
-    const pngImage = croppedCanvas.toDataURL("image/png");
-    pdf.addImage(pngImage, "PNG", 0, 0, pageW, pageH);
-
-    console.log(`[buildA4PDF] ✓ PDF ready with PNG lossless compression (4K quality)`);
-    return pdf;
+    return {
+      pdfBase64: pdfData.pdfBase64,
+      fileSize: pdfData.fileSize,
+    };
   };
 
   const handleDownloadPDF = async () => {
     setDownloading(true);
     try {
-      const pdf = await buildA4PDF();
-      pdf.save(`${invoice.invoice_number}.pdf`);
+      const { pdfBase64 } = await buildA4PDF();
+
+      // Convert base64 to blob and download
+      const binaryString = atob(pdfBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: "application/pdf" });
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${invoice.invoice_number}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
       showToast("PDF downloaded successfully", "success");
     } catch (e: any) {
       showToast("PDF generation failed: " + e.message, "error");
@@ -1954,15 +1923,11 @@ function PreviewModal({ invoice, onClose, settings }: {
     if (!shareEmail) { showToast("Enter recipient email", "error"); return; }
     setSharing(true);
     try {
-      console.log("[Preview Modal] Starting PDF generation...");
-      const pdf = await buildA4PDF();
-      console.log("[Preview Modal] ✓ PDF generated successfully");
+      console.log("[Preview Modal] Starting PDF generation via Puppeteer...");
+      const { pdfBase64, fileSize } = await buildA4PDF();
+      console.log("[Preview Modal] ✓ PDF generated successfully, size:", (fileSize / 1024 / 1024).toFixed(2), "MB");
 
-      // Step 2 — extract raw base64 (strip data URI prefix)
-      const pdfBase64 = pdf.output("datauristring").split(",")[1];
-      console.log("[Preview Modal] PDF size:", pdfBase64?.length || 0, "bytes");
-
-      // Step 3 — send to share API with PDF attachment
+      // Step 2 — send to share API with PDF attachment
       console.log("[Preview Modal] Sending email to", shareEmail);
       const res = await fetch("/api/invoices/share", {
         method: "POST",

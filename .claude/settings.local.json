@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(curl -s -X POST http://localhost:3004/api/invoices/generate-pdf -H 'Content-Type: application/json' -d '{:*)",
+      "Bash(npm run:*)",
+      "Bash(grep -l \"vendors\\\\|purchases\" /d/Finanace_Dashboard/src/supabase/migrations/*.sql)",
+      "Bash(find /d/Finanace_Dashboard/src/supabase -name \"*.sql\" -exec grep -l \"vendors\" {} \\\\;)",
+      "Bash(grep -r \"vendors\\\\|invoices\\\\|clients\" /d/Finanace_Dashboard/src/supabase/migrations/*.sql)"
     ]
   }
 }

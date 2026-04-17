@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useApi } from "@/hooks/useApi";
-import { formatCurrency, cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import {
   calculateCompanyScore,
   calculateFinalIncentive,
@@ -49,12 +50,29 @@ interface ConfigShape {
   payout_pool_amount: number;
 }
 
+interface AnalyticsData {
+  revenue: number[];
+  expenses: number[];
+  kpi: {
+    revenue: number;
+    expenses: number;
+    profit: number;
+    projects: number;
+    budgetUsed: number;
+  };
+  kpiScorecard: any[];
+}
+
 // ─── Business Health Chart ────────────────────────────────
 // Shows last 6 months of the three KPIs as a grouped bar chart.
 // The current month uses live config values; prior months are mock trend data.
 const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
 
 function buildChartData(revenue: number, collections: number, delivery: number) {
+  const rval = Number(revenue) || 0;
+  const cval = Number(collections) || 0;
+  const dval = Number(delivery) || 0;
+
   // Mock trend — each prior month is offset by a small delta
   const deltas = [
     { r: -8,  c: -10, d: -5  },
@@ -66,9 +84,9 @@ function buildChartData(revenue: number, collections: number, delivery: number) 
   ];
   return MONTHS.map((month, i) => ({
     month,
-    Revenue:     Math.max(0, Math.min(100, revenue     + deltas[i].r)),
-    Collections: Math.max(0, Math.min(100, collections + deltas[i].c)),
-    Delivery:    Math.max(0, Math.min(100, delivery    + deltas[i].d)),
+    Revenue:     Math.max(0, Math.min(100, rval + deltas[i].r)),
+    Collections: Math.max(0, Math.min(100, cval + deltas[i].c)),
+    Delivery:    Math.max(0, Math.min(100, dval + deltas[i].d)),
     isCurrent: i === 5,
   }));
 }
@@ -159,81 +177,135 @@ export default function AdminOverview() {
   const { request } = useApi();
   const { showToast } = useToast();
   const [config, setConfig] = useState<ConfigShape>(MOCK_CONFIG);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [employeeRows, setEmployeeRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const [configRes, usersRes] = await Promise.all([
-          request<{ config: ConfigShape }>({ url: "/api/config" }),
-          request<{ users: UserShape[] }>({ url: "/api/users?role=employee&limit=6" }),
-        ]);
-        if (configRes.config) setConfig(configRes.config);
+  const loadDashboardData = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
+    try {
+      const [configRes, analyticsRes, usersRes] = await Promise.all([
+        request<{ config: ConfigShape }>({ url: "/api/config" }),
+        request<AnalyticsData>({ url: "/api/analytics/company" }),
+        request<{ users: UserShape[] }>({ url: "/api/users?role=employee&limit=6" }),
+      ]);
 
-        const cfg = configRes.config ?? MOCK_CONFIG;
-        const companyScore = calculateCompanyScore(
-          cfg.revenue_achievement_percentage,
-          cfg.collections_percentage,
-          cfg.delivery_health_percentage
-        );
-        const companyMultiplier = getCompanyMultiplier(companyScore);
+      if (configRes.config) setConfig(configRes.config);
+      if (analyticsRes) setAnalytics(analyticsRes);
 
-        const rows = await Promise.all(
-          (usersRes.users ?? []).map(async (emp) => {
-            const [kpiRes, incRes] = await Promise.all([
-              request<{ scores: any[] }>({ url: `/api/kpi?employeeId=${emp._id}` }),
-              request<{ incentives: any[] }>({ url: `/api/incentives?employeeId=${emp._id}` }),
-            ]);
-            const score = kpiRes.scores?.[0]?.final_score ?? 80;
-            const employeeMultiplier = getEmployeeMultiplier(score);
-            const latestIncentive = incRes.incentives?.[0];
-            const baseIncentive = latestIncentive?.base_amount ?? 10000;
-            return {
-              id: emp._id,
-              name: emp.name,
-              score,
-              baseIncentive,
-              employeeMultiplier,
-              finalIncentive: calculateFinalIncentive(0, baseIncentive, employeeMultiplier, companyMultiplier),
-              status: latestIncentive?.status ?? "locked",
-            };
-          })
-        );
-        setEmployeeRows(rows);
-      } catch (err: any) {
-        showToast("Synchronization failure. Displaying offline metrics.", "warning");
-      } finally {
-        setLoading(false);
-      }
+      const cfg = configRes.config ?? MOCK_CONFIG;
+      const companyScore = calculateCompanyScore(
+        cfg.revenue_achievement_percentage,
+        cfg.collections_percentage,
+        cfg.delivery_health_percentage
+      );
+      const companyMultiplier = getCompanyMultiplier(companyScore);
+
+      const rows = await Promise.all(
+        (usersRes.users ?? []).map(async (emp) => {
+          const [kpiRes, incRes] = await Promise.all([
+            request<{ scores: any[] }>({ url: `/api/kpi?employeeId=${emp._id}` }),
+            request<{ incentives: any[] }>({ url: `/api/incentives?employeeId=${emp._id}` }),
+          ]);
+          const score = kpiRes.scores?.[0]?.final_score ?? 80;
+          const employeeMultiplier = getEmployeeMultiplier(score);
+          const latestIncentive = incRes.incentives?.[0];
+          const baseIncentive = latestIncentive?.base_amount ?? 10000;
+          return {
+            id: emp._id,
+            name: emp.name,
+            score,
+            baseIncentive,
+            employeeMultiplier,
+            finalIncentive: calculateFinalIncentive(0, baseIncentive, employeeMultiplier, companyMultiplier),
+            status: latestIncentive?.status ?? "locked",
+          };
+        })
+      );
+      setEmployeeRows(rows);
+    } catch (err: any) {
+      showToast("Synchronization failure. Displaying offline metrics.", "warning");
+    } finally {
+      setLoading(false);
     }
-    load();
   }, [request, showToast]);
 
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  // ─── Realtime Integration ───────────────────────────────────────────────
+
+  useEffect(() => {
+    const channel = supabase.channel("dashboard-realtime-v2")
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => loadDashboardData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "company_revenues" }, () => loadDashboardData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "company_expenses" }, () => loadDashboardData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => loadDashboardData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "incentives" }, () => loadDashboardData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "system_config" }, () => loadDashboardData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "invoices" }, () => loadDashboardData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchases" }, () => loadDashboardData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance_logs" }, () => loadDashboardData(true))
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") setRealtimeStatus("connected");
+        else if (status === "CLOSED" || status === "CHANNEL_ERROR") setRealtimeStatus("disconnected");
+      });
+
+    return () => { supabase.removeChannel(channel); };
+  }, [loadDashboardData]);
+
+  const currentMonth = new Date().getMonth();
+  const liveRevenue = analytics?.revenue[currentMonth] ?? 0;
+  const liveExpenses = analytics?.expenses[currentMonth] ?? 0;
+  const liveNetRevenue = liveRevenue - liveExpenses;
+  const expensePercentage = liveRevenue > 0 ? Math.round((liveExpenses / liveRevenue) * 100) : 0;
+
+  // Real Achievement Logic
+  const targetRevenue = Number(config.company_revenue) || 100000;
+  const revAchievement = Math.min(100, Math.round((liveRevenue / targetRevenue) * 100));
+  
+  // Use config as primary source for Collections/Delivery, fallback to sensible industry averages
+  const liveCollections = Number(config.collections_percentage) || 85; 
+  const liveDelivery    = Number(config.delivery_health_percentage) || 92;
+
   const companyScore = calculateCompanyScore(
-    config.revenue_achievement_percentage,
-    config.collections_percentage,
-    config.delivery_health_percentage
+    revAchievement,
+    liveCollections,
+    liveDelivery
   );
 
-  const expenses = config.company_revenue * config.expense_percentage / 100;
-  const netRevenue = config.company_revenue - expenses;
+  // Use live analytics but fallback to config if analytics is still loading
+  const displayRevenue = analytics ? liveRevenue : (config.company_revenue || 0);
+  const displayExpensesValue = analytics ? liveExpenses : (config.company_revenue * config.expense_percentage / 100);
+  const displayNetRevenue = displayRevenue - displayExpensesValue;
+  const displayExpensePct = analytics ? expensePercentage : config.expense_percentage;
 
   return (
     <DashboardShell
       title="Dashboard"
       subtitle="Company performance, payouts, and key metrics at a glance."
       actions={
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" className="hidden sm:flex">
-            <Download size={14} className="mr-1.5" /> Export
-          </Button>
-          <Link href="/admin/config">
-            <Button variant="primary" size="sm">
-              <Settings size={14} className="mr-1.5" /> Config
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold">
+            <span className={cn("h-1.5 w-1.5 rounded-full",
+              realtimeStatus==="connected" ? "bg-emerald-500 animate-pulse" :
+              realtimeStatus==="connecting"? "bg-amber-500 animate-pulse" : "bg-red-500")} />
+            <span className={cn(realtimeStatus==="connected"?"text-emerald-600":realtimeStatus==="connecting"?"text-amber-600":"text-red-500")}>
+              {realtimeStatus==="connected"?"System Live":realtimeStatus==="connecting"?"Syncing...":"Realtime Offline"}
+            </span>
+          </span>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" className="hidden sm:flex">
+              <Download size={14} className="mr-1.5" /> Export
             </Button>
-          </Link>
+            <Link href="/admin/config">
+              <Button variant="primary" size="sm">
+                <Settings size={14} className="mr-1.5" /> Config
+              </Button>
+            </Link>
+          </div>
         </div>
       }
     >
@@ -242,9 +314,9 @@ export default function AdminOverview() {
         {/* Stat cards */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
-            { label: "Total Revenue",  value: formatCurrency(config.company_revenue), icon: IndianRupee, color: "text-theme-fg",    bg: "bg-theme-raised",     sub: "This month" },
-            { label: "Total Expenses", value: formatCurrency(expenses),                icon: TrendingDown, color: "text-red-500",   bg: "bg-red-500/10",       sub: `${config.expense_percentage}% of revenue` },
-            { label: "Net Revenue",    value: formatCurrency(netRevenue),              icon: TrendingUp,   color: "text-emerald-600", bg: "bg-emerald-500/10", sub: "After expenses" },
+            { label: "Total Revenue",  value: formatCurrency(displayRevenue),       icon: IndianRupee, color: "text-theme-fg",    bg: "bg-theme-raised",     sub: "Current Month" },
+            { label: "Total Expenses", value: formatCurrency(displayExpensesValue), icon: TrendingDown, color: "text-red-500",   bg: "bg-red-500/10",       sub: `${displayExpensePct}% of revenue` },
+            { label: "Net Revenue",    value: formatCurrency(displayNetRevenue),    icon: TrendingUp,   color: "text-emerald-600", bg: "bg-emerald-500/10", sub: "After expenses" },
             { label: "Payout Pool",    value: formatCurrency(config.payout_pool_amount), icon: Gift,       color: "text-sky-600",    bg: "bg-sky-500/10",       sub: "Available" },
           ].map(({ label, value, icon: Icon, color, bg, sub }) => (
             <div key={label} className="page-card flex items-center gap-3">
@@ -290,9 +362,9 @@ export default function AdminOverview() {
           </div>
 
           <BusinessHealthChart
-            revenue={config.revenue_achievement_percentage}
-            collections={config.collections_percentage}
-            delivery={config.delivery_health_percentage}
+            revenue={revAchievement}
+            collections={liveCollections}
+            delivery={liveDelivery}
           />
         </div>
 
