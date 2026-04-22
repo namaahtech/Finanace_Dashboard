@@ -1,4 +1,4 @@
-# Namaah Pulse — Platform Transformation Plan
+# Namaah Nexus — Platform Transformation Plan
 **Branch:** `preview` | **Version:** 1.0 | **April 2026**
 
 ---
@@ -230,7 +230,7 @@
 - [ ] Push notifications → NEW (Firebase FCM)
 
 **Connects to:** Same Supabase backend (anon key + RLS)
-**Repo:** Create `namaah-pulse-flutter` repo separately
+**Repo:** Create `namaah-nexus-flutter` repo separately
 
 ---
 

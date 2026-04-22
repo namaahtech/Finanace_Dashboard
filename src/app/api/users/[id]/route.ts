@@ -26,7 +26,7 @@ async function sendMail(to: string, subject: string, html: string) {
     auth: { user: cfg.smtp_user, pass: cfg.smtp_pass },
   });
   await transporter.sendMail({
-    from: `"${cfg.company_name || "Namaah Pulse"}" <${cfg.smtp_user}>`,
+    from: `"${cfg.company_name || "Namaah Nexus"}" <${cfg.smtp_user}>`,
     to,
     subject,
     html,
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 });
 
     try {
-      await sendMail(emp.email, `Account Credentials Resent - ${config?.company_name || "Namaah Pulse"}`, `
+      await sendMail(emp.email, `Account Credentials Resent - ${config?.company_name || "Namaah Nexus"}`, `
         <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
           <div style="background-color: #0f172a; color: #ffffff; padding: 32px 20px; text-align: center;">
             <h1 style="margin:0; letter-spacing: 4px; font-size: 24px; font-weight: 800; text-transform: uppercase;">${config?.company_name || "NAMAAH PULSE"}</h1>
@@ -146,7 +146,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     try {
       await sendMail(emp.email, subject, `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
-          <div style="background:#0f172a; color:#fff; padding:20px; text-align:center"><h2>${config?.company_name || "Namaah Pulse"}</h2></div>
+          <div style="background:#0f172a; color:#fff; padding:20px; text-align:center"><h2>${config?.company_name || "Namaah Nexus"}</h2></div>
           <div style="padding:30px; background:#fbfbfa">
             <p>Hi <b>${emp.name}</b>,</p>
             ${message.split("\n").map((l: string) => `<p>${l}</p>`).join("")}

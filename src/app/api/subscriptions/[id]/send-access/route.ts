@@ -43,7 +43,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const smtpUser = profile?.smtp_user;
     const smtpPass = profile?.smtp_pass;
     const smtpPort = profile?.smtp_port || 587;
-    const fromName = profile?.smtp_from_name || profile?.company_name || "Namaah Pulse";
+    const fromName = profile?.smtp_from_name || profile?.company_name || "Namaah Nexus";
     const fromEmail = profile?.smtp_from_email || smtpUser;
     const companyName = profile?.company_name || "Your Organisation";
 

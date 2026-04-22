@@ -116,6 +116,97 @@ function CustomTooltip({ active, payload, label }: {active?: boolean; payload?: 
   );
 }
 
+/* ─── Custom Dropdown ────────────────────────────────────────────────────── */
+function BudgetDropdown({
+  label, value, onChange, options, placeholder, icon: Icon, searchable = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { label: string; value: string; sub?: string }[];
+  placeholder: string;
+  icon?: React.ElementType;
+  searchable?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false); setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = searchable && query.trim()
+    ? options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()))
+    : options;
+
+  const selected = options.find(o => o.value === value);
+
+  return (
+    <div ref={ref} className="relative">
+      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">{label}</label>
+      <button
+        type="button"
+        onClick={() => { setOpen(o => !o); setQuery(""); }}
+        className={cn(
+          "flex h-9 w-full items-center justify-between rounded-lg border bg-theme-raised px-3 text-sm outline-none transition-all",
+          open ? "border-theme-strong" : "border-theme-border",
+          selected ? "text-theme-fg" : "text-theme-muted"
+        )}
+      >
+        <span className="flex items-center gap-2 truncate">
+          {Icon && <Icon size={13} className="flex-shrink-0 text-theme-muted" />}
+          {selected ? selected.label : placeholder}
+        </span>
+        <ChevronDown size={12} className={cn("flex-shrink-0 text-theme-muted transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 z-[200] mt-1 w-full rounded-xl border border-theme-border bg-theme-surface shadow-xl overflow-hidden animate-in slide-in-from-top-1 duration-150">
+          {searchable && (
+            <div className="border-b border-theme-border px-3 py-2">
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search…"
+                className="w-full bg-transparent text-xs text-theme-fg outline-none placeholder:text-theme-muted"
+              />
+            </div>
+          )}
+          <div className="max-h-52 overflow-y-auto p-1">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-center text-[11px] text-theme-subtle">No options found</div>
+            ) : filtered.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { onChange(opt.value); setOpen(false); setQuery(""); }}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs transition-all",
+                  value === opt.value
+                    ? "bg-theme-primary/10 text-theme-primary font-semibold"
+                    : "text-theme-fg hover:bg-theme-raised font-medium"
+                )}
+              >
+                <span className="truncate">{opt.label}</span>
+                {opt.sub && <span className="ml-2 flex-shrink-0 text-[10px] text-theme-subtle">{opt.sub}</span>}
+                {value === opt.value && <Check size={11} className="ml-2 flex-shrink-0 text-theme-primary" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main Component ─────────────────────────────────────────────────────── */
 export default function BudgetsPage() {
   /* tabs */
@@ -304,8 +395,13 @@ export default function BudgetsPage() {
     Spent:  Math.round((b.actual_spent || 0) / 1000),
   }));
 
-  /* ── departments list (from budgets) ── */
-  const departments = [...new Set(budgets.filter(b => b.department_name).map(b => b.department_name!))];
+  /* ── departments from teams table (real source) ── */
+  const departments = [...new Set(teams.filter(t => t.department).map(t => t.department!))].sort();
+
+  /* ── teams filtered by selected department (for team-scope budgets) ── */
+  const teamsForDept = fDept
+    ? teams.filter(t => t.department === fDept)
+    : teams;
 
   /* ─── Render ─────────────────────────────────────────────────────────── */
   return (
@@ -730,7 +826,7 @@ export default function BudgetsPage() {
                   <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Scope</label>
                   <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5">
                     {(["department","team","company"] as const).map(s => (
-                      <button key={s} onClick={() => setFScope(s)}
+                      <button key={s} onClick={() => { setFScope(s); setFDept(""); setFTeamId(""); }}
                         className={cn("flex-1 rounded-lg py-1.5 text-xs font-semibold capitalize transition-all",
                           fScope === s ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}>
                         {s}
@@ -739,39 +835,56 @@ export default function BudgetsPage() {
                   </div>
                 </div>
                 {fScope === "department" && (
-                  <div>
-                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Department Name</label>
-                    <input value={fDept} onChange={e => setFDept(e.target.value)} placeholder="e.g. Engineering"
-                      list="dept-list"
-                      className="h-9 w-full rounded-lg border border-theme-border bg-theme-raised px-3 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
-                    <datalist id="dept-list">
-                      {departments.map(d => <option key={d} value={d} />)}
-                    </datalist>
-                  </div>
+                  <BudgetDropdown
+                    label="Department"
+                    value={fDept}
+                    onChange={setFDept}
+                    placeholder="— Select department —"
+                    icon={Building2}
+                    searchable
+                    options={departments.map(d => ({
+                      label: d,
+                      value: d,
+                      sub: `${teams.filter(t => t.department === d).length} team${teams.filter(t => t.department === d).length !== 1 ? "s" : ""}`,
+                    }))}
+                  />
                 )}
                 {fScope === "team" && (
-                  <div>
-                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Team</label>
-                    <div className="relative">
-                      <select value={fTeamId} onChange={e => setFTeamId(e.target.value)}
-                        className="h-9 w-full appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer">
-                        <option value="">— Select team —</option>
-                        {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
-                      <ChevronDown size={12} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted" />
-                    </div>
+                  <div className="space-y-3">
+                    <BudgetDropdown
+                      label="Department (filter)"
+                      value={fDept}
+                      onChange={v => { setFDept(v); setFTeamId(""); }}
+                      placeholder="— All departments —"
+                      icon={Building2}
+                      options={[
+                        { label: "All departments", value: "" },
+                        ...departments.map(d => ({ label: d, value: d })),
+                      ]}
+                    />
+                    <BudgetDropdown
+                      label="Team *"
+                      value={fTeamId}
+                      onChange={setFTeamId}
+                      placeholder="— Select team —"
+                      icon={Users}
+                      searchable
+                      options={teamsForDept.map(t => ({
+                        label: t.name,
+                        value: t.id,
+                        sub: t.department || undefined,
+                      }))}
+                    />
                   </div>
                 )}
-                <div>
-                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Category</label>
-                  <div className="relative">
-                    <select value={fCategory} onChange={e => setFCategory(e.target.value)}
-                      className="h-9 w-full appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer">
-                      {BUDGET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <ChevronDown size={12} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted" />
-                  </div>
-                </div>
+                <BudgetDropdown
+                  label="Category"
+                  value={fCategory}
+                  onChange={setFCategory}
+                  placeholder="— Select category —"
+                  icon={Tag}
+                  options={BUDGET_CATEGORIES.map(c => ({ label: c, value: c }))}
+                />
               </div>
 
               {/* Right col */}

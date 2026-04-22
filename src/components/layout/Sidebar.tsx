@@ -240,7 +240,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
           </div>
           {!collapsed && (
             <span className="text-sm font-bold text-theme-fg tracking-tight truncate">
-              Namaah Pulse
+              Namaah Nexus
             </span>
           )}
         </div>

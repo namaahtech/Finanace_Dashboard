@@ -198,13 +198,13 @@ export default function AdminClaimsPage() {
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-theme-fg">{c.employee?.name}</p>
-                          <p className="text-[10px] text-theme-subtle">{c.employee?.department} Â· {c.employee?.employeeId}</p>
+                          <p className="text-[10px] text-theme-subtle">{c.employee?.department} · {c.employee?.employeeId}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-5 py-3 text-sm font-bold text-emerald-600">{formatCurrency(c.amount)}</td>
                     <td className="px-5 py-3 text-xs text-theme-muted">
-                      {c.incentive ? monthLabel(c.incentive.month, c.incentive.year) : "â€”"}
+                      {c.incentive ? monthLabel(c.incentive.month, c.incentive.year) : "—"}
                     </td>
                     <td className="px-5 py-3">
                       <span className="rounded-md bg-theme-raised px-2 py-0.5 text-xs font-semibold text-theme-muted">
@@ -216,7 +216,7 @@ export default function AdminClaimsPage() {
                         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/10 text-xs font-bold text-purple-600">
                           {c.queue_position}
                         </span>
-                      ) : <span className="text-theme-subtle text-xs">â€”</span>}
+                      ) : <span className="text-theme-subtle text-xs">—</span>}
                     </td>
                     <td className="px-5 py-3">
                       <Badge variant={statusBadgeVariant(c.status)}>

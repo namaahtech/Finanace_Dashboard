@@ -6,43 +6,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const supabase = getSupabaseAdmin();
     const { id } = await params;
     const body = await req.json();
+    const { name, description, budget, client_id, phase, issued_date, due_date, team_ids, is_active, budget_id } = body;
 
-    const { name, description, budget, client_id, phase, issued_date, due_date, team_ids, is_active } = body;
+    const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (name        !== undefined) payload.name        = name;
+    if (description !== undefined) payload.description = description;
+    if (budget      !== undefined) payload.budget      = Number(budget);
+    if (client_id   !== undefined) payload.client_id   = client_id;
+    if (phase       !== undefined) payload.phase       = phase;
+    if (issued_date !== undefined) payload.issued_date = issued_date;
+    if (due_date    !== undefined) payload.due_date    = due_date;
+    if (is_active   !== undefined) payload.is_active   = is_active;
+    if (budget_id   !== undefined) payload.budget_id   = budget_id || null;
 
-    // 1. Update Project
-    const { error: pError } = await supabase
-      .from("projects")
-      .update({
-        name,
-        description,
-        budget: budget !== undefined ? Number(budget) : undefined,
-        client_id,
-        phase,
-        issued_date,
-        due_date,
-        is_active,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", id);
-
+    const { error: pError } = await supabase.from("projects").update(payload).eq("id", id);
     if (pError) throw pError;
 
-    // 2. Update Teams (Full Refresh)
-    if (team_ids) {
-      // Clear existing
+    if (team_ids !== undefined) {
       await supabase.from("project_teams").delete().eq("project_id", id);
-      
-      // Insert new ones
       if (team_ids.length > 0) {
-        const teamLinks = team_ids.map((tid: string) => ({
-          project_id: id,
-          team_id: tid
-        }));
-        await supabase.from("project_teams").insert(teamLinks);
+        await supabase.from("project_teams").insert(
+          team_ids.map((tid: string) => ({ project_id: id, team_id: tid }))
+        );
       }
     }
 
-    return NextResponse.json({ success: true }, { status: 200 });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -52,11 +41,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   try {
     const supabase = getSupabaseAdmin();
     const { id } = await params;
-
     const { error } = await supabase.from("projects").delete().eq("id", id);
     if (error) throw error;
-
-    return NextResponse.json({ success: true }, { status: 200 });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

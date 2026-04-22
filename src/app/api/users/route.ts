@@ -75,9 +75,9 @@ export async function POST(req: Request) {
       });
 
       const mailOptions = {
-        from: `"${config.company_name || "Namaah Pulse"}" <${config.smtp_user}>`,
+        from: `"${config.company_name || "Namaah Nexus"}" <${config.smtp_user}>`,
         to: email,
-        subject: `Welcome to ${config.company_name || "Namaah Pulse"} - Onboarding Initiated`,
+        subject: `Welcome to ${config.company_name || "Namaah Nexus"} - Onboarding Initiated`,
         html: `
           <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
             <div style="background-color: #0f172a; color: #ffffff; padding: 32px 20px; text-align: center;">
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
             </div>
             <div style="padding: 40px; color: #1e293b; line-height: 1.6;">
               <h2 style="margin-top: 0; font-size: 20px; font-weight: 700;">Welcome Onboard, ${name}!</h2>
-              <p>Your professional account at <b>${config.company_name || "Namaah Pulse"}</b> has been successfully initialized. You now have access to the enterprise portal with the following credentials:</p>
+              <p>Your professional account at <b>${config.company_name || "Namaah Nexus"}</b> has been successfully initialized. You now have access to the enterprise portal with the following credentials:</p>
               
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 24px; border-radius: 8px; margin: 24px 0;">
                 <div style="margin-bottom: 12px; display: flex; align-items: center;">
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
               
               <div style="margin-top: 32px; border-top: 1px solid #f1f5f9; pt: 24px;">
                 <p style="margin: 0; font-weight: 700; color: #0f172a;">Identity Management System</p>
-                <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 12px;">Automated Onboarding Engine · ${config.company_name || "Namaah Pulse"}</p>
+                <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 12px;">Automated Onboarding Engine · ${config.company_name || "Namaah Nexus"}</p>
               </div>
             </div>
           </div>

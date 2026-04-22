@@ -11,7 +11,7 @@ import {
   Folder, Plus, Search, X, Building2, Zap, Target, ArrowRightLeft,
   CheckCircle2, Clock, CalendarDays, TrendingUp, MoreVertical, Edit2,
   Trash2, SearchCode, ShieldCheck, Tag, LayoutGrid, Building, User, ChevronDown,
-  FileText, Activity, Users, Check, Columns, Database
+  FileText, Activity, Users, Check, Columns, Database, IndianRupee, AlertCircle,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { DatePicker } from "@/components/ui/DatePicker";
@@ -33,11 +33,32 @@ interface Team {
   name: string;
 }
 
+interface BudgetData {
+  id: string;
+  budget_number: string;
+  name: string;
+  total_amount: number;
+  actual_spent: number;
+  purchase_spent: number;
+  sub_spent: number;
+  status: string;
+}
+
+interface Budget {
+  id: string;
+  budget_number: string;
+  name: string;
+  total_amount: number;
+  actual_spent: number;
+  status: string;
+}
+
 interface Project {
   id: string;
   name: string;
   description: string;
   budget: number;
+  budget_id: string | null;
   clientId: string;
   teamIds: string[];
   phase: ProjectPhase;
@@ -46,6 +67,7 @@ interface Project {
   is_active: boolean;
   client?: Client;
   teams?: Team[];
+  budget_data?: BudgetData | null;
 }
 
 interface ProjectTask {
@@ -302,6 +324,7 @@ export default function AdminProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -315,10 +338,11 @@ export default function AdminProjectsPage() {
   
   const [form, setForm] = useState({
     name: "", description: "", budget: "",
-    client_id: "", phase: "SCOPING", 
+    client_id: "", phase: "SCOPING",
     issued_date: dayjs().format("YYYY-MM-DD"),
     due_date: "",
-    team_ids: [] as string[]
+    team_ids: [] as string[],
+    budget_id: "",
   });
 
   async function loadData(q?: string) {
@@ -333,14 +357,16 @@ export default function AdminProjectsPage() {
     }
   }
   async function loadMeta() {
-    const [cRes, tRes, eRes] = await Promise.all([
+    const [cRes, tRes, eRes, bRes] = await Promise.all([
       axios.get("/api/config/clients"),
       supabase.from("teams").select("id, name"),
-      supabase.from("employees").select("id, name, employee_id").eq("is_active", true)
+      supabase.from("employees").select("id, name, employee_id").eq("is_active", true),
+      supabase.from("budgets").select("id, budget_number, name, total_amount, actual_spent, status").eq("status", "active").order("name"),
     ]);
     setClients(cRes.data.clients || []);
     setTeams(tRes.data || []);
     setEmployees(eRes.data || []);
+    setBudgets(bRes.data || []);
   }
 
   useEffect(() => {
@@ -374,12 +400,12 @@ export default function AdminProjectsPage() {
 
   function handleAdd() {
     setEditingId(null);
-    setForm({ 
-      name: "", description: "", budget: "", 
+    setForm({
+      name: "", description: "", budget: "",
       client_id: "", phase: "SCOPING",
       issued_date: dayjs().format("YYYY-MM-DD"),
       due_date: dayjs().add(3, "month").format("YYYY-MM-DD"),
-      team_ids: []
+      team_ids: [], budget_id: "",
     });
     setShowForm(true);
   }
@@ -387,14 +413,11 @@ export default function AdminProjectsPage() {
   function handleEdit(p: Project) {
     setEditingId(p.id);
     setForm({
-      name: p.name,
-      description: p.description,
-      budget: String(p.budget),
-      client_id: p.clientId,
-      phase: p.phase,
-      issued_date: p.issued_date || "",
-      due_date: p.dueDate,
-      team_ids: p.teamIds || []
+      name: p.name, description: p.description,
+      budget: String(p.budget), client_id: p.clientId,
+      phase: p.phase, issued_date: p.issued_date || "",
+      due_date: p.dueDate, team_ids: p.teamIds || [],
+      budget_id: p.budget_id || "",
     });
     setShowForm(true);
   }
@@ -651,7 +674,7 @@ export default function AdminProjectsPage() {
 
                   <div className="sm:col-span-2 space-y-2">
                     <label className="flex items-center gap-2 text-xs font-semibold text-theme-primary">Operational Units (Team Assignment)</label>
-                    <MultiSelect 
+                    <MultiSelect
                         icon={<LayoutGrid size={14} className="text-theme-primary" />}
                         placeholder="Assign Teams to Cluster..."
                         value={form.team_ids}
@@ -659,6 +682,52 @@ export default function AdminProjectsPage() {
                         options={(teams || []).map(t => ({ label: t.name, value: t.id }))}
                         label="Assigned Teams"
                     />
+                  </div>
+
+                  <div className="sm:col-span-2 space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">
+                      <IndianRupee size={13} className="text-emerald-500" />
+                      Link to Budget (optional)
+                    </label>
+                    <CustomSelect
+                      icon={<IndianRupee size={14} className="text-emerald-500" />}
+                      placeholder="— No budget linked —"
+                      value={form.budget_id}
+                      onChange={(v) => setForm({ ...form, budget_id: v })}
+                      options={[
+                        { label: "— No budget linked —", value: "" },
+                        ...budgets.map(b => ({
+                          label: `${b.name} (${b.budget_number}) · ₹${(b.total_amount / 1000).toFixed(0)}K`,
+                          value: b.id,
+                        })),
+                      ]}
+                    />
+                    {form.budget_id && (() => {
+                      const b = budgets.find(x => x.id === form.budget_id);
+                      if (!b) return null;
+                      const pct = b.total_amount > 0 ? Math.min((b.actual_spent / b.total_amount) * 100, 100) : 0;
+                      const isOver = b.actual_spent > b.total_amount;
+                      return (
+                        <div className="rounded-xl border border-theme-border bg-theme-raised p-3 space-y-1.5">
+                          <div className="flex items-center justify-between text-[10px] font-semibold">
+                            <span className="text-theme-muted">Current utilisation</span>
+                            <span className={isOver ? "text-red-500 font-bold" : "text-emerald-600 font-bold"}>
+                              {isOver ? "OVER BUDGET" : `${pct.toFixed(0)}%`}
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-theme-page overflow-hidden">
+                            <div
+                              className={cn("h-full rounded-full transition-all", isOver ? "bg-red-500" : pct >= 85 ? "bg-amber-500" : "bg-emerald-500")}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-[10px] text-theme-subtle">
+                            <span>Spent: ₹{(b.actual_spent / 1000).toFixed(1)}K</span>
+                            <span>Total: ₹{(b.total_amount / 1000).toFixed(1)}K</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -738,6 +807,7 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
   project: Project | null;
   onClose: () => void;
   employees: Employee[];
+  // budget_data is read from project.budget_data directly
 }) {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -810,6 +880,19 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'project_tasks' }, fetchTasks)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'task_comments' }, () => {
           if (selectedTask) fetchComments(selectedTask.id);
+        })
+        // Refresh project (budget bar) when budgets table updates
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'budgets',
+          filter: project.budget_id ? `id=eq.${project.budget_id}` : undefined as any,
+        }, () => {
+          // Trigger parent reload so budget_data refreshes
+          supabase.from("budgets")
+            .select("id, budget_number, name, total_amount, actual_spent, purchase_spent, sub_spent, status")
+            .eq("id", project.budget_id!)
+            .single()
+            .then(({ data }) => {
+              if (data) project.budget_data = data;
+            });
         })
         .subscribe();
       return () => { supabase.removeChannel(channel); };
@@ -974,10 +1057,10 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
 
           <div className="hidden lg:flex items-center gap-4 ml-6 border-l border-black/5 pl-6">
             {[
-              { label: 'Total',    val: tasks.length,                                                                                                 color: 'text-black/50' },
-              { label: 'Active',   val: tasks.filter(t => t.status !== 'COMPLETED').length,                                                           color: 'text-sky-600'  },
-              { label: 'Done',     val: tasks.filter(t => t.status === 'COMPLETED').length,                                                           color: 'text-emerald-600' },
-              { label: 'Overdue',  val: tasks.filter(t => t.due_date && dayjs(t.due_date).isBefore(dayjs()) && t.status !== 'COMPLETED').length,      color: 'text-rose-500' },
+              { label: 'Total',    val: tasks.length,                                                                                            color: 'text-black/50' },
+              { label: 'Active',   val: tasks.filter(t => t.status !== 'COMPLETED').length,                                                      color: 'text-sky-600'  },
+              { label: 'Done',     val: tasks.filter(t => t.status === 'COMPLETED').length,                                                      color: 'text-emerald-600' },
+              { label: 'Overdue',  val: tasks.filter(t => t.due_date && dayjs(t.due_date).isBefore(dayjs()) && t.status !== 'COMPLETED').length, color: 'text-rose-500' },
             ].map(s => (
               <div key={s.label} className="text-center">
                 <p className={cn("text-base font-black leading-none", s.color)}>{s.val}</p>
@@ -985,6 +1068,41 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
               </div>
             ))}
           </div>
+
+          {/* ── Live Budget Bar ── */}
+          {project.budget_data && (() => {
+            const b = project.budget_data!;
+            const spent   = b.actual_spent || 0;
+            const isOver  = spent > b.total_amount;
+            const pct     = b.total_amount > 0 ? Math.min((spent / b.total_amount) * 100, 100) : 0;
+            const rem     = b.total_amount - spent;
+            return (
+              <div className="hidden lg:flex items-center gap-3 ml-6 border-l border-black/5 pl-6 min-w-[220px]">
+                <IndianRupee size={12} className={isOver ? "text-rose-500 flex-shrink-0" : "text-emerald-500 flex-shrink-0"} />
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-black/30 truncate max-w-[100px]">{b.name}</span>
+                    <span className={cn("text-[9px] font-black", isOver ? "text-rose-500" : pct >= 85 ? "text-amber-500" : "text-emerald-600")}>
+                      {isOver ? "OVER" : `${pct.toFixed(0)}%`}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-black/5 overflow-hidden">
+                    <div
+                      className={cn("h-full rounded-full transition-all", isOver ? "bg-rose-500" : pct >= 85 ? "bg-amber-500" : "bg-emerald-500")}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[8px] text-black/25 font-semibold">
+                    <span>₹{(spent / 1000).toFixed(1)}K spent</span>
+                    <span className={isOver ? "text-rose-400" : "text-black/25"}>
+                      {isOver ? `₹${(Math.abs(rem) / 1000).toFixed(1)}K over` : `₹${(rem / 1000).toFixed(1)}K left`}
+                    </span>
+                  </div>
+                </div>
+                {isOver && <AlertCircle size={13} className="text-rose-500 flex-shrink-0" />}
+              </div>
+            );
+          })()}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button

@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
-  serverExternalPackages: ["mongoose"],
+  serverExternalPackages: ["mongoose", "puppeteer"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "lh3.googleusercontent.com" },

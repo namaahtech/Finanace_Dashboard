@@ -20,7 +20,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      showToast("Access Granted. Welcome back to Namaah Pulse.", "success");
+      showToast("Access Granted. Welcome back to Namaah Nexus.", "success");
     } catch (err: any) {
       const msg = err.message || "Authentication failed. Please check your credentials.";
       showToast(msg, "error");
@@ -39,7 +39,7 @@ export default function LoginPage() {
             N
           </div>
           <div>
-            <h1 className="text-xl font-black tracking-tight text-theme-fg">Namaah Pulse</h1>
+            <h1 className="text-xl font-black tracking-tight text-theme-fg">Namaah Nexus</h1>
             <p className="text-xs font-semibold text-theme-muted uppercase tracking-widest mt-1">Enterprise Operations Panel</p>
           </div>
         </div>
