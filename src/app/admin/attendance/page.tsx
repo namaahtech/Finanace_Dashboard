@@ -5,7 +5,7 @@ import {
   Users, Clock, CalendarDays, Search, Download, UserCheck, UserX,
   TrendingUp, ChevronLeft, ChevronRight, Edit2, X, CheckCircle2,
   AlarmClock, Palmtree, LayoutGrid, List, CalendarRange, Play, Square, Timer,
-  RotateCcw, Target, Coffee
+  RotateCcw, Target, Coffee, ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -18,7 +18,7 @@ import dayjs from "dayjs";
 
 // ─── Types ───────────────────────────────────────────────
 type AttStatus = "present" | "late" | "absent" | "leave" | "holiday" | "half_day" | "on_duty";
-type ViewTab = "daily" | "logsheet" | "summary" | "leaves";
+type ViewTab = "daily" | "logsheet" | "summary" | "leaves" | "holidays";
 
 interface LeaveRequest {
   id: string;
@@ -70,13 +70,17 @@ function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
-function formatDurationDisplay(clock_in: string, clock_out: string | null) {
+function formatDurationDisplay(clock_in: string, clock_out: string | null, recordDate?: string) {
   if (!clock_in) return "—";
-  const start = dayjs(`2000-01-01 ${clock_in}`);
-  const end = clock_out ? dayjs(`2000-01-01 ${clock_out}`) : dayjs();
+  const dateRef = recordDate || dayjs().format("YYYY-MM-DD");
+  const start = dayjs(`${dateRef} ${clock_in}`);
+  const end = clock_out ? dayjs(`${dateRef} ${clock_out}`) : dayjs();
+  
   const diffMin = end.diff(start, 'minute');
-  const hrs = Math.floor(Math.abs(diffMin) / 60);
-  const mins = Math.abs(diffMin) % 60;
+  if (diffMin < 0) return "0 hr 0 min";
+  
+  const hrs = Math.floor(diffMin / 60);
+  const mins = diffMin % 60;
   return `${hrs} hr ${mins} min`;
 }
 
@@ -147,6 +151,8 @@ export default function AdminAttendancePage() {
   const [selectedDate, setSelectedDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("All");
+  const [showMonthSelect, setShowMonthSelect] = useState(false);
+  const [showYearSelect, setShowYearSelect] = useState(false);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [dailyLogs, setDailyLogs] = useState<Record<string, DayRecord & { modified_by_name?: string }>>({});
@@ -172,6 +178,20 @@ export default function AdminAttendancePage() {
     from: dayjs().format("YYYY-MM-DD"),
     to: dayjs().format("YYYY-MM-DD"),
     reason: ""
+  });
+
+  // Holidays
+  const [holidays, setHolidays] = useState<Record<string, any>>({});
+  const [showHolidayModal, setShowHolidayModal] = useState(false);
+  const [holidayDate, setHolidayDate] = useState("");
+  const [holidayForm, setHolidayForm] = useState({
+    title: "",
+    description: "",
+    type: "public",
+    color: "#ef4444",
+    is_half_day: false,
+    start_time: "09:00:00",
+    end_time: "13:00:00"
   });
 
   // Initial Auth & Data
@@ -228,10 +248,20 @@ export default function AdminAttendancePage() {
     setLeaves(data || []);
   }
 
+  async function loadHolidays() {
+    const start = dayjs(selectedDate).startOf('month').format("YYYY-MM-DD");
+    const end = dayjs(selectedDate).endOf('month').format("YYYY-MM-DD");
+    const { data } = await supabase.from("system_holidays").select("*").gte("date", start).lte("date", end);
+    const hm: Record<string, any> = {};
+    data?.forEach(h => hm[h.date] = h);
+    setHolidays(hm);
+  }
+
   useEffect(() => { init(); }, []); // Run once on mount
   useEffect(() => { loadLogsForDate(selectedDate); }, [selectedDate]); // Refetch on date change
   useEffect(() => { 
     if (tab === "leaves") loadLeaves();
+    else if (tab === "holidays") loadHolidays();
     else if (tab !== "daily") loadMonthData(); 
   }, [tab, selectedDate]);
 
@@ -240,8 +270,23 @@ export default function AdminAttendancePage() {
       loadLogsForDate(selectedDate);
       if (tab !== "daily") loadMonthData();
     }).subscribe();
-    return () => { supabase.removeChannel(chan); };
+    const chan2 = supabase.channel("holidays_updates").on('postgres_changes', { event: '*', schema: 'public', table: 'system_holidays' }, () => {
+      loadHolidays();
+    }).subscribe();
+    return () => { supabase.removeChannel(chan); supabase.removeChannel(chan2); };
   }, [tab, selectedDate]);
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowHolidayModal(false);
+        setShowLeaveModal(false);
+        setShowOverride(false);
+      }
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, []);
 
   // Actions
   async function handleCheckAction(type: "in" | "out") {
@@ -358,19 +403,45 @@ export default function AdminAttendancePage() {
   async function handleManualLeave() {
     if (!leaveForm.empId) return;
     try {
+      const dayCount = dayjs(leaveForm.to).diff(dayjs(leaveForm.from), 'day') + 1;
       const { error } = await supabase.from("leave_requests").insert({
         employee_id: leaveForm.empId,
         type: leaveForm.type,
         from_date: leaveForm.from,
         to_date: leaveForm.to,
+        start_date: leaveForm.from,
+        end_date: leaveForm.to,
+        days: dayCount,
         reason: leaveForm.reason,
-        status: userRole === "super_admin" ? "approved" : "pending",
+        status: userRole === "super_admin" ? "Approved" : "Pending", // Match capitalized status for safety
         approved_by: userRole === "super_admin" ? userId : null
       });
       if (error) throw error;
       showToast("Leave induction completed", "success");
       setShowLeaveModal(false);
       loadLeaves();
+    } catch (e: any) {
+      showToast(e.message, "error");
+    }
+  }
+
+  async function handleHolidaySubmit() {
+    if (!holidayForm.title || !holidayDate) return;
+    try {
+      const { error } = await supabase.from("system_holidays").upsert({
+        date: holidayDate,
+        title: holidayForm.title,
+        description: holidayForm.description,
+        type: holidayForm.type,
+        color: holidayForm.color,
+        is_half_day: holidayForm.is_half_day,
+        start_time: holidayForm.is_half_day ? holidayForm.start_time : null,
+        end_time: holidayForm.is_half_day ? holidayForm.end_time : null
+      }, { onConflict: "date" });
+      if (error) throw error;
+      showToast("Holiday protocol published successfully", "success");
+      setShowHolidayModal(false);
+      loadHolidays();
     } catch (e: any) {
       showToast(e.message, "error");
     }
@@ -393,28 +464,13 @@ export default function AdminAttendancePage() {
   return (
     <>
       <DashboardShell
-        title="Attendance"
-        subtitle="Track, manage and audit workforce attendance."
+        title="Attendance Command Center"
+        subtitle="Track, manage and audit workforce attendance records."
         actions={
-          <div className="flex items-center">
-            <DigitalClock clockIn={myTodayLog?.clock_in} clockOut={myTodayLog?.clock_out} />
-            <div className="flex items-center gap-2">
-              <Button 
-                 variant="outline" size="sm" onClick={() => handleCheckAction("in")} 
-                 disabled={checking || (!!myTodayLog?.clock_in && isSelectedToday) || !isSelectedToday} 
-                 className="h-10 px-6 rounded-xl font-bold border-emerald-500/20 text-emerald-600 hover:bg-emerald-500/5 transition-all">
-                <Play size={14} className="mr-2" /> Check In
-              </Button>
-              <Button 
-                 variant="outline" size="sm" onClick={() => handleCheckAction("out")} 
-                 disabled={checking || !myTodayLog?.clock_in || !!myTodayLog?.clock_out}
-                 className="h-10 px-6 rounded-xl font-bold border-rose-500/20 text-rose-600 hover:bg-rose-500/5 transition-all">
-                <Square size={14} className="mr-2" /> Check Out
-              </Button>
-              <Button variant="secondary" size="sm" className="h-10 px-4 rounded-xl font-bold">
-                <Download size={14} className="mr-2" /> Export
-              </Button>
-            </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" className="h-10 px-4 rounded-xl font-bold">
+              <Download size={14} className="mr-2" /> Export
+            </Button>
           </div>
         }
       >
@@ -426,6 +482,7 @@ export default function AdminAttendancePage() {
                 { key: "logsheet", label: "Log Sheet",    icon: LayoutGrid },
                 { key: "summary",  label: "Monthly Summary", icon: CalendarRange },
                 { key: "leaves",   label: "Leave Approval", icon: Palmtree },
+                { key: "holidays", label: "System Holidays", icon: Palmtree },
               ].map(({ key, label, icon: Icon }) => (
                 <button key={key} onClick={() => setTab(key as ViewTab)}
                   className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all", tab === key ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}>
@@ -509,9 +566,19 @@ export default function AdminAttendancePage() {
                                {emp.id === userId && <Badge variant="default" className="text-[10px] h-5 rounded-md">YOU</Badge>}
                              </div></td>
                              <td className="px-5 py-3"><p className="text-xs font-semibold text-theme-fg">{emp.department}</p><p className="text-xs text-theme-muted">{emp.designation}</p></td>
-                             <td className="px-5 py-3 font-mono text-xs text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}</td>
-                             <td className="px-5 py-3 font-mono text-xs text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}</td>
-                             <td className="px-5 py-3 text-xs font-semibold text-theme-fg tabular-nums">{log?.clock_in ? formatDurationDisplay(log.clock_in, log.clock_out) : "—"}</td>
+                             <td className="px-5 py-3">
+                               <div className="flex flex-col">
+                                 <span className="font-mono text-xs font-bold text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}</span>
+                                 {log?.clock_in && <span className="text-[10px] text-theme-subtle font-medium mt-0.5">{dayjs(selectedDate).format("DD MMM, YYYY")}</span>}
+                               </div>
+                             </td>
+                             <td className="px-5 py-3">
+                               <div className="flex flex-col">
+                                 <span className="font-mono text-xs font-bold text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}</span>
+                                 {log?.clock_out && <span className="text-[10px] text-theme-subtle font-medium mt-0.5">{dayjs(selectedDate).format("DD MMM, YYYY")}</span>}
+                               </div>
+                             </td>
+                             <td className="px-5 py-3 text-xs font-semibold text-theme-fg tabular-nums">{log?.clock_in ? formatDurationDisplay(log.clock_in, log.clock_out, selectedDate) : "—"}</td>
                              <td className="px-5 py-3">
                                 <div className="flex items-center gap-1.5 text-xs font-semibold text-theme-muted">
                                   <Coffee size={13} />
@@ -703,8 +770,325 @@ export default function AdminAttendancePage() {
               </div>
             </div>
           )}
+
+          {tab === "holidays" && (
+            <div className="enterprise-card bg-theme-surface p-0 overflow-hidden flex flex-col border border-theme-border shadow-xl h-[650px]">
+              <div className="p-4 border-b border-theme-border flex items-center justify-between bg-theme-page/50">
+                <div className="flex items-center gap-4">
+                  {/* Custom Month Dropdown */}
+                  <div className="relative">
+                    <button 
+                      onClick={() => { setShowMonthSelect(!showMonthSelect); setShowYearSelect(false); }}
+                      className="flex items-center gap-2 text-xl font-black text-theme-fg tracking-tight hover:text-theme-primary transition-colors"
+                    >
+                      {dayjs(selectedDate).format('MMMM')}
+                      <ChevronDown size={16} className="text-theme-subtle" />
+                    </button>
+                    {showMonthSelect && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowMonthSelect(false)} />
+                        <div className="absolute top-full left-0 mt-2 w-48 bg-theme-surface border border-theme-border rounded-xl shadow-2xl z-50 p-2 grid grid-cols-2 gap-1 animate-in slide-in-from-top-2">
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <button
+                              key={i}
+                              onClick={() => { setSelectedDate(dayjs(selectedDate).month(i).format('YYYY-MM-DD')); setShowMonthSelect(false); }}
+                              className={cn(
+                                "text-left px-3 py-2 text-[11px] font-bold uppercase tracking-widest rounded-lg transition-all",
+                                dayjs(selectedDate).month() === i ? "bg-theme-primary text-white" : "text-theme-fg hover:bg-theme-raised"
+                              )}
+                            >
+                              {dayjs().month(i).format('MMM')}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Custom Year Dropdown */}
+                  <div className="relative">
+                    <button 
+                      onClick={() => { setShowYearSelect(!showYearSelect); setShowMonthSelect(false); }}
+                      className="flex items-center gap-2 text-xl font-black text-theme-fg tracking-tight hover:text-theme-primary transition-colors"
+                    >
+                      {dayjs(selectedDate).year()}
+                      <ChevronDown size={16} className="text-theme-subtle" />
+                    </button>
+                    {showYearSelect && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowYearSelect(false)} />
+                        <div className="absolute top-full left-0 mt-2 w-32 bg-theme-surface border border-theme-border rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1 animate-in slide-in-from-top-2">
+                          {Array.from({ length: 7 }).map((_, i) => {
+                            const yr = dayjs().year() - 3 + i;
+                            return (
+                              <button
+                                key={yr}
+                                onClick={() => { setSelectedDate(dayjs(selectedDate).year(yr).format('YYYY-MM-DD')); setShowYearSelect(false); }}
+                                className={cn(
+                                  "text-left px-3 py-2 text-xs font-bold rounded-lg transition-all text-center",
+                                  dayjs(selectedDate).year() === yr ? "bg-theme-primary text-white" : "text-theme-fg hover:bg-theme-raised"
+                                )}
+                              >
+                                {yr}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 p-1 bg-theme-surface border border-theme-border rounded-2xl shadow-sm">
+                  <button 
+                    onClick={() => setSelectedDate(dayjs(selectedDate).subtract(1, 'day').format('YYYY-MM-DD'))} 
+                    className="p-2.5 hover:bg-theme-raised rounded-xl transition-all text-theme-subtle hover:text-theme-primary"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  
+                  <div className="px-5 py-2.5 flex items-center gap-3 bg-theme-page/50 border border-theme-border rounded-xl min-w-[140px] justify-center relative group">
+                    <CalendarDays size={14} className="text-theme-primary" />
+                    <span className="text-xs font-black uppercase tracking-widest text-theme-fg">
+                      {dayjs(selectedDate).isSame(dayjs(), 'day') ? "Today" : 
+                       dayjs(selectedDate).isSame(dayjs().subtract(1, 'day'), 'day') ? "Yesterday" :
+                       dayjs(selectedDate).isSame(dayjs().add(1, 'day'), 'day') ? "Tomorrow" :
+                       dayjs(selectedDate).format('DD MMM, YYYY')}
+                    </span>
+                    {selectedDate !== dayjs().format('YYYY-MM-DD') && (
+                      <button 
+                        onClick={() => setSelectedDate(dayjs().format('YYYY-MM-DD'))}
+                        className="p-1 hover:bg-theme-primary/10 rounded-lg transition-all text-theme-subtle hover:text-theme-primary ml-1"
+                        title="Reset to Today"
+                      >
+                        <RotateCcw size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={() => setSelectedDate(dayjs(selectedDate).add(1, 'day').format('YYYY-MM-DD'))} 
+                    className="p-2.5 hover:bg-theme-raised rounded-xl transition-all text-theme-subtle hover:text-theme-primary"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 flex flex-col bg-theme-page">
+                <div className="grid grid-cols-7 border-b border-theme-border bg-theme-surface">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <div key={day} className="py-4 text-center text-[10px] font-black uppercase tracking-widest text-theme-muted">{day}</div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 flex-1 auto-rows-[1fr]">
+                  {Array.from({ length: dayjs(selectedDate).startOf('month').day() }).map((_, i) => <div key={`empty-${i}`} className="border-r border-b border-theme-border bg-theme-surface/30 min-h-[60px]" />)}
+                  
+                  {Array.from({ length: dayjs(selectedDate).daysInMonth() }).map((_, i) => {
+                    const dNum = i + 1;
+                    const dateStr = dayjs(selectedDate).date(dNum).format('YYYY-MM-DD');
+                    const holi = holidays[dateStr];
+                    const isToday = dateStr === dayjs().format('YYYY-MM-DD');
+                    const isSelected = dateStr === selectedDate;
+                    
+                    return (
+                      <div 
+                        key={dateStr}
+                        onClick={() => {
+                          setSelectedDate(dateStr);
+                          setHolidayDate(dateStr);
+                          setHolidayForm({
+                            title: holi?.title || "",
+                            description: holi?.description || "",
+                            type: holi?.type || "public",
+                            color: holi?.color || "#ef4444",
+                            is_half_day: holi?.is_half_day || false,
+                            start_time: holi?.start_time || "09:00:00",
+                            end_time: holi?.end_time || "13:00:00"
+                          });
+                        }}
+                        className={cn(
+                          "relative border-r border-b border-theme-border p-1.5 transition-all min-h-[80px] flex flex-col group overflow-visible cursor-pointer",
+                          isSelected ? "bg-theme-raised" : "bg-theme-surface/50 hover:bg-theme-raised/40",
+                          isToday ? "ring-2 ring-inset ring-theme-primary" : ""
+                        )}
+                      >
+                        <div className="flex justify-between items-start mb-0.5 z-10">
+                          <span className={cn(
+                            "text-xs font-black w-6 h-6 flex items-center justify-center rounded-full transition-colors", 
+                            isToday ? "bg-theme-primary text-white" : 
+                            isSelected ? "bg-theme-fg text-theme-surface" : "text-theme-fg/90 group-hover:text-theme-primary group-hover:bg-theme-primary/10"
+                          )}>
+                            {dNum}
+                          </span>
+                        </div>
+                        {holi && (
+                          <div className="mt-auto space-y-1 rounded px-1.5 py-1 mb-1 shadow-sm relative group/holi z-20" style={{ backgroundColor: `${holi.color}20`, borderLeft: `3px solid ${holi.color}` }}>
+                            <span className="block text-[9px] font-black uppercase tracking-widest truncate" style={{ color: holi.color }}>{holi.title}</span>
+                            {holi.is_half_day && <span className="block text-[9px] font-bold font-mono opacity-100" style={{ color: holi.color }}>{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>}
+                            
+                            {/* Hover Tooltip Popup */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-theme-surface border border-theme-border rounded-xl shadow-2xl p-4 opacity-0 pointer-events-none group-hover/holi:opacity-100 transition-all duration-200 z-[100] transform scale-95 group-hover/holi:scale-100">
+                              <h4 className="text-sm font-black uppercase tracking-widest mb-1.5 border-b border-theme-border pb-1.5" style={{ color: holi.color }}>{holi.title}</h4>
+                              {holi.description && <p className="text-[12px] text-theme-subtle mb-3 leading-relaxed font-medium">{holi.description}</p>}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">{holi.type}</span>
+                                {holi.is_half_day ? (
+                                  <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider font-mono">{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>
+                                ) : (
+                                  <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">Full Day</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </DashboardShell>
+
+      <div className={cn(
+        "fixed inset-0 z-[10000] flex justify-end bg-black/40 backdrop-blur-[2px] transition-all duration-1000 ease-in-out",
+        showHolidayModal ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+      )}>
+         {/* Backdrop Click */}
+         <div className="absolute inset-0 cursor-pointer" onClick={() => setShowHolidayModal(false)} />
+         
+         <div 
+           className={cn(
+             "w-full max-w-md bg-theme-surface h-full shadow-2xl border-l border-theme-border relative flex flex-col transition-all duration-1000 ease-in-out"
+           )}
+           style={{ 
+             transform: showHolidayModal ? 'translateX(0) rotateY(0) scale(1)' : 'translateX(100%) rotateY(-15deg) scale(0.95)',
+             transformOrigin: 'right center',
+             perspective: '2000px',
+             opacity: showHolidayModal ? 1 : 0
+           }}
+         >
+              <div className="p-6 border-b border-theme-border flex items-center justify-between bg-theme-surface">
+                 <div>
+                   <h3 className="text-xl font-black text-theme-fg tracking-tight">Holiday Management</h3>
+                   <p className="text-xs text-theme-muted font-medium mt-1">Configure company-wide calendar events</p>
+                 </div>
+                 <button onClick={() => setShowHolidayModal(false)} className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-theme-raised transition-all text-theme-muted hover:text-theme-fg border border-theme-border">
+                    <X size={20} />
+                 </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                 <div className="space-y-4">
+                    <div className="p-4 bg-theme-page/50 border border-theme-border rounded-2xl">
+                      <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Selected Date</label>
+                      <div className="flex items-center gap-3 text-theme-fg">
+                        <CalendarDays size={18} className="text-theme-primary" />
+                        <span className="text-lg font-bold">{dayjs(holidayDate).format('DD MMMM, YYYY')}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Event Title</label>
+                      <input 
+                        type="text" 
+                        value={holidayForm.title} 
+                        onChange={e => setHolidayForm({...holidayForm, title: e.target.value})} 
+                        placeholder="e.g. Christmas Day" 
+                        className="w-full h-12 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary focus:ring-4 focus:ring-theme-primary/10 transition-all shadow-sm" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Description</label>
+                      <textarea 
+                        value={holidayForm.description} 
+                        onChange={e => setHolidayForm({...holidayForm, description: e.target.value})} 
+                        placeholder="Enter holiday details or reason..."
+                        className="w-full h-28 p-4 bg-theme-page border border-theme-border rounded-xl text-sm font-medium text-theme-fg outline-none focus:border-theme-primary focus:ring-4 focus:ring-theme-primary/10 resize-none transition-all shadow-sm" 
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Category</label>
+                        <select 
+                          value={holidayForm.type} 
+                          onChange={e => setHolidayForm({...holidayForm, type: e.target.value})} 
+                          className="w-full h-12 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm cursor-pointer"
+                        >
+                          <option value="public">Public Holiday</option>
+                          <option value="company">Company Holiday</option>
+                          <option value="restricted">Restricted Holiday</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">UI Accent</label>
+                        <div className="flex gap-2 p-1 bg-theme-page border border-theme-border rounded-xl h-12">
+                          <input 
+                            type="color" 
+                            value={holidayForm.color} 
+                            onChange={e => setHolidayForm({...holidayForm, color: e.target.value})} 
+                            className="flex-1 h-full rounded-lg cursor-pointer bg-transparent border-none p-0" 
+                          />
+                          <div className="w-10 h-full rounded-lg" style={{ backgroundColor: holidayForm.color }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-theme-page/30 border border-theme-border rounded-2xl">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-all", holidayForm.is_half_day ? "bg-theme-primary text-white" : "bg-theme-raised text-theme-muted")}>
+                            <Clock size={20} />
+                          </div>
+                          <div>
+                            <span className="block text-xs font-black text-theme-fg uppercase tracking-widest">Half Day Session</span>
+                            <span className="text-[10px] text-theme-muted font-medium">Toggle for specific timing</span>
+                          </div>
+                        </div>
+                        <input 
+                          type="checkbox" 
+                          id="hd" 
+                          checked={holidayForm.is_half_day} 
+                          onChange={e => setHolidayForm({...holidayForm, is_half_day: e.target.checked})} 
+                          className="w-6 h-6 rounded-lg bg-theme-page border-theme-border text-theme-primary focus:ring-offset-0 focus:ring-0 cursor-pointer" 
+                        />
+                      </div>
+
+                      {holidayForm.is_half_day && (
+                        <div className="grid grid-cols-2 gap-4 mt-4 animate-in slide-in-from-top-2 duration-300">
+                          <div>
+                            <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Starts At</label>
+                            <input type="time" value={holidayForm.start_time} onChange={e => setHolidayForm({...holidayForm, start_time: e.target.value})} className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Ends At</label>
+                            <input type="time" value={holidayForm.end_time} onChange={e => setHolidayForm({...holidayForm, end_time: e.target.value})} className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                 </div>
+              </div>
+              
+              <div className="p-6 bg-theme-surface border-t border-theme-border flex items-center justify-between gap-3 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+                 <button onClick={async () => {
+                    if(confirm("Permanently delete this holiday from calendar?")) {
+                       await supabase.from("system_holidays").delete().eq("date", holidayDate);
+                       setShowHolidayModal(false); loadHolidays();
+                    }
+                 }} className="px-5 py-3 text-sm font-black uppercase tracking-widest text-red-500 hover:bg-red-500/10 rounded-xl transition-all">Delete</button>
+                 
+                 <div className="flex gap-3">
+                   <button onClick={() => setShowHolidayModal(false)} className="px-6 py-3 text-sm font-black uppercase tracking-widest text-theme-muted hover:text-theme-fg transition-all">Cancel</button>
+                   <Button onClick={handleHolidaySubmit} className="px-8 h-12 bg-theme-primary text-white shadow-lg shadow-theme-primary/25 rounded-xl font-black uppercase tracking-widest text-[11px]">Publish Holiday</Button>
+                 </div>
+              </div>
+           </div>
+        </div>
 
       {/* MANUAL LEAVE MODAL */}
       {showLeaveModal && (
