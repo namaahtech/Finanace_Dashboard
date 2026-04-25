@@ -10,9 +10,28 @@ export async function GET(req: NextRequest) {
     const year = searchParams.get("year");
     const allEmployees = searchParams.get("allEmployees") === "true";
 
+    // Use explicit relationship names to disambiguate foreign keys
     let query = supabase
       .from("kpi_metrics")
-      .select("*, employee:employees(id, name, employeeId, department, designation)");
+      .select(`
+        id,
+        employee_id,
+        month,
+        year,
+        kpi_score,
+        kpi_entries,
+        kra_score,
+        kra_metrics,
+        behavioral_score,
+        behavioral_metrics,
+        final_score,
+        rating_label,
+        remarks,
+        entered_at,
+        updated_at,
+        employee:employees!kpi_metrics_employee_id_fkey(id, name, employeeId, department, designation),
+        entered_by:employees!kpi_metrics_entered_by_fkey(id, name)
+      `);
 
     if (employeeId) {
       query = query.eq("employee_id", employeeId);
@@ -66,14 +85,14 @@ export async function POST(req: NextRequest) {
       remarks
     } = body;
 
-    if (!employee_id || !month || !year) {
+    if (!employee_id || month === undefined || !year) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields" },
+        { success: false, error: "Missing required fields: employee_id, month, year" },
         { status: 400 }
       );
     }
 
-    // Insert or update KPI
+    // Insert or update KPI with explicit relationship select
     const { data, error } = await supabase
       .from("kpi_metrics")
       .upsert(
@@ -82,20 +101,37 @@ export async function POST(req: NextRequest) {
           employee_id,
           month,
           year,
-          kpi_score,
+          kpi_score: kpi_score || 0,
           kpi_entries: kpi_entries || [],
-          kra_score,
+          kra_score: kra_score || 0,
           kra_metrics: kra_metrics || {},
-          behavioral_score,
+          behavioral_score: behavioral_score || 0,
           behavioral_metrics: behavioral_metrics || {},
-          final_score,
-          rating_label,
+          final_score: final_score || 0,
+          rating_label: rating_label || "Meets",
           remarks,
           updated_at: new Date().toISOString()
         },
         { onConflict: "id" }
       )
-      .select("*, employee:employees(id, name, employeeId, department)");
+      .select(`
+        id,
+        employee_id,
+        month,
+        year,
+        kpi_score,
+        kpi_entries,
+        kra_score,
+        kra_metrics,
+        behavioral_score,
+        behavioral_metrics,
+        final_score,
+        rating_label,
+        remarks,
+        entered_at,
+        updated_at,
+        employee:employees!kpi_metrics_employee_id_fkey(id, name, employeeId, department)
+      `);
 
     if (error) throw error;
 
