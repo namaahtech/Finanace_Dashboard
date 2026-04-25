@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
         remarks,
         entered_at,
         updated_at,
-        employee:employees!kpi_metrics_employee_id_fkey(id, name, employeeId, department, designation),
+        employee:employees!kpi_metrics_employee_id_fkey(id, name, employee_id, department, designation),
         entered_by:employees!kpi_metrics_entered_by_fkey(id, name)
       `);
 
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
         remarks,
         entered_at,
         updated_at,
-        employee:employees!kpi_metrics_employee_id_fkey(id, name, employeeId, department)
+        employee:employees!kpi_metrics_employee_id_fkey(id, name, employee_id, department)
       `);
 
     if (error) throw error;
