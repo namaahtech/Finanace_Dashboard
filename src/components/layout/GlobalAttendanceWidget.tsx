@@ -35,14 +35,16 @@ export function GlobalAttendanceWidget({ floating = false }: { floating?: boolea
         .eq("employee_id", user.id)
         .eq("date", today)
         .single();
-      
+
       if (data) {
         setActiveSession(data);
       } else {
         setActiveSession(null);
       }
-    } catch (e) {
-      console.error(e);
+      // Silently handle errors - table might not exist or user might not have access
+      if (error) {
+        setActiveSession(null);
+      }
     } finally {
       setLoading(false);
     }

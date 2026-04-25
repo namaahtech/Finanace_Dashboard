@@ -7,10 +7,12 @@ import { useAuth } from "@/components/layout/AuthProvider";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, cn } from "@/lib/utils";
-import { 
-  calculateCompanyScore, 
-  getCompanyMultiplier, 
-  getEmployeeMultiplier 
+import { ProjectModal } from "@/components/projects/ProjectModal";
+import { ProjectCard } from "@/components/projects/ProjectCard";
+import {
+  calculateCompanyScore,
+  getCompanyMultiplier,
+  getEmployeeMultiplier
 } from "@/lib/incentiveMath";
 import dayjs from "dayjs";
 import {
@@ -24,7 +26,8 @@ import {
   ChevronRight,
   History,
   TrendingDown,
-  LayoutGrid
+  LayoutGrid,
+  Briefcase
 } from "lucide-react";
 import {
   BarChart,
@@ -179,6 +182,27 @@ interface IncentiveData {
   }>;
 }
 
+interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  progress: number;
+  phase: string;
+  dueDate?: string;
+  tasks: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    todo: number;
+  };
+}
+
+interface AssignedProjectsResponse {
+  success: boolean;
+  data: Project[];
+  count: number;
+}
+
 export default function EmployeeDashboard() {
   const { user } = useAuth();
   const { request } = useApi();
@@ -186,8 +210,28 @@ export default function EmployeeDashboard() {
   const [config, setConfig] = useState<ConfigData | null>(null);
   const [kpi, setKpi] = useState<KpiData["scores"]>([]);
   const [incentiveData, setIncentiveData] = useState<IncentiveData | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [showProjectModal, setShowProjectModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState(new Date());
+
+  const loadProjects = useCallback(async (silent = false) => {
+    if (!user?.id) return;
+    if (!silent) setProjectsLoading(true);
+    try {
+      const res = await request<AssignedProjectsResponse>({
+        url: `/api/projects/assigned?employeeId=${user.id}`,
+      });
+      if (res.success) {
+        setProjects(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to load projects:", err);
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, [user?.id, request]);
 
   const load = useCallback(async (silent = false) => {
     if (!user) return;
@@ -213,10 +257,14 @@ export default function EmployeeDashboard() {
 
   useEffect(() => {
     load();
+    loadProjects();
     // Real-time Simulation: Sync every 60 seconds
-    const interval = setInterval(() => load(true), 60000);
+    const interval = setInterval(() => {
+      load(true);
+      loadProjects(true);
+    }, 60000);
     return () => clearInterval(interval);
-  }, [load]);
+  }, [load, loadProjects]);
 
   const latestKpi = kpi[0];
   const employeeScore = latestKpi?.final_score ?? 80;
@@ -255,6 +303,55 @@ export default function EmployeeDashboard() {
     >
       <div className="space-y-6 animate-in fade-in duration-700">
         
+        {/* My Assigned Projects */}
+        <div className="enterprise-card bg-theme-surface p-6 border border-theme-border shadow-xl">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-theme-page border border-theme-border">
+                <Briefcase size={18} className="text-theme-primary" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg">My Assigned Projects</h3>
+                <p className="text-[10px] text-theme-muted font-bold mt-0.5 uppercase tracking-wider">
+                  {projects.length} active project{projects.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => setShowProjectModal(true)}
+              className="font-black uppercase tracking-widest text-[10px] h-9"
+            >
+              View All <ChevronRight size={14} className="ml-2" />
+            </Button>
+          </div>
+
+          {projectsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-64 bg-theme-raised animate-pulse rounded-2xl" />
+              ))}
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="text-5xl mb-4">📦</div>
+              <p className="text-theme-muted font-bold">No projects assigned yet</p>
+              <p className="text-[12px] text-theme-subtle mt-1">Your assigned projects will appear here</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {projects.slice(0, 3).map((project) => (
+                <div
+                  key={project.id}
+                  onClick={() => setShowProjectModal(true)}
+                  className="cursor-pointer transition-transform hover:scale-105"
+                >
+                  <ProjectCard {...project} onClick={() => setShowProjectModal(true)} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* KPI Grid - Enterprise Grade */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
@@ -528,6 +625,12 @@ export default function EmployeeDashboard() {
             </Link>
           </div>
         </div>
+
+        <ProjectModal
+          isOpen={showProjectModal}
+          onClose={() => setShowProjectModal(false)}
+          projects={projects}
+        />
       </div>
     </DashboardShell>
   );

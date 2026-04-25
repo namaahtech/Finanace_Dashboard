@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
 
-    const { name, email, role, department, designation, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary } = body;
+    const { name, email, role, department, designation, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary, salary_min, salary_max, kpi_weight, kra_weight, behavioral_weight, enable_salary_linkage } = body;
 
     if (!name || !email || !role) {
       return NextResponse.json({ error: "Missing highly critical parameters (Name, Email, Role)" }, { status: 400 });
@@ -33,25 +33,35 @@ export async function POST(req: Request) {
     // 3. Systematically link the created User ID structurally to employee DB table
     const employee_id_gen = `NP-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const insertData: any = {
+      id: user.id,   // Mapped to strict auth.user (RLS)
+      name,
+      email,
+      employee_id: body.employee_id || employee_id_gen,
+      role,
+      department,
+      designation,
+      team_id: team_id || null,
+      shift_id: shift_id || null,
+      monthly_leave_quota: monthly_leave_quota || 1.5,
+      leave_balance: monthly_leave_quota || 1.5,
+      joining_date: joining_date || new Date().toISOString(),
+      employment_type: employment_type || 'full_time',
+      salary_structure: salary_structure || 'fixed_monthly',
+      base_salary: base_salary ? Number(base_salary) : 0
+    };
+
+    // Add salary fields only if they're provided (migration may not be applied yet)
+    if (salary_min !== undefined) insertData.salary_min = salary_min ? Number(salary_min) : null;
+    if (salary_max !== undefined) insertData.salary_max = salary_max ? Number(salary_max) : null;
+    if (kpi_weight !== undefined) insertData.kpi_weight = kpi_weight ? Number(kpi_weight) : 40;
+    if (kra_weight !== undefined) insertData.kra_weight = kra_weight ? Number(kra_weight) : 40;
+    if (behavioral_weight !== undefined) insertData.behavioral_weight = behavioral_weight ? Number(behavioral_weight) : 20;
+    if (enable_salary_linkage !== undefined) insertData.enable_salary_linkage = enable_salary_linkage || false;
+
     const { error: dbError } = await supabase
       .from("employees")
-      .insert({
-        id: user.id,   // Mapped to strict auth.user (RLS)
-        name,
-        email,
-        employee_id: body.employee_id || employee_id_gen,
-        role,
-        department,
-        designation,
-        team_id: team_id || null,
-        shift_id: shift_id || null,
-        monthly_leave_quota: monthly_leave_quota || 1.5,
-        leave_balance: monthly_leave_quota || 1.5,
-        joining_date: joining_date || new Date().toISOString(),
-        employment_type: employment_type || 'full_time',
-        salary_structure: salary_structure || 'fixed_monthly',
-        base_salary: base_salary ? Number(base_salary) : 0
-      });
+      .insert(insertData);
 
     if (dbError) {
       // Revert if insertion failed
@@ -144,7 +154,7 @@ export async function GET(req: Request) {
     if (role) {
       query = query.eq("role", role);
     }
-    
+
     if (search) {
       query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,employee_id.ilike.%${search}%`);
     }
@@ -152,7 +162,34 @@ export async function GET(req: Request) {
     // Always sort by joined_at or created_at natively to display newest first
     query = query.order("created_at", { ascending: false });
 
-    const { data, count, error } = await query;
+    let { data, count, error } = await query;
+
+    // If select(*) fails due to missing columns, try without them
+    if (error && error.message?.includes("column")) {
+      console.warn("Some columns not found, fetching available columns only");
+
+      let fallbackQuery = supabase
+        .from("employees")
+        .select("id, name, email, employee_id, role, department, designation, team_id, joining_date, employment_type, salary_structure, base_salary, is_active, created_at, updated_at", { count: 'exact' });
+
+      if (role) {
+        fallbackQuery = fallbackQuery.eq("role", role);
+      }
+
+      if (search) {
+        fallbackQuery = fallbackQuery.or(`name.ilike.%${search}%,email.ilike.%${search}%,employee_id.ilike.%${search}%`);
+      }
+
+      const { data: fallbackData, count: fallbackCount, error: fallbackError } = await fallbackQuery.order("created_at", { ascending: false });
+
+      if (!fallbackError) {
+        data = fallbackData;
+        count = fallbackCount;
+        error = null;
+      } else {
+        throw fallbackError;
+      }
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

@@ -43,6 +43,12 @@ interface User {
   employment_type: string;
   salary_structure: string;
   base_salary: number;
+  salary_min?: number;
+  salary_max?: number;
+  kpi_weight?: number;
+  kra_weight?: number;
+  behavioral_weight?: number;
+  enable_salary_linkage?: boolean;
 }
 
 const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger"> = {
@@ -247,7 +253,10 @@ export default function AdminUsersPage() {
     name: "", email: "", role: "employee",
     employeeId: "", department: "", designation: "", joiningDate: "",
     shift_id: "", team_id: "", monthly_leave_quota: "1",
-    employment_type: "full_time", salary_structure: "fixed_monthly", base_salary: ""
+    employment_type: "full_time", salary_structure: "fixed_monthly", base_salary: "",
+    salary_min: "", salary_max: "",
+    kpi_weight: 40, kra_weight: 40, behavioral_weight: 20,
+    enable_salary_linkage: false
   });
 
   async function load(q?: string) {
@@ -291,12 +300,15 @@ export default function AdminUsersPage() {
 
   function handleAdd() {
     setEditingId(null);
-    setForm({ 
-      name: "", email: "", role: "employee", employeeId: "", 
+    setForm({
+      name: "", email: "", role: "employee", employeeId: "",
       department: "", designation: "", shift_id: "", team_id: "",
       monthly_leave_quota: "1", employment_type: "full_time",
       salary_structure: "fixed_monthly", base_salary: "",
-      joiningDate: new Date().toISOString() 
+      salary_min: "", salary_max: "",
+      joiningDate: new Date().toISOString(),
+      kpi_weight: 40, kra_weight: 40, behavioral_weight: 20,
+      enable_salary_linkage: false
     });
     setShowForm(true);
   }
@@ -317,7 +329,13 @@ export default function AdminUsersPage() {
       monthly_leave_quota: String(user.monthly_leave_quota || "1"),
       employment_type: user.employment_type || "full_time",
       salary_structure: user.salary_structure || "fixed_monthly",
-      base_salary: String(user.base_salary || "")
+      base_salary: String(user.base_salary || ""),
+      salary_min: String(user.salary_min || ""),
+      salary_max: String(user.salary_max || ""),
+      kpi_weight: user.kpi_weight || 40,
+      kra_weight: user.kra_weight || 40,
+      behavioral_weight: user.behavioral_weight || 20,
+      enable_salary_linkage: user.enable_salary_linkage || false
     });
     setShowForm(true);
   }
@@ -327,12 +345,28 @@ export default function AdminUsersPage() {
     setSubmitting(true);
     try {
       const deptNode = orgTeams.find(t => t.id === form.department);
+
+      // Validate KPI weights sum to 100
+      const totalWeight = form.kpi_weight + form.kra_weight + form.behavioral_weight;
+      if (totalWeight !== 100) {
+        showToast(`KPI weights must sum to 100 (currently ${totalWeight})`, "error");
+        setSubmitting(false);
+        return;
+      }
+
       const payload = {
         ...form,
         department: deptNode ? deptNode.name : form.department,
         shift_id: form.shift_id || null,
         team_id: form.team_id || null,
-        monthly_leave_quota: parseFloat(form.monthly_leave_quota)
+        monthly_leave_quota: parseFloat(form.monthly_leave_quota),
+        base_salary: form.base_salary ? parseFloat(form.base_salary) : 0,
+        salary_min: form.salary_min ? parseFloat(form.salary_min) : null,
+        salary_max: form.salary_max ? parseFloat(form.salary_max) : null,
+        kpi_weight: form.kpi_weight,
+        kra_weight: form.kra_weight,
+        behavioral_weight: form.behavioral_weight,
+        enable_salary_linkage: form.enable_salary_linkage
       };
 
       if (editingId) {
@@ -617,10 +651,19 @@ export default function AdminUsersPage() {
 
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Employment Type</label>
-                    <CustomSelect 
+                    <CustomSelect
                       placeholder="Select Type"
-                      value={form.employment_type} 
-                      onChange={(v) => setForm({...form, employment_type: v})} 
+                      value={form.employment_type}
+                      onChange={(v) => {
+                        // Auto-set salary structure based on employment type
+                        let newSalaryStructure = form.salary_structure;
+                        if (v === "internship") {
+                          newSalaryStructure = "stipend";
+                        } else if (v === "full_time") {
+                          newSalaryStructure = "fixed_monthly";
+                        }
+                        setForm({...form, employment_type: v, salary_structure: newSalaryStructure});
+                      }}
                       options={[
                         { label: "Full Time", value: "full_time" },
                         { label: "Part Time", value: "part_time" },
@@ -630,11 +673,13 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Salary Structure</label>
-                    <CustomSelect 
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Salary Structure
+                      {form.employment_type === "internship" && <span className="text-[10px] bg-amber-500/20 text-amber-600 px-2 py-0.5 rounded">Auto: Stipend</span>}
+                    </label>
+                    <CustomSelect
                       placeholder="Select Structure"
-                      value={form.salary_structure} 
-                      onChange={(v) => setForm({...form, salary_structure: v})} 
+                      value={form.salary_structure}
+                      onChange={(v) => setForm({...form, salary_structure: v})}
                       options={[
                         { label: "Fixed Monthly", value: "fixed_monthly" },
                         { label: "Hourly Pay", value: "hourly" },
@@ -644,10 +689,100 @@ export default function AdminUsersPage() {
                     />
                   </div>
 
-                  <div className="sm:col-span-2 space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Base Salary / Rate (Amount)</label>
-                    <input type="number" required value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })}
-                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                  {/* STIPEND ONLY - Show Min/Max */}
+                  {form.salary_structure === "stipend" && (
+                    <>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Minimum Stipend (₹)</label>
+                        <input type="number" required value={form.salary_min} onChange={(e) => setForm({ ...form, salary_min: e.target.value })}
+                          placeholder="e.g., 10000"
+                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                        <p className="text-[10px] text-theme-muted">Base amount when KPI linkage is disabled</p>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Maximum Stipend (₹)</label>
+                        <input type="number" required value={form.salary_max} onChange={(e) => setForm({ ...form, salary_max: e.target.value })}
+                          placeholder="e.g., 15000"
+                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                        <p className="text-[10px] text-theme-muted">Maximum range (performance-based when linked to KPI)</p>
+                      </div>
+
+                      {/* Enable Salary Linkage to KPI/KRA - ONLY for Stipend */}
+                      <div className="sm:col-span-2 p-4 rounded-lg bg-theme-primary/10 border border-theme-primary/20">
+                        <label className="flex items-center gap-3">
+                          <input type="checkbox" checked={form.enable_salary_linkage}
+                            onChange={(e) => setForm({ ...form, enable_salary_linkage: e.target.checked })}
+                            className="w-4 h-4 rounded border-theme-border"
+                          />
+                          <span className="text-xs font-bold text-theme-primary uppercase tracking-wide">
+                            Link Stipend to KPI/KRA Performance
+                          </span>
+                        </label>
+                        <p className="text-[10px] text-theme-muted mt-2 ml-7">
+                          ✓ If enabled: Stipend auto-adjusts between Min-Max based on KPI/KRA scores<br/>
+                          ✓ If disabled: Use minimum stipend as fixed amount
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* FIXED MONTHLY - Show single base salary */}
+                  {form.salary_structure === "fixed_monthly" && (
+                    <div className="sm:col-span-2 space-y-2">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Monthly Base Salary (₹)</label>
+                      <input type="number" required value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })}
+                        placeholder="e.g., 50000"
+                        className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      <p className="text-[10px] text-theme-muted">Fixed monthly salary amount</p>
+                    </div>
+                  )}
+
+                  {/* HOURLY - Show single hourly rate */}
+                  {form.salary_structure === "hourly" && (
+                    <div className="sm:col-span-2 space-y-2">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Hourly Rate (₹/hour)</label>
+                      <input type="number" required step="0.01" value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })}
+                        placeholder="e.g., 500"
+                        className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      <p className="text-[10px] text-theme-muted">Rate per hour (Salary = Rate × Hours Worked)</p>
+                    </div>
+                  )}
+
+                  {/* DAILY - Show single daily rate */}
+                  {form.salary_structure === "daily" && (
+                    <div className="sm:col-span-2 space-y-2">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Daily Rate (₹/day)</label>
+                      <input type="number" required step="0.01" value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })}
+                        placeholder="e.g., 2000"
+                        className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      <p className="text-[10px] text-theme-muted">Rate per day (Salary = Rate × Days Worked)</p>
+                    </div>
+                  )}
+
+                  {/* KPI & KRA Weights */}
+                  <div className="sm:col-span-2 border-t border-theme-border pt-4 mt-4">
+                    <p className="text-xs font-bold text-theme-primary uppercase tracking-widest mb-4">Performance Linkage Settings</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-blue-600">KPI Weight (%)</label>
+                        <input type="number" min="0" max="100" step="1" defaultValue="40"
+                          onChange={(e) => setForm({ ...form, kpi_weight: parseFloat(e.target.value) })}
+                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600">KRA Weight (%)</label>
+                        <input type="number" min="0" max="100" step="1" defaultValue="40"
+                          onChange={(e) => setForm({ ...form, kra_weight: parseFloat(e.target.value) })}
+                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-amber-600">Behavioral Weight (%)</label>
+                        <input type="number" min="0" max="100" step="1" defaultValue="20"
+                          onChange={(e) => setForm({ ...form, behavioral_weight: parseFloat(e.target.value) })}
+                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-theme-muted mt-2">⚠️ Weights must sum to 100%</p>
                   </div>
 
                   <div className="sm:col-span-2 space-y-2">

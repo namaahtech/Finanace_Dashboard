@@ -9,7 +9,7 @@ import {
   GitBranch, Receipt, CreditCard, Tag, PiggyBank, Handshake,
   MessageSquare, CalendarClock, IndianRupee,
   Shield, RefreshCw, Mail, ChevronDown, Check,
-  Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder,
+  Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder, User,
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
@@ -130,6 +130,7 @@ const salesNav: NavSection[] = [
   ]},
   { title: "My Info", items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard/profile", label: "My Profile", icon: User },
     { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
   ]},
   { title: "Comms", items: [
@@ -141,6 +142,7 @@ const salesNav: NavSection[] = [
 const employeeNav: NavSection[] = [
   { title: "My Workspace", items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard/profile", label: "My Profile", icon: User },
     { href: "/dashboard/attendance", label: "Attendance", icon: CalendarDays },
     { href: "/dashboard/performance", label: "Performance", icon: TrendingUp },
     { href: "/dashboard/incentives", label: "Incentives", icon: Wallet },

@@ -148,8 +148,8 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/kpi/summary — fetch performance summaries
-export async function GET_SUMMARY(req: NextRequest) {
+// GET_SUMMARY — fetch performance summaries (internal, not a route handler)
+async function getSummary(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const employeeId = searchParams.get("employeeId");
