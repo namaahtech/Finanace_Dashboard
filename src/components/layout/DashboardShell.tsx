@@ -13,6 +13,8 @@ interface DashboardShellProps {
  actions?: React.ReactNode;
 }
 
+import { GlobalAttendanceWidget } from "./GlobalAttendanceWidget";
+
 export function DashboardShell({ children, title, subtitle, actions }: DashboardShellProps) {
  const { user, loading } = useAuth();
  const router = useRouter();
@@ -38,15 +40,16 @@ export function DashboardShell({ children, title, subtitle, actions }: Dashboard
  <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
 
  <main className="flex-1 overflow-y-auto flex flex-col min-w-0 bg-theme-page">
- {(title || actions) && (
- <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-theme-border bg-theme-surface/80 px-8 py-5 backdrop-blur-md">
+ <header className="sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-theme-border bg-theme-surface/80 px-6 py-4 backdrop-blur-md">
  <div>
- {title && <h1 className="text-lg font-bold text-theme-fg tracking-tight leading-tight">{title}</h1>}
- {subtitle && <p className="text-xs text-theme-muted mt-0.5">{subtitle}</p>}
+ {title && <h1 className="text-xl font-black text-theme-fg tracking-tight leading-tight">{title}</h1>}
+ {subtitle && <p className="text-[11px] font-bold text-theme-muted uppercase tracking-widest mt-1">{subtitle}</p>}
  </div>
- {actions && <div className="flex items-center gap-3 flex-shrink-0">{actions}</div>}
+ <div className="flex items-center gap-3 flex-shrink-0">
+ <GlobalAttendanceWidget />
+ {actions}
+ </div>
  </header>
- )}
  <div className="flex-1 p-6 lg:p-8">
  <div className="max-w-[1400px] mx-auto">
  {children}

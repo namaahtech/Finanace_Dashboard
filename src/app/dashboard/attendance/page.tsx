@@ -12,14 +12,16 @@ import {
   UserCheck,
   Timer,
   X,
-  RotateCcw
+  RotateCcw,
+  ListFilter,
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import dayjs from "dayjs";
-import axios from "axios";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
@@ -43,9 +45,19 @@ const STATUS_CELL: Record<string, string> = {
   on_duty: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-indigo-500/20",
 };
 
+const STATUS_BADGE: Record<string, "success" | "warning" | "danger" | "info" | "default"> = {
+  present: "success",
+  late: "warning",
+  absent: "danger",
+  leave: "info",
+  holiday: "default",
+  on_duty: "info"
+};
+
 export default function AttendancePage() {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const [activeTab, setActiveTab] = useState<"calendar" | "logsheet">("calendar");
   const [currentMonth, setCurrentMonth] = useState(dayjs());
   const [logs, setLogs] = useState<Record<string, DayRecord>>({});
   const [loading, setLoading] = useState(true);
@@ -63,13 +75,19 @@ export default function AttendancePage() {
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(dayjs()), 60000);
+    const timer = setInterval(() => setCurrentTime(dayjs()), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  const [showCheckModal, setShowCheckModal] = useState(false);
+  const [selectedDateForCheck, setSelectedDateForCheck] = useState<string | null>(null);
+
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setTakeLeaveType(null);
+      if (e.key === "Escape") {
+        setTakeLeaveType(null);
+        setShowCheckModal(false);
+      }
     };
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
@@ -169,10 +187,18 @@ export default function AttendancePage() {
       })
       .subscribe();
 
+    const attSub = supabase
+      .channel('att-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs', filter: `employee_id=eq.${user.id}` }, () => {
+        fetchLogs();
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(empSub);
       supabase.removeChannel(lrSub);
       supabase.removeChannel(holiSub);
+      supabase.removeChannel(attSub);
     };
   }, [fetchLogs, user]);
 
@@ -181,12 +207,10 @@ export default function AttendancePage() {
     let interval: NodeJS.Timeout;
     if (activeSession && activeSession.clock_in && !activeSession.clock_out) {
       const [h, m, s] = activeSession.clock_in.split(":").map(Number);
-      const startTime = new Date();
-      startTime.setHours(h, m, s, 0);
+      const startTime = dayjs().set('hour', h).set('minute', m).set('second', s);
 
       interval = setInterval(() => {
-        const now = new Date();
-        const diff = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+        const diff = dayjs().diff(startTime, 'second');
         setElapsed(diff > 0 ? diff : 0);
       }, 1000);
     } else {
@@ -239,11 +263,8 @@ export default function AttendancePage() {
 
       // --- Admin Notification Dispatch ---
       try {
-        // 1. Get system-alerts channel ID
         const { data: channel } = await supabase.from('channels').select('id').eq('name', 'system-alerts').maybeSingle();
-        
         if (channel) {
-          // 2. Dispatch Message to Comms Hub
           await supabase.from('messages').insert({
             channel_id: channel.id,
             sender_id: user.id,
@@ -252,7 +273,6 @@ export default function AttendancePage() {
           });
         }
 
-        // 3. Log System Notification for Admin Dashboard
         await supabase.from('system_notifications').insert({
           user_id: user.id,
           title: `New Leave Request: ${user.name}`,
@@ -265,9 +285,9 @@ export default function AttendancePage() {
       }
 
       setTakeLeaveType(null);
-      setLeaveDate("");
+      setLeaveDate(dayjs().format("YYYY-MM-DD"));
       setLeaveReason("");
-      fetchLogs(); // Refresh the list
+      fetchLogs();
       showToast(`Protocol submitted for ${leaveDate}`, "success");
     } catch(err: any) {
       console.error(err);
@@ -280,11 +300,23 @@ export default function AttendancePage() {
   const handleCheckIn = async () => {
     if (!user) return;
     setActionLoading(true);
+    const today = dayjs().format("YYYY-MM-DD");
+    const nowTime = dayjs().format("HH:mm:ss");
+    
     try {
-      await axios.post("/api/attendance/logs", { action: "check_in", userId: user.id });
+      const { error } = await supabase.from("attendance_logs").upsert({
+        employee_id: user.id,
+        date: today,
+        clock_in: nowTime,
+        status: "present" // Will be recalculated by protocol if needed
+      }, { onConflict: 'employee_id,date' });
+
+      if (error) throw error;
+      showToast("Checked in successfully", "success");
       await fetchLogs();
     } catch (e) {
       console.error("Check-in Error", e);
+      showToast("Failed to check in", "error");
     } finally {
       setActionLoading(false);
     }
@@ -293,14 +325,30 @@ export default function AttendancePage() {
   const handleCheckOut = async () => {
     if (!user) return;
     setActionLoading(true);
+    const today = dayjs().format("YYYY-MM-DD");
+    const nowTime = dayjs().format("HH:mm:ss");
+
     try {
-      await axios.post("/api/attendance/logs", { action: "check_out", userId: user.id });
+      const { error } = await supabase.from("attendance_logs").update({
+        clock_out: nowTime
+      }).eq("employee_id", user.id).eq("date", today);
+
+      if (error) throw error;
+      showToast("Checked out successfully", "success");
+      setShowCheckModal(false);
       await fetchLogs();
     } catch (e) {
       console.error("Check-out Error", e);
+      showToast("Failed to check out", "error");
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleDayClick = (dateStr: string) => {
+    setSelectedDate(dateStr);
+    setSelectedDateForCheck(dateStr);
+    setShowCheckModal(true);
   };
 
   const formatTime = (seconds: number) => {
@@ -331,9 +379,11 @@ export default function AttendancePage() {
       title="Attendance Command Center"
       subtitle="Track, manage, and verify your real-time attendance logs."
     >
-      <>
-        <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
         
+
+        
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="enterprise-card bg-theme-surface p-6 flex items-center justify-between group overflow-hidden relative">
             <div className="absolute top-0 right-0 p-4 opacity-5 transform rotate-12 group-hover:scale-110 transition-transform">
@@ -368,249 +418,338 @@ export default function AttendancePage() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-          <div className="xl:col-span-2 enterprise-card bg-theme-surface p-0 overflow-hidden flex flex-col border border-theme-border shadow-xl h-full">
-            <div className="p-4 border-b border-theme-border flex items-center justify-between bg-theme-page/50 relative">
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <button 
-                    onClick={() => { setShowMonthSelect(!showMonthSelect); setShowYearSelect(false); }}
-                    className="flex items-center gap-2 text-xl font-black text-theme-fg tracking-tight hover:text-theme-primary transition-colors"
-                  >
-                    {currentMonth.format('MMMM')}
-                    <ChevronDown size={16} className="text-theme-subtle" />
-                  </button>
-                  {showMonthSelect && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowMonthSelect(false)} />
-                      <div className="absolute top-full left-0 mt-2 w-48 bg-theme-surface border border-theme-border rounded-xl shadow-2xl z-50 p-2 grid grid-cols-2 gap-1 animate-in slide-in-from-top-2">
-                        {Array.from({ length: 12 }).map((_, i) => (
-                          <button
-                            key={i}
-                            onClick={() => { setCurrentMonth(currentMonth.month(i)); setShowMonthSelect(false); }}
-                            className={cn(
-                              "text-left px-3 py-2 text-[11px] font-bold uppercase tracking-widest rounded-lg transition-all",
-                              currentMonth.month() === i ? "bg-theme-primary text-white" : "text-theme-fg hover:bg-theme-raised"
-                            )}
-                          >
-                            {dayjs().month(i).format('MMM')}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <button 
-                    onClick={() => { setShowYearSelect(!showYearSelect); setShowMonthSelect(false); }}
-                    className="flex items-center gap-2 text-xl font-black text-theme-fg tracking-tight hover:text-theme-primary transition-colors"
-                  >
-                    {currentMonth.year()}
-                    <ChevronDown size={16} className="text-theme-subtle" />
-                  </button>
-                  {showYearSelect && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowYearSelect(false)} />
-                      <div className="absolute top-full left-0 mt-2 w-32 bg-theme-surface border border-theme-border rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1 animate-in slide-in-from-top-2">
-                        {Array.from({ length: 7 }).map((_, i) => {
-                          const yr = dayjs().year() - 3 + i;
-                          return (
-                            <button
-                              key={yr}
-                              onClick={() => { setCurrentMonth(currentMonth.year(yr)); setShowYearSelect(false); }}
-                              className={cn(
-                                "text-left px-3 py-2 text-xs font-bold rounded-lg transition-all text-center",
-                                currentMonth.year() === yr ? "bg-theme-primary text-white" : "text-theme-fg hover:bg-theme-raised"
-                              )}
-                            >
-                              {yr}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 p-1 bg-theme-surface border border-theme-border rounded-2xl shadow-sm">
-                <button 
-                  onClick={() => {
-                    const next = dayjs(selectedDate).subtract(1, 'day');
-                    setSelectedDate(next.format('YYYY-MM-DD'));
-                    if (!next.isSame(currentMonth, 'month')) setCurrentMonth(next);
-                  }}
-                  className="p-2.5 hover:bg-theme-raised rounded-xl transition-all text-theme-subtle hover:text-theme-primary"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                
-                <div className="px-5 py-2.5 flex items-center gap-3 bg-theme-page/50 border border-theme-border rounded-xl min-w-[140px] justify-center relative group">
-                  <CalendarDays size={14} className="text-theme-primary" />
-                  <span className="text-xs font-black uppercase tracking-widest text-theme-fg">
-                    {dayjs(selectedDate).isSame(dayjs(), 'day') ? "Today" : 
-                     dayjs(selectedDate).isSame(dayjs().subtract(1, 'day'), 'day') ? "Yesterday" :
-                     dayjs(selectedDate).isSame(dayjs().add(1, 'day'), 'day') ? "Tomorrow" :
-                     dayjs(selectedDate).format('DD MMM, YYYY')}
-                  </span>
-                  {selectedDate !== dayjs().format('YYYY-MM-DD') && (
-                    <button 
-                      onClick={() => {
-                        const today = dayjs();
-                        setSelectedDate(today.format('YYYY-MM-DD'));
-                        setCurrentMonth(today);
-                      }}
-                      className="p-1 hover:bg-theme-primary/10 rounded-lg transition-all text-theme-subtle hover:text-theme-primary ml-1"
-                      title="Reset to Today"
-                    >
-                      <RotateCcw size={12} />
-                    </button>
-                  )}
-                </div>
-
-                <button 
-                  onClick={() => {
-                    const next = dayjs(selectedDate).add(1, 'day');
-                    setSelectedDate(next.format('YYYY-MM-DD'));
-                    if (!next.isSame(currentMonth, 'month')) setCurrentMonth(next);
-                  }}
-                  className="p-2.5 hover:bg-theme-raised rounded-xl transition-all text-theme-subtle hover:text-theme-primary"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </div>
+          <div className="xl:col-span-2 flex flex-col gap-4 h-full">
+            
+            {/* View Selector Tabs */}
+            <div className="flex p-1 bg-theme-surface border border-theme-border rounded-xl w-fit">
+               <button 
+                onClick={() => setActiveTab("calendar")}
+                className={cn(
+                  "px-6 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2",
+                  activeTab === "calendar" ? "bg-theme-primary text-white shadow-md" : "text-theme-muted hover:text-theme-fg"
+                )}
+               >
+                 <CalendarDays size={14} />
+                 Calendar View
+               </button>
+               <button 
+                onClick={() => setActiveTab("logsheet")}
+                className={cn(
+                  "px-6 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2",
+                  activeTab === "logsheet" ? "bg-theme-primary text-white shadow-md" : "text-theme-muted hover:text-theme-fg"
+                )}
+               >
+                 <ListFilter size={14} />
+                 Log Sheet
+               </button>
             </div>
 
-            <div className="flex-1 flex flex-col bg-theme-page">
-              <div className="grid grid-cols-7 border-b border-theme-border bg-theme-surface">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="py-4 text-center text-[10px] font-black uppercase tracking-widest text-theme-muted">
-                    {day}
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-7 flex-1 auto-rows-[1fr]">
-                {calendarDays.map((dateStr, idx) => {
-                  if (!dateStr) {
-                    return <div key={`empty-${idx}`} className="border-r border-b border-theme-border bg-theme-surface/30 min-h-[60px]" />;
-                  }
-
-                  const isToday = dateStr === todayStr;
-                  const isSelected = dateStr === selectedDate;
-                  const log = logs[dateStr];
-                  const holi = holidays[dateStr];
-                  const dayNum = dayjs(dateStr).date();
-
-                  return (
-                    <div 
-                      key={dateStr} 
-                      onClick={() => setSelectedDate(dateStr)}
-                      className={cn(
-                        "relative border-r border-b border-theme-border p-1.5 transition-all min-h-[60px] flex flex-col group overflow-visible cursor-pointer",
-                        isSelected ? "bg-theme-raised" : "bg-theme-surface/50 hover:bg-theme-raised/40",
-                        isToday ? "ring-2 ring-inset ring-theme-primary" : "",
-                        log ? STATUS_CELL[log.status] : ""
-                      )}
-                    >
-                      <div className="flex justify-between items-start mb-0.5 z-10">
-                        <span className={cn(
-                          "text-xs font-black w-6 h-6 flex items-center justify-center rounded-full transition-colors",
-                          isToday ? "bg-theme-primary text-white" : 
-                          isSelected ? "bg-theme-fg text-theme-surface" : "text-theme-fg/90 group-hover:text-theme-primary group-hover:bg-theme-primary/10"
-                        )}>
-                          {dayNum}
-                        </span>
-                        {log && !holi && (
-                          <span className="uppercase text-[8px] font-bold tracking-widest bg-white/50 dark:bg-black/20 text-theme-fg backdrop-blur-sm px-1.5 py-0.5 rounded">
-                            {log.status}
-                          </span>
+            <div className="enterprise-card bg-theme-surface p-0 overflow-hidden flex flex-col border border-theme-border shadow-xl min-h-[500px]">
+              
+              {activeTab === "calendar" ? (
+                <>
+                  <div className="p-4 border-b border-theme-border flex items-center justify-between bg-theme-page/50 relative">
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        <button 
+                          onClick={() => { setShowMonthSelect(!showMonthSelect); setShowYearSelect(false); }}
+                          className="flex items-center gap-2 text-xl font-black text-theme-fg tracking-tight hover:text-theme-primary transition-colors"
+                        >
+                          {currentMonth.format('MMMM')}
+                          <ChevronDown size={16} className="text-theme-subtle" />
+                        </button>
+                        {showMonthSelect && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setShowMonthSelect(false)} />
+                            <div className="absolute top-full left-0 mt-2 w-48 bg-theme-surface border border-theme-border rounded-xl shadow-2xl z-50 p-2 grid grid-cols-2 gap-1 animate-in slide-in-from-top-2">
+                              {Array.from({ length: 12 }).map((_, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => { setCurrentMonth(currentMonth.month(i)); setShowMonthSelect(false); }}
+                                  className={cn(
+                                    "text-left px-3 py-2 text-[11px] font-bold uppercase tracking-widest rounded-lg transition-all",
+                                    currentMonth.month() === i ? "bg-theme-primary text-white" : "text-theme-fg hover:bg-theme-raised"
+                                  )}
+                                >
+                                  {dayjs().month(i).format('MMM')}
+                                </button>
+                              ))}
+                            </div>
+                          </>
                         )}
                       </div>
 
-                      {holi && (
-                        <div className="mt-auto space-y-1 rounded px-1.5 py-1 mb-1 z-20 shadow-sm relative group/holi" style={{ backgroundColor: `${holi.color}20`, borderLeft: `3px solid ${holi.color}` }}>
-                          <span className="block text-[9px] font-black uppercase tracking-widest truncate" style={{ color: holi.color }}>{holi.title}</span>
-                          {holi.is_half_day && <span className="block text-[9px] font-bold font-mono opacity-100" style={{ color: holi.color }}>{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>}
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-theme-surface border border-theme-border rounded-xl shadow-2xl p-4 opacity-0 pointer-events-none group-hover/holi:opacity-100 transition-all duration-200 z-[100] transform scale-95 group-hover/holi:scale-100">
-                            <h4 className="text-sm font-black uppercase tracking-widest mb-1.5 border-b border-theme-border pb-1.5" style={{ color: holi.color }}>{holi.title}</h4>
-                            {holi.description && <p className="text-[12px] text-theme-subtle mb-3 leading-relaxed font-medium">{holi.description}</p>}
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">{holi.type}</span>
-                              {holi.is_half_day ? (
-                                <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider font-mono">{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>
-                              ) : (
-                                <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">Full Day</span>
+                      <div className="relative">
+                        <button 
+                          onClick={() => { setShowYearSelect(!showYearSelect); setShowMonthSelect(false); }}
+                          className="flex items-center gap-2 text-xl font-black text-theme-fg tracking-tight hover:text-theme-primary transition-colors"
+                        >
+                          {currentMonth.year()}
+                          <ChevronDown size={16} className="text-theme-subtle" />
+                        </button>
+                        {showYearSelect && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setShowYearSelect(false)} />
+                            <div className="absolute top-full left-0 mt-2 w-32 bg-theme-surface border border-theme-border rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1 animate-in slide-in-from-top-2">
+                              {Array.from({ length: 7 }).map((_, i) => {
+                                const yr = dayjs().year() - 3 + i;
+                                return (
+                                  <button
+                                    key={yr}
+                                    onClick={() => { setCurrentMonth(currentMonth.year(yr)); setShowYearSelect(false); }}
+                                    className={cn(
+                                      "text-left px-3 py-2 text-xs font-bold rounded-lg transition-all text-center",
+                                      currentMonth.year() === yr ? "bg-theme-primary text-white" : "text-theme-fg hover:bg-theme-raised"
+                                    )}
+                                  >
+                                    {yr}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 p-1 bg-theme-surface border border-theme-border rounded-2xl shadow-sm">
+                      <button 
+                        onClick={() => {
+                          const next = dayjs(selectedDate).subtract(1, 'day');
+                          setSelectedDate(next.format('YYYY-MM-DD'));
+                          if (!next.isSame(currentMonth, 'month')) setCurrentMonth(next);
+                        }}
+                        className="p-2.5 hover:bg-theme-raised rounded-xl transition-all text-theme-subtle hover:text-theme-primary"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      
+                      <div className="px-5 py-2.5 flex items-center gap-3 bg-theme-page/50 border border-theme-border rounded-xl min-w-[140px] justify-center relative group">
+                        <CalendarDays size={14} className="text-theme-primary" />
+                        <span className="text-xs font-black uppercase tracking-widest text-theme-fg">
+                          {dayjs(selectedDate).isSame(dayjs(), 'day') ? "Today" : 
+                          dayjs(selectedDate).isSame(dayjs().subtract(1, 'day'), 'day') ? "Yesterday" :
+                          dayjs(selectedDate).isSame(dayjs().add(1, 'day'), 'day') ? "Tomorrow" :
+                          dayjs(selectedDate).format('DD MMM, YYYY')}
+                        </span>
+                        {selectedDate !== dayjs().format('YYYY-MM-DD') && (
+                          <button 
+                            onClick={() => {
+                              const today = dayjs();
+                              setSelectedDate(today.format('YYYY-MM-DD'));
+                              setCurrentMonth(today);
+                            }}
+                            className="p-1 hover:bg-theme-primary/10 rounded-lg transition-all text-theme-subtle hover:text-theme-primary ml-1"
+                            title="Reset to Today"
+                          >
+                            <RotateCcw size={12} />
+                          </button>
+                        )}
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          const next = dayjs(selectedDate).add(1, 'day');
+                          setSelectedDate(next.format('YYYY-MM-DD'));
+                          if (!next.isSame(currentMonth, 'month')) setCurrentMonth(next);
+                        }}
+                        className="p-2.5 hover:bg-theme-raised rounded-xl transition-all text-theme-subtle hover:text-theme-primary"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 flex flex-col bg-theme-page">
+                    <div className="grid grid-cols-7 border-b border-theme-border bg-theme-surface">
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                        <div key={day} className="py-4 text-center text-[10px] font-black uppercase tracking-widest text-theme-muted">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-7 flex-1 auto-rows-[1fr]">
+                      {calendarDays.map((dateStr, idx) => {
+                        if (!dateStr) {
+                          return <div key={`empty-${idx}`} className="border-r border-b border-theme-border bg-theme-surface/30 min-h-[60px]" />;
+                        }
+
+                        const isToday = dateStr === todayStr;
+                        const isSelected = dateStr === selectedDate;
+                        const log = logs[dateStr];
+                        const holi = holidays[dateStr];
+                        const dayNum = dayjs(dateStr).date();
+
+                        return (
+                          <div
+                            key={dateStr}
+                            onClick={() => handleDayClick(dateStr)}
+                            className={cn(
+                              "relative border-r border-b border-theme-border p-1.5 transition-all min-h-[60px] flex flex-col group overflow-visible cursor-pointer",
+                              isSelected ? "bg-theme-raised" : "bg-theme-surface/50 hover:bg-theme-raised/40",
+                              isToday ? "ring-2 ring-inset ring-theme-primary" : "",
+                              log ? STATUS_CELL[log.status] : ""
+                            )}
+                          >
+                            <div className="flex justify-between items-start mb-0.5 z-10">
+                              <span className={cn(
+                                "text-xs font-black w-6 h-6 flex items-center justify-center rounded-full transition-colors",
+                                isToday ? "bg-theme-primary text-white" : 
+                                isSelected ? "bg-theme-fg text-theme-surface" : "text-theme-fg/90 group-hover:text-theme-primary group-hover:bg-theme-primary/10"
+                              )}>
+                                {dayNum}
+                              </span>
+                              {log && !holi && (
+                                <span className="uppercase text-[8px] font-bold tracking-widest bg-white/50 dark:bg-black/20 text-theme-fg backdrop-blur-sm px-1.5 py-0.5 rounded">
+                                  {log.status}
+                                </span>
                               )}
                             </div>
-                          </div>
-                        </div>
-                      )}
 
-                      <div className="flex-1 flex flex-col justify-end z-10">
-                        {isToday ? (
-                          <div className="flex flex-col gap-1 mt-auto">
-                            {!activeSession ? (
-                              <Button 
-                                onClick={handleCheckIn}
-                                loading={actionLoading}
-                                disabled={holi ? (holi.is_half_day ? currentTime.format('HH:mm:ss') < holi.end_time : true) : false}
-                                className={cn("w-full shadow-lg h-6 text-[8px] font-black uppercase tracking-widest px-1 transition-all", holi && (holi.is_half_day ? currentTime.format('HH:mm:ss') < holi.end_time : true) ? "bg-theme-raised text-theme-subtle opacity-80 cursor-not-allowed" : "bg-theme-primary text-white shadow-theme-primary/30 animate-pulse hover:animate-none")}
-                              >
-                                {holi ? (holi.is_half_day && currentTime.format('HH:mm:ss') < holi.end_time ? 'Holiday Active' : (!holi.is_half_day ? 'Holiday' : <><Play size={8} className="mr-1 fill-current" /> Initialize</>)) : <><Play size={8} className="mr-1 fill-current" /> Initialize</>}
-                              </Button>
-                            ) : !activeSession.clock_out ? (
-                              <div className="flex flex-col gap-1">
-                                <div className="bg-white/90 dark:bg-black/50 backdrop-blur-md border border-emerald-500/30 rounded p-1 text-center shadow-lg animate-in slide-in-from-bottom-2">
-                                  <span className="block text-emerald-600 dark:text-emerald-400 font-black tabular-nums text-xs leading-none">
-                                    {formatTime(elapsed)}
-                                  </span>
+                            {holi && (
+                              <div className="mt-auto space-y-1 rounded px-1.5 py-1 mb-1 z-20 shadow-sm relative group/holi" style={{ backgroundColor: `${holi.color}20`, borderLeft: `3px solid ${holi.color}` }}>
+                                <span className="block text-[9px] font-black uppercase tracking-widest truncate" style={{ color: holi.color }}>{holi.title}</span>
+                                {holi.is_half_day && <span className="block text-[9px] font-bold font-mono opacity-100" style={{ color: holi.color }}>{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>}
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-theme-surface border border-theme-border rounded-xl shadow-2xl p-4 opacity-0 pointer-events-none group-hover/holi:opacity-100 transition-all duration-200 z-[100] transform scale-95 group-hover/holi:scale-100">
+                                  <h4 className="text-sm font-black uppercase tracking-widest mb-1.5 border-b border-theme-border pb-1.5" style={{ color: holi.color }}>{holi.title}</h4>
+                                  {holi.description && <p className="text-[12px] text-theme-subtle mb-3 leading-relaxed font-medium">{holi.description}</p>}
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">{holi.type}</span>
+                                    {holi.is_half_day ? (
+                                      <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider font-mono">{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>
+                                    ) : (
+                                      <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">Full Day</span>
+                                    )}
+                                  </div>
                                 </div>
-                                <Button 
-                                  onClick={handleCheckOut}
-                                  loading={actionLoading}
-                                  variant="danger"
-                                  className="w-full shadow-lg shadow-red-500/20 h-6 text-[8px] font-black uppercase tracking-widest px-1"
-                                >
-                                  <Square size={6} className="mr-1 fill-current" /> Terminate
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="bg-theme-raised rounded p-1 text-center text-theme-subtle">
-                                <span className="block text-[6px] font-black uppercase tracking-widest">Completed</span>
-                                <span className="text-[8px] font-mono">{activeSession.clock_in}</span>
                               </div>
                             )}
-                          </div>
-                        ) : log ? (
-                          <div className="mt-auto space-y-0.5 bg-white/50 dark:bg-black/20 backdrop-blur-sm p-1 rounded">
-                            {log.clock_in && (
-                              <div className="flex items-center justify-between text-[7px] font-mono text-theme-fg/80">
-                                <span className="font-bold text-[6px] uppercase tracking-widest text-theme-muted">IN</span>
-                                {log.clock_in}
-                              </div>
-                            )}
-                            {log.clock_out && (
-                              <div className="flex items-center justify-between text-[7px] font-mono text-theme-fg/80">
-                                <span className="font-bold text-[6px] uppercase tracking-widest text-theme-muted">OUT</span>
-                                {log.clock_out}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="mt-auto text-[7px] font-bold text-theme-muted uppercase tracking-widest text-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            No Record
-                          </div>
-                        )}
-                      </div>
 
-                      {isToday && activeSession && !activeSession.clock_out && (
-                        <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/10 to-transparent pointer-events-none" />
-                      )}
+                            <div className="flex-1 flex flex-col justify-end z-10">
+                              {log ? (
+                                <div className="mt-auto space-y-0.5 bg-white/50 dark:bg-black/20 backdrop-blur-sm p-1 rounded">
+                                  {log.clock_in && (
+                                    <div className="flex items-center justify-between text-[7px] font-mono text-theme-fg/80">
+                                      <span className="font-bold text-[6px] uppercase tracking-widest text-theme-muted">IN</span>
+                                      {dayjs(`2000-01-01 ${log.clock_in}`).format("HH:mm")}
+                                    </div>
+                                  )}
+                                  {log.clock_out && (
+                                    <div className="flex items-center justify-between text-[7px] font-mono text-theme-fg/80">
+                                      <span className="font-bold text-[6px] uppercase tracking-widest text-theme-muted">OUT</span>
+                                      {dayjs(`2000-01-01 ${log.clock_out}`).format("HH:mm")}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="mt-auto text-[7px] font-bold text-theme-muted uppercase tracking-widest text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                  No Record
+                                </div>
+                              )}
+                            </div>
+
+                            {isToday && activeSession && !activeSession.clock_out && (
+                              <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/10 to-transparent pointer-events-none animate-pulse" />
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col h-full animate-in fade-in duration-500">
+                   <div className="p-6 border-b border-theme-border bg-theme-page/50 flex justify-between items-center">
+                     <div>
+                       <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg">Monthly Log Sheet</h3>
+                       <p className="text-[10px] text-theme-muted font-bold mt-1 uppercase tracking-wider">{currentMonth.format("MMMM YYYY")}</p>
+                     </div>
+                     <div className="flex gap-2">
+                        {Object.entries(STATUS_BADGE).map(([key, val]) => (
+                          <div key={key} className="flex items-center gap-1.5 px-2 py-1 rounded bg-theme-raised">
+                            <div className={cn("w-1.5 h-1.5 rounded-full", 
+                              val === 'success' ? 'bg-emerald-500' : 
+                              val === 'warning' ? 'bg-amber-500' : 
+                              val === 'danger' ? 'bg-red-500' : 'bg-theme-muted'
+                            )} />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-theme-muted">{key}</span>
+                          </div>
+                        ))}
+                     </div>
+                   </div>
+                   
+                   <div className="flex-1 overflow-x-auto">
+                     <table className="w-full text-left border-collapse">
+                       <thead>
+                         <tr className="bg-theme-page border-b border-theme-border">
+                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted">Date</th>
+                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted">Status</th>
+                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted">Check In</th>
+                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted">Check Out</th>
+                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted">Duration</th>
+                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted text-right">Details</th>
+                         </tr>
+                       </thead>
+                       <tbody className="divide-y divide-theme-border">
+                         {Array.from({ length: daysInMonth }).map((_, i) => {
+                            const date = currentMonth.date(i + 1).format("YYYY-MM-DD");
+                            const log = logs[date];
+                            const holi = holidays[date];
+                            const isWeekend = currentMonth.date(i + 1).day() === 0 || currentMonth.date(i + 1).day() === 6;
+                            
+                            return (
+                              <tr key={date} className={cn("hover:bg-theme-raised/30 transition-colors", date === todayStr && "bg-theme-primary/5")}>
+                                <td className="px-6 py-4">
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-black text-theme-fg">{currentMonth.date(i + 1).format("DD")}</span>
+                                    <span className="text-[10px] font-bold text-theme-muted uppercase">{currentMonth.date(i + 1).format("ddd")}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  {holi ? (
+                                    <Badge style={{ backgroundColor: `${holi.color}20`, color: holi.color, borderColor: `${holi.color}40` }} className="text-[9px] font-black uppercase tracking-widest">
+                                      Holiday
+                                    </Badge>
+                                  ) : log ? (
+                                    <Badge variant={STATUS_BADGE[log.status]} className="text-[9px] font-black uppercase tracking-widest">
+                                      {log.status.replace("_", " ")}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-theme-subtle uppercase tracking-widest">
+                                      {isWeekend ? "Weekend" : "No Record"}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 font-mono text-xs font-bold text-theme-fg">
+                                  {log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}
+                                </td>
+                                <td className="px-6 py-4 font-mono text-xs font-bold text-theme-fg">
+                                  {log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}
+                                </td>
+                                <td className="px-6 py-4">
+                                  {log?.clock_in && log?.clock_out ? (
+                                    <div className="flex items-center gap-2">
+                                      <Timer size={12} className="text-theme-primary" />
+                                      <span className="text-xs font-black tabular-nums text-theme-fg">
+                                        {Math.floor(dayjs(`2000-01-01 ${log.clock_out}`).diff(dayjs(`2000-01-01 ${log.clock_in}`), 'minute') / 60)}h {dayjs(`2000-01-01 ${log.clock_out}`).diff(dayjs(`2000-01-01 ${log.clock_in}`), 'minute') % 60}m
+                                      </span>
+                                    </div>
+                                  ) : "—"}
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                  {holi && (
+                                    <span className="text-[10px] font-black uppercase tracking-tight text-theme-subtle italic">{holi.title}</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                         })}
+                       </tbody>
+                     </table>
+                   </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -711,6 +850,136 @@ export default function AttendancePage() {
         <div className="h-20" />
       </div>
 
+      {/* CHECK-IN / CHECK-OUT OVERLAY MODAL */}
+      {showCheckModal && selectedDateForCheck && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+          <div className="w-full max-w-2xl bg-theme-surface rounded-3xl shadow-2xl overflow-hidden border border-theme-border animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-8 border-b border-theme-border bg-gradient-to-r from-theme-primary/10 to-transparent flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-theme-fg tracking-tight mb-1">Attendance Protocol</h2>
+                <p className="text-sm font-bold text-theme-muted uppercase tracking-widest">
+                  {dayjs(selectedDateForCheck).format('dddd, DD MMMM YYYY')}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCheckModal(false)}
+                className="h-12 w-12 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-8 space-y-8">
+              {/* Time Display */}
+              <div className="bg-theme-page/50 border border-theme-border rounded-2xl p-8">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Current Time</p>
+                    <p className="text-5xl font-black text-theme-fg tracking-tight">{currentTime.format('HH:mm:ss')}</p>
+                    <p className="text-xs font-bold text-theme-subtle mt-2 uppercase tracking-widest">{currentTime.format('dddd')}</p>
+                  </div>
+                  <Clock size={80} className="text-theme-primary/20" />
+                </div>
+              </div>
+
+              {/* Session Info */}
+              {activeSession && logs[selectedDateForCheck] && (
+                <div className="space-y-4">
+                  <h3 className="text-sm font-black text-theme-fg uppercase tracking-widest">Session Summary</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                      <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest mb-2">Check In</p>
+                      <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                        {logs[selectedDateForCheck]?.clock_in
+                          ? dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_in}`).format('HH:mm:ss')
+                          : '— —'}
+                      </p>
+                    </div>
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                      <p className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest mb-2">Check Out</p>
+                      <p className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono">
+                        {logs[selectedDateForCheck]?.clock_out
+                          ? dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_out}`).format('HH:mm:ss')
+                          : '— —'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {logs[selectedDateForCheck]?.clock_in && logs[selectedDateForCheck]?.clock_out && (
+                    <div className="bg-theme-raised rounded-xl p-4 flex items-center gap-3">
+                      <CheckCircle2 size={20} className="text-emerald-500" />
+                      <div>
+                        <p className="text-xs font-bold text-theme-fg">Session Completed</p>
+                        <p className="text-[10px] text-theme-muted font-mono">
+                          {Math.floor(dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_out}`).diff(dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_in}`), 'minute') / 60)}h {dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_out}`).diff(dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_in}`), 'minute') % 60}m logged
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Status Badge */}
+              {logs[selectedDateForCheck] && (
+                <div className={cn(
+                  "rounded-xl p-4 flex items-center gap-3",
+                  logs[selectedDateForCheck].status === 'present' ? "bg-emerald-500/10" :
+                  logs[selectedDateForCheck].status === 'late' ? "bg-amber-500/10" : "bg-red-500/10"
+                )}>
+                  <div className={cn(
+                    "w-3 h-3 rounded-full animate-pulse",
+                    logs[selectedDateForCheck].status === 'present' ? "bg-emerald-500" :
+                    logs[selectedDateForCheck].status === 'late' ? "bg-amber-500" : "bg-red-500"
+                  )} />
+                  <div>
+                    <p className="text-sm font-black text-theme-fg uppercase tracking-widest">
+                      {logs[selectedDateForCheck].status === 'present' ? "On Time" :
+                       logs[selectedDateForCheck].status === 'late' ? "Late Entry" : "Absent"}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="p-8 bg-theme-page/50 border-t border-theme-border flex items-center justify-end gap-4">
+              <button
+                onClick={() => setShowCheckModal(false)}
+                className="px-8 py-3 text-sm font-black uppercase tracking-widest text-theme-muted hover:text-theme-fg hover:bg-theme-raised rounded-xl transition-all"
+              >
+                Close
+              </button>
+
+              {selectedDateForCheck === todayStr && (
+                <>
+                  {!logs[selectedDateForCheck]?.clock_in && (
+                    <Button
+                      onClick={handleCheckIn}
+                      disabled={actionLoading}
+                      className="flex items-center gap-2 h-12 px-8 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl shadow-lg shadow-emerald-500/30 font-black uppercase tracking-widest text-[11px]"
+                    >
+                      <Play size={16} className="fill-current" /> Check In Now
+                    </Button>
+                  )}
+                  {logs[selectedDateForCheck]?.clock_in && !logs[selectedDateForCheck]?.clock_out && (
+                    <Button
+                      onClick={handleCheckOut}
+                      disabled={actionLoading}
+                      className="flex items-center gap-2 h-12 px-8 bg-red-500 text-white hover:bg-red-600 rounded-xl shadow-lg shadow-red-500/30 font-black uppercase tracking-widest text-[11px]"
+                    >
+                      <Square size={16} className="fill-current" /> Check Out Now
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Slide-over Side Panel */}
       <div className={cn(
         "fixed inset-0 z-[100] flex justify-end bg-black/40 backdrop-blur-[2px] transition-all duration-1000 ease-in-out",
         takeLeaveType ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
@@ -768,7 +1037,7 @@ export default function AttendancePage() {
               {takeLeaveType === 'Request' && (
                 <div className="p-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl">
                   <p className="text-[10px] font-medium text-yellow-600 dark:text-yellow-400 flex gap-2">
-                    <span>⚠️</span>
+                    <AlertCircle size={14} />
                     This request requires manual verification by the administration.
                   </p>
                 </div>
@@ -787,7 +1056,6 @@ export default function AttendancePage() {
           </div>
         </div>
       </div>
-    </>
-  </DashboardShell>
+    </DashboardShell>
   );
 }

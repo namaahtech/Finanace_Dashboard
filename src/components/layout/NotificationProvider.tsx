@@ -73,6 +73,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         playMessagePing();
         addToast({ type: "message", title: msg.sender_name, body: msg.content || "Sent an attachment", channelId: msg.channel_id });
       })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "system_notifications" }, (payload) => {
+        const notif = payload.new as any;
+        if (notif.user_id !== user.id) return; // Only notify the recipient
+        playMessagePing();
+        addToast({ type: "info", title: notif.title, body: notif.message });
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user, addToast]);

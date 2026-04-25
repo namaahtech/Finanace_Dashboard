@@ -1362,7 +1362,7 @@ export default function SubscriptionsPage() {
               <p className="text-[10px] text-theme-subtle">Credentials email uses your configured SMTP from Company Profile</p>
               <div className="flex gap-2">
                 <Button variant="secondary" size="sm" onClick={() => setShowAssignModal(false)}>Cancel</Button>
-                <Button variant="secondary" size="sm" disabled={saving || !assignValid} onClick={handleSaveAssign}>{saving ? "Saving…" : "Save Assignment"}</Button>
+                <Button variant="secondary" size="sm" disabled={saving || !assignValid} onClick={() => handleSaveAssign(false)}>{saving ? "Saving…" : "Save Assignment"}</Button>
                 <Button variant="primary" size="sm" disabled={saving || !canSendEmail} onClick={() => handleSaveAssign(true)}>
                   <Send size={13} className="mr-1.5" />{saving ? "Saving…" : "Save & Send Access Email"}
                 </Button>
