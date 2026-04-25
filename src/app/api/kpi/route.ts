@@ -1,41 +1,171 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticate, requireRole } from "@/middleware/auth";
+import { supabase } from "@/lib/supabase";
 
-// GET /api/kpi — employee sees own KPI, admin sees list
+// GET /api/kpi — fetch KPI metrics (real-time)
 export async function GET(req: NextRequest) {
   try {
-    const authUser = await authenticate();
     const { searchParams } = new URL(req.url);
-    const employeeId = authUser.role === "employee" ? authUser.userId : searchParams.get("employeeId");
+    const employeeId = searchParams.get("employeeId");
+    const month = searchParams.get("month");
+    const year = searchParams.get("year");
+    const allEmployees = searchParams.get("allEmployees") === "true";
 
-    // Dummy KPI scores
-    const scores = [
-      {
-        id: "kpi-1",
-        employeeId: employeeId || "dummy-emp",
-        month: 3,
-        year: 2024,
-        kra_score: 85,
-        kpi_score: 90,
-        behavioral_score: 88,
-        final_score: 87.5,
-        created_at: new Date().toISOString()
-      }
-    ];
+    let query = supabase
+      .from("kpi_metrics")
+      .select("*, employee:employees(id, name, employeeId, department, designation)");
 
-    return NextResponse.json(scores);
-  } catch (err) {
-    return NextResponse.json({ error: "Dummy error" }, { status: 500 });
+    if (employeeId) {
+      query = query.eq("employee_id", employeeId);
+    }
+
+    if (month && year) {
+      query = query
+        .eq("month", parseInt(month))
+        .eq("year", parseInt(year));
+    }
+
+    if (!allEmployees) {
+      query = query.order("updated_at", { ascending: false }).limit(1);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      success: true,
+      data: data || [],
+      count: data?.length || 0
+    });
+  } catch (err: any) {
+    console.error("KPI fetch error:", err);
+    return NextResponse.json(
+      { success: false, error: err.message || "Failed to fetch KPI" },
+      { status: 500 }
+    );
   }
 }
 
-// POST /api/kpi — add KPI score (HR/Lead)
+// POST /api/kpi — create/update KPI score (HR/Lead/Admin)
 export async function POST(req: NextRequest) {
   try {
-    // await requireRole(req, "hr", "lead", "super_admin");
     const body = await req.json();
-    return NextResponse.json({ ...body, id: "new-kpi-id", final_score: 85 }, { status: 201 });
-  } catch (err) {
-    return NextResponse.json({ error: "Dummy error" }, { status: 500 });
+    const {
+      id,
+      employee_id,
+      month,
+      year,
+      kpi_score,
+      kpi_entries,
+      kra_score,
+      kra_metrics,
+      behavioral_score,
+      behavioral_metrics,
+      final_score,
+      rating_label,
+      remarks
+    } = body;
+
+    if (!employee_id || !month || !year) {
+      return NextResponse.json(
+        { success: false, error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    // Insert or update KPI
+    const { data, error } = await supabase
+      .from("kpi_metrics")
+      .upsert(
+        {
+          id: id || undefined,
+          employee_id,
+          month,
+          year,
+          kpi_score,
+          kpi_entries: kpi_entries || [],
+          kra_score,
+          kra_metrics: kra_metrics || {},
+          behavioral_score,
+          behavioral_metrics: behavioral_metrics || {},
+          final_score,
+          rating_label,
+          remarks,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "id" }
+      )
+      .select("*, employee:employees(id, name, employeeId, department)");
+
+    if (error) throw error;
+
+    return NextResponse.json(
+      { success: true, data: data?.[0] },
+      { status: id ? 200 : 201 }
+    );
+  } catch (err: any) {
+    console.error("KPI save error:", err);
+    return NextResponse.json(
+      { success: false, error: err.message || "Failed to save KPI" },
+      { status: 500 }
+    );
+  }
+}
+
+// GET /api/kpi/summary — fetch performance summaries
+export async function GET_SUMMARY(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const employeeId = searchParams.get("employeeId");
+
+    let query = supabase
+      .from("kpi_summary")
+      .select("*, employee:employees(id, name, employeeId, department)");
+
+    if (employeeId) {
+      query = query.eq("employee_id", employeeId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, data });
+  } catch (err: any) {
+    console.error("KPI summary error:", err);
+    return NextResponse.json(
+      { success: false, error: err.message },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/kpi — delete KPI record (Admin only)
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const kpiId = searchParams.get("id");
+
+    if (!kpiId) {
+      return NextResponse.json(
+        { success: false, error: "Missing KPI ID" },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await supabase
+      .from("kpi_metrics")
+      .delete()
+      .eq("id", kpiId);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, message: "KPI deleted" });
+  } catch (err: any) {
+    console.error("KPI delete error:", err);
+    return NextResponse.json(
+      { success: false, error: err.message },
+      { status: 500 }
+    );
   }
 }

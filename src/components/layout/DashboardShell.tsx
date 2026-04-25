@@ -2,60 +2,68 @@
 
 import { useAuth } from "./AuthProvider";
 import { Sidebar } from "./Sidebar";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-
-interface DashboardShellProps {
- children: React.ReactNode;
- title?: string;
- subtitle?: string;
- actions?: React.ReactNode;
-}
-
 import { GlobalAttendanceWidget } from "./GlobalAttendanceWidget";
 
+interface DashboardShellProps {
+  children: React.ReactNode;
+  title?: string;
+  subtitle?: string;
+  actions?: React.ReactNode;
+}
+
 export function DashboardShell({ children, title, subtitle, actions }: DashboardShellProps) {
- const { user, loading } = useAuth();
- const router = useRouter();
- const [collapsed, setCollapsed] = useState(false);
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
 
- useEffect(() => {
- if (!loading && !user) router.replace("/login");
- }, [user, loading, router]);
+  useEffect(() => {
+    if (!loading && !user) router.replace("/login");
+  }, [user, loading, router]);
 
- if (loading || !user) {
- return (
- <div className="flex h-screen items-center justify-center bg-theme-page">
- <div className="flex flex-col items-center gap-4">
- <div className="h-9 w-9 animate-spin rounded-full border-2 border-theme-fg border-t-transparent" />
- <p className="text-xs font-semibold text-theme-muted uppercase tracking-widest">Loading…</p>
- </div>
- </div>
- );
- }
+  if (loading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-theme-page">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-9 w-9 animate-spin rounded-full border-2 border-theme-fg border-t-transparent" />
+          <p className="text-xs font-semibold text-theme-muted uppercase tracking-widest">Loading…</p>
+        </div>
+      </div>
+    );
+  }
 
- return (
- <div className="flex h-screen overflow-hidden bg-theme-page">
- <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+  return (
+    <div className="flex h-screen overflow-hidden bg-theme-page">
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
 
- <main className="flex-1 overflow-y-auto flex flex-col min-w-0 bg-theme-page">
- <header className="sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-theme-border bg-theme-surface/80 px-6 py-4 backdrop-blur-md">
- <div>
- {title && <h1 className="text-xl font-black text-theme-fg tracking-tight leading-tight">{title}</h1>}
- {subtitle && <p className="text-[11px] font-bold text-theme-muted uppercase tracking-widest mt-1">{subtitle}</p>}
- </div>
- <div className="flex items-center gap-3 flex-shrink-0">
- <GlobalAttendanceWidget />
- {actions}
- </div>
- </header>
- <div className="flex-1 p-6 lg:p-8">
- <div className="max-w-[1400px] mx-auto">
- {children}
- </div>
- </div>
- </main>
- </div>
- );
+      <main className="flex-1 overflow-y-auto flex flex-col min-w-0 bg-theme-page">
+        <header className="sticky top-0 z-50 flex flex-col sm:flex-row sm:items-center justify-between gap-6 border-b border-theme-border bg-theme-surface/80 px-8 py-5 backdrop-blur-md">
+          <div className="flex-1 min-w-0">
+            {title && <h1 className="text-2xl font-black text-theme-fg tracking-tighter leading-none">{title}</h1>}
+            {subtitle && <p className="text-[11px] font-bold text-theme-muted uppercase tracking-[0.2em] mt-2 opacity-70">{subtitle}</p>}
+          </div>
+          
+          <div className="flex items-center gap-4 flex-shrink-0">
+            {actions && (
+              <div className="flex items-center gap-2 border-r border-theme-border pr-4 mr-2">
+                {actions}
+              </div>
+            )}
+
+            {/* The Global Attendance Command Center - Now at the perfect right end */}
+            <GlobalAttendanceWidget />
+          </div>
+        </header>
+
+        <div className="flex-1 p-6 lg:p-10">
+          <div className="max-w-[1600px] mx-auto">
+            {children}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
 }

@@ -211,20 +211,52 @@ export default function AdminKpiPage() {
 
   const canEdit = user?.role === "super_admin" || user?.role === "hr" || user?.role === "lead";
 
-  // Try to load real users
+  // Load real users with safe field mapping
   useEffect(() => {
     axios.get("/api/users?role=employee&limit=100")
-      .then((res) => { if (res.data.users?.length) setUsers(res.data.users); })
+      .then((res) => {
+        if (res.data.users?.length) {
+          const mappedUsers = res.data.users.map((u: any) => ({
+            _id: u.id || u._id,
+            id: u.id || u._id,
+            name: u.name,
+            employeeId: u.employeeId || u.employee_id,
+            department: u.department
+          }));
+          setUsers(mappedUsers);
+        }
+      })
       .catch(() => {/* use mock */});
   }, []);
 
+  // Fetch KPI scores in real-time
   useEffect(() => {
     if (!selectedUser) { setScores([]); return; }
     setLoadingScores(true);
     axios.get(`/api/kpi?employeeId=${selectedUser}`)
-      .then((res) => setScores(res.data.scores ?? []))
-      .catch(() => setScores([]))
+      .then((res) => {
+        const data = res.data.data || res.data.scores || [];
+        setScores(Array.isArray(data) ? data : [data]);
+      })
+      .catch((err) => {
+        console.error("KPI fetch error:", err);
+        setScores([]);
+      })
       .finally(() => setLoadingScores(false));
+  }, [selectedUser]);
+
+  // Subscribe to real-time KPI updates via polling
+  useEffect(() => {
+    if (!selectedUser) return;
+    const interval = setInterval(() => {
+      axios.get(`/api/kpi?employeeId=${selectedUser}`)
+        .then((res) => {
+          const data = res.data.data || res.data.scores || [];
+          setScores(Array.isArray(data) ? data : [data]);
+        })
+        .catch(() => {/* silent fail */});
+    }, 3000); // Real-time update every 3 seconds
+    return () => clearInterval(interval);
   }, [selectedUser]);
 
   useEffect(() => {
@@ -243,7 +275,7 @@ export default function AdminKpiPage() {
   const rating         = useMemo(() => getKpiRating(finalScore),                      [finalScore]);
   const totalWeight    = form.kpiEntries.reduce((s, e) => s + e.weight, 0);
 
-  const selectedEmployee = users.find((e) => e._id === selectedUser);
+  const selectedEmployee = users.find((e) => (e._id || e.id) === selectedUser);
   const isEditing = scores.some((s) => s.month === form.month && s.year === form.year);
 
   function resetForPeriod(month: number, year: number) {
@@ -364,7 +396,7 @@ export default function AdminKpiPage() {
                     >
                       <option value="">Select employee…</option>
                       {users.map((emp) => (
-                        <option key={emp._id} value={emp._id}>
+                        <option key={emp._id || emp.id || emp.employeeId} value={emp._id || emp.id || emp.employeeId}>
                           {emp.name} — {emp.employeeId}
                         </option>
                       ))}

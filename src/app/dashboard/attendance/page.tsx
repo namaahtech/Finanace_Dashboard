@@ -73,6 +73,8 @@ export default function AttendancePage() {
   const [holidays, setHolidays] = useState<Record<string, any>>({});
   const [currentTime, setCurrentTime] = useState(dayjs());
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [activeProtocol, setActiveProtocol] = useState<any>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(dayjs()), 1000);
@@ -92,6 +94,27 @@ export default function AttendancePage() {
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, []);
+
+  useEffect(() => {
+    const fetchProtocol = async () => {
+      if (!user) return;
+      try {
+        const { data: emp } = await supabase.from('employees').select('department').eq('id', user.id).single();
+        const { data: protos } = await supabase.from('attendance_protocols')
+          .select('*')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false });
+        
+        if (protos) {
+          const proto = protos.find(p => p.target_type === 'All' || p.type === `Department:${emp?.department}`);
+          setActiveProtocol(proto);
+        }
+      } catch (err) {
+        console.error("Protocol Fetch Error", err);
+      }
+    };
+    fetchProtocol();
+  }, [user]);
 
   // Fetch Monthly Logs
   const fetchLogs = useCallback(async () => {
@@ -381,38 +404,36 @@ export default function AttendancePage() {
     >
       <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
         
-
-        
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="enterprise-card bg-theme-surface p-6 flex items-center justify-between group overflow-hidden relative">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="enterprise-card bg-theme-surface p-4 flex items-center justify-between group overflow-hidden relative">
             <div className="absolute top-0 right-0 p-4 opacity-5 transform rotate-12 group-hover:scale-110 transition-transform">
-              <CalendarDays size={80} />
+              <CalendarDays size={60} />
             </div>
             <div>
-              <span className="text-[10px] font-black text-theme-muted uppercase tracking-widest block mb-2">Total Logged</span>
-              <span className="text-3xl font-black text-theme-fg">{presentDays + lateDays}</span>
+              <span className="text-[9px] font-black text-theme-muted uppercase tracking-widest block mb-1">Total Logged</span>
+              <span className="text-2xl font-black text-theme-fg">{presentDays + lateDays}</span>
             </div>
-            <div className="w-12 h-12 rounded-full bg-theme-raised flex items-center justify-center text-theme-subtle">
-              <UserCheck size={20} />
+            <div className="w-10 h-10 rounded-full bg-theme-raised flex items-center justify-center text-theme-subtle">
+              <UserCheck size={18} />
             </div>
           </div>
-          <div className="enterprise-card bg-theme-surface p-6 flex items-center justify-between group overflow-hidden relative border-l-4 border-emerald-500">
+          <div className="enterprise-card bg-theme-surface p-4 flex items-center justify-between group overflow-hidden relative border-l-4 border-emerald-500">
             <div>
-              <span className="text-[10px] font-black text-emerald-500/70 uppercase tracking-widest block mb-2">Present</span>
-              <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{presentDays}</span>
+              <span className="text-[9px] font-black text-emerald-500/70 uppercase tracking-widest block mb-1">Present</span>
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{presentDays}</span>
             </div>
           </div>
-          <div className="enterprise-card bg-theme-surface p-6 flex items-center justify-between group overflow-hidden relative border-l-4 border-amber-500">
+          <div className="enterprise-card bg-theme-surface p-4 flex items-center justify-between group overflow-hidden relative border-l-4 border-amber-500">
             <div>
-              <span className="text-[10px] font-black text-amber-500/70 uppercase tracking-widest block mb-2">Late Starts</span>
-              <span className="text-3xl font-black text-amber-600 dark:text-amber-400">{lateDays}</span>
+              <span className="text-[9px] font-black text-amber-500/70 uppercase tracking-widest block mb-1">Late Starts</span>
+              <span className="text-2xl font-black text-amber-600 dark:text-amber-400">{lateDays}</span>
             </div>
           </div>
-          <div className="enterprise-card bg-theme-surface p-6 flex items-center justify-between group overflow-hidden relative border-l-4 border-red-500">
+          <div className="enterprise-card bg-theme-surface p-4 flex items-center justify-between group overflow-hidden relative border-l-4 border-red-500">
             <div>
-              <span className="text-[10px] font-black text-red-500/70 uppercase tracking-widest block mb-2">Absent</span>
-              <span className="text-3xl font-black text-red-600 dark:text-red-400">{absentDays}</span>
+              <span className="text-[9px] font-black text-red-500/70 uppercase tracking-widest block mb-1">Absent</span>
+              <span className="text-2xl font-black text-red-600 dark:text-red-400">{absentDays}</span>
             </div>
           </div>
         </div>
@@ -420,13 +441,13 @@ export default function AttendancePage() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
           <div className="xl:col-span-2 flex flex-col gap-4 h-full">
             
-            {/* View Selector Tabs */}
-            <div className="flex p-1 bg-theme-surface border border-theme-border rounded-xl w-fit">
+            {/* View Selector Tabs (Admin Style) */}
+            <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-1 shadow-inner w-fit">
                <button 
                 onClick={() => setActiveTab("calendar")}
                 className={cn(
-                  "px-6 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2",
-                  activeTab === "calendar" ? "bg-theme-primary text-white shadow-md" : "text-theme-muted hover:text-theme-fg"
+                  "flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition-all",
+                  activeTab === "calendar" ? "bg-theme-surface text-theme-fg shadow-sm border border-theme-border/50" : "text-theme-muted hover:text-theme-fg"
                 )}
                >
                  <CalendarDays size={14} />
@@ -435,8 +456,8 @@ export default function AttendancePage() {
                <button 
                 onClick={() => setActiveTab("logsheet")}
                 className={cn(
-                  "px-6 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2",
-                  activeTab === "logsheet" ? "bg-theme-primary text-white shadow-md" : "text-theme-muted hover:text-theme-fg"
+                  "flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition-all",
+                  activeTab === "logsheet" ? "bg-theme-surface text-theme-fg shadow-sm border border-theme-border/50" : "text-theme-muted hover:text-theme-fg"
                 )}
                >
                  <ListFilter size={14} />
@@ -572,7 +593,7 @@ export default function AttendancePage() {
                     <div className="grid grid-cols-7 flex-1 auto-rows-[1fr]">
                       {calendarDays.map((dateStr, idx) => {
                         if (!dateStr) {
-                          return <div key={`empty-${idx}`} className="border-r border-b border-theme-border bg-theme-surface/30 min-h-[60px]" />;
+                          return <div key={`empty-${idx}`} className="border-r border-b border-theme-border bg-theme-surface/30 min-h-[40px]" />;
                         }
 
                         const isToday = dateStr === todayStr;
@@ -586,7 +607,7 @@ export default function AttendancePage() {
                             key={dateStr}
                             onClick={() => handleDayClick(dateStr)}
                             className={cn(
-                              "relative border-r border-b border-theme-border p-1.5 transition-all min-h-[60px] flex flex-col group overflow-visible cursor-pointer",
+                              "relative border-r border-b border-theme-border p-1.5 transition-all min-h-[40px] flex flex-col group overflow-visible cursor-pointer",
                               isSelected ? "bg-theme-raised" : "bg-theme-surface/50 hover:bg-theme-raised/40",
                               isToday ? "ring-2 ring-inset ring-theme-primary" : "",
                               log ? STATUS_CELL[log.status] : ""
@@ -660,86 +681,119 @@ export default function AttendancePage() {
                 </>
               ) : (
                 <div className="flex flex-col h-full animate-in fade-in duration-500">
-                   <div className="p-6 border-b border-theme-border bg-theme-page/50 flex justify-between items-center">
+                   <div className="p-4 border-b border-theme-border bg-theme-page/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                      <div>
                        <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg">Monthly Log Sheet</h3>
                        <p className="text-[10px] text-theme-muted font-bold mt-1 uppercase tracking-wider">{currentMonth.format("MMMM YYYY")}</p>
                      </div>
-                     <div className="flex gap-2">
+                     <div className="flex flex-wrap gap-1.5">
+                        <button 
+                          onClick={() => setStatusFilter(null)}
+                          className={cn(
+                            "px-2 py-1 rounded text-[9px] font-black uppercase tracking-widest transition-all",
+                            statusFilter === null ? "bg-theme-fg text-theme-surface" : "bg-theme-raised text-theme-muted hover:text-theme-fg"
+                          )}
+                        >
+                          All
+                        </button>
                         {Object.entries(STATUS_BADGE).map(([key, val]) => (
-                          <div key={key} className="flex items-center gap-1.5 px-2 py-1 rounded bg-theme-raised">
+                          <button 
+                            key={key} 
+                            onClick={() => setStatusFilter(statusFilter === key ? null : key)}
+                            className={cn(
+                              "flex items-center gap-1.5 px-2 py-1 rounded transition-all",
+                              statusFilter === key ? "ring-1 ring-inset ring-theme-fg bg-theme-raised" : "bg-theme-raised hover:bg-theme-border/50"
+                            )}
+                          >
                             <div className={cn("w-1.5 h-1.5 rounded-full", 
                               val === 'success' ? 'bg-emerald-500' : 
                               val === 'warning' ? 'bg-amber-500' : 
                               val === 'danger' ? 'bg-red-500' : 'bg-theme-muted'
                             )} />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-theme-muted">{key}</span>
-                          </div>
+                            <span className={cn("text-[9px] font-black uppercase tracking-widest",
+                              statusFilter === key ? "text-theme-fg" : "text-theme-muted"
+                            )}>{key.replace("_", " ")}</span>
+                          </button>
                         ))}
                      </div>
                    </div>
                    
-                   <div className="flex-1 overflow-x-auto">
+                   <div className="flex-1 overflow-y-auto max-h-[500px] border-t border-theme-border/30">
                      <table className="w-full text-left border-collapse">
-                       <thead>
+                       <thead className="sticky top-0 z-10">
                          <tr className="bg-theme-page border-b border-theme-border">
-                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted">Date</th>
-                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted">Status</th>
-                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted">Check In</th>
-                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted">Check Out</th>
-                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted">Duration</th>
-                           <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-theme-muted text-right">Details</th>
+                           <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-theme-muted">Date</th>
+                           <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-theme-muted">Status</th>
+                           <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-theme-muted">In</th>
+                           <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-theme-muted">Out</th>
+                           <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-theme-muted">Time</th>
+                           <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-theme-muted text-right">Info</th>
                          </tr>
                        </thead>
-                       <tbody className="divide-y divide-theme-border">
+                       <tbody className="divide-y divide-theme-border/50">
                          {Array.from({ length: daysInMonth }).map((_, i) => {
                             const date = currentMonth.date(i + 1).format("YYYY-MM-DD");
                             const log = logs[date];
                             const holi = holidays[date];
                             const isWeekend = currentMonth.date(i + 1).day() === 0 || currentMonth.date(i + 1).day() === 6;
                             
+                            // Filtering Logic
+                            if (statusFilter) {
+                              if (statusFilter === 'holiday' && !holi) return null;
+                              if (statusFilter !== 'holiday') {
+                                if (!log || log.status !== statusFilter) return null;
+                              }
+                            }
+
                             return (
-                              <tr key={date} className={cn("hover:bg-theme-raised/30 transition-colors", date === todayStr && "bg-theme-primary/5")}>
-                                <td className="px-6 py-4">
-                                  <div className="flex flex-col">
-                                    <span className="text-sm font-black text-theme-fg">{currentMonth.date(i + 1).format("DD")}</span>
-                                    <span className="text-[10px] font-bold text-theme-muted uppercase">{currentMonth.date(i + 1).format("ddd")}</span>
+                              <tr key={date} className={cn("hover:bg-theme-raised/30 transition-colors group", date === todayStr && "bg-theme-primary/5")}>
+                                <td className="px-4 py-2">
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-xs font-black text-theme-fg w-5">{currentMonth.date(i + 1).format("DD")}</span>
+                                    <span className="text-[8px] font-black text-theme-muted uppercase tracking-tighter">{currentMonth.date(i + 1).format("ddd")}</span>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4">
+                                <td className="px-4 py-2">
                                   {holi ? (
-                                    <Badge style={{ backgroundColor: `${holi.color}20`, color: holi.color, borderColor: `${holi.color}40` }} className="text-[9px] font-black uppercase tracking-widest">
-                                      Holiday
-                                    </Badge>
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="w-1 h-1 rounded-full bg-theme-muted" />
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-theme-muted">Holiday</span>
+                                    </div>
                                   ) : log ? (
-                                    <Badge variant={STATUS_BADGE[log.status]} className="text-[9px] font-black uppercase tracking-widest">
-                                      {log.status.replace("_", " ")}
-                                    </Badge>
+                                    <div className="flex items-center gap-1.5">
+                                      <div className={cn("w-1.5 h-1.5 rounded-full", 
+                                        STATUS_BADGE[log.status] === 'success' ? 'bg-emerald-500' : 
+                                        STATUS_BADGE[log.status] === 'warning' ? 'bg-amber-500' : 
+                                        STATUS_BADGE[log.status] === 'danger' ? 'bg-red-500' : 'bg-theme-muted'
+                                      )} />
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-theme-fg">{log.status.replace("_", " ")}</span>
+                                    </div>
                                   ) : (
-                                    <span className="text-[10px] font-bold text-theme-subtle uppercase tracking-widest">
-                                      {isWeekend ? "Weekend" : "No Record"}
+                                    <span className="text-[9px] font-bold text-theme-subtle/50 uppercase tracking-widest">
+                                      {isWeekend ? "Weekend" : "—"}
                                     </span>
                                   )}
                                 </td>
-                                <td className="px-6 py-4 font-mono text-xs font-bold text-theme-fg">
-                                  {log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}
+                                <td className="px-4 py-2 font-mono text-[10px] font-bold text-theme-fg">
+                                  {log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("HH:mm") : "—"}
                                 </td>
-                                <td className="px-6 py-4 font-mono text-xs font-bold text-theme-fg">
-                                  {log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}
+                                <td className="px-4 py-2 font-mono text-[10px] font-bold text-theme-fg">
+                                  {log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("HH:mm") : "—"}
                                 </td>
-                                <td className="px-6 py-4">
+                                <td className="px-4 py-2">
                                   {log?.clock_in && log?.clock_out ? (
-                                    <div className="flex items-center gap-2">
-                                      <Timer size={12} className="text-theme-primary" />
-                                      <span className="text-xs font-black tabular-nums text-theme-fg">
-                                        {Math.floor(dayjs(`2000-01-01 ${log.clock_out}`).diff(dayjs(`2000-01-01 ${log.clock_in}`), 'minute') / 60)}h {dayjs(`2000-01-01 ${log.clock_out}`).diff(dayjs(`2000-01-01 ${log.clock_in}`), 'minute') % 60}m
-                                      </span>
-                                    </div>
+                                    <span className="text-[10px] font-black tabular-nums text-theme-fg opacity-60">
+                                      {Math.floor(dayjs(`2000-01-01 ${log.clock_out}`).diff(dayjs(`2000-01-01 ${log.clock_in}`), 'minute') / 60)}h {dayjs(`2000-01-01 ${log.clock_out}`).diff(dayjs(`2000-01-01 ${log.clock_in}`), 'minute') % 60}m logged
+                                    </span>
                                   ) : "—"}
                                 </td>
-                                <td className="px-6 py-4 text-right">
-                                  {holi && (
-                                    <span className="text-[10px] font-black uppercase tracking-tight text-theme-subtle italic">{holi.title}</span>
+                                <td className="px-4 py-2 text-right">
+                                  {holi ? (
+                                    <span className="text-[8px] font-black uppercase tracking-tight text-theme-subtle italic">{holi.title}</span>
+                                  ) : (
+                                    <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-theme-raised rounded text-theme-subtle">
+                                      <ChevronRight size={12} />
+                                    </button>
                                   )}
                                 </td>
                               </tr>
@@ -753,89 +807,103 @@ export default function AttendancePage() {
             </div>
           </div>
 
-          <div className="xl:col-span-1 flex flex-col gap-6">
-            <div className="enterprise-card bg-theme-surface p-6 border-l-4 border-indigo-500">
-              <h3 className="text-xs font-black uppercase tracking-widest text-theme-muted mb-6">Leave Allocation Engine</h3>
+          <div className="xl:col-span-1 flex flex-col gap-4">
+            <div className="enterprise-card bg-theme-surface p-5 space-y-5 border border-theme-border shadow-lg">
+              {activeProtocol && (
+                <div className="p-4 bg-theme-primary/5 border border-theme-primary/20 rounded-2xl relative overflow-hidden group">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Clock size={14} className="text-theme-primary" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-theme-primary">Active Protocol</span>
+                  </div>
+                  <h4 className="text-sm font-black text-theme-fg mb-3">{activeProtocol.name}</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 rounded-xl bg-theme-surface border border-theme-border/30">
+                      <span className="text-[8px] font-black text-theme-muted uppercase block mb-1">Shift In</span>
+                      <span className="text-xs font-black text-theme-fg">{dayjs(`2000-01-01 ${activeProtocol.check_in_time}`).format('hh:mm A')}</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-theme-surface border border-theme-border/30">
+                      <span className="text-[8px] font-black text-theme-muted uppercase block mb-1">Shift Out</span>
+                      <span className="text-xs font-black text-theme-fg">{dayjs(`2000-01-01 ${activeProtocol.check_out_time}`).format('hh:mm A')}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
               
-              <div className="flex flex-col gap-6">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="block text-[10px] font-bold uppercase tracking-widest text-theme-subtle mb-1">Available PTO</span>
-                    <span className="text-4xl font-black text-theme-fg">{employeeData?.monthly_leave_quota || "0.0"}</span>
+                    <span className="text-2xl font-black text-theme-fg">{employeeData?.monthly_leave_quota || "0.0"}</span>
                   </div>
-                  <div className="flex flex-col gap-2 items-center">
+                  <div className="flex flex-col gap-1.5 items-center">
                     <button 
                       onClick={() => setTakeLeaveType('PTO')}
                       disabled={Number(employeeData?.monthly_leave_quota || 0) === 0}
-                      className="w-12 h-12 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center hover:bg-indigo-500/20 hover:scale-110 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      className="w-10 h-10 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center hover:bg-indigo-500/20 hover:scale-110 transition-all disabled:opacity-50"
                     >
-                      <Timer size={20} />
+                      <Timer size={18} />
                     </button>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-theme-primary">
-                      Take PTO
-                    </span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-theme-primary">TAKE PTO</span>
                   </div>
                 </div>
 
-                <div className="h-px w-full bg-theme-border" />
+                <div className="h-px w-full bg-theme-border/50" />
 
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="block text-[10px] font-bold uppercase tracking-widest text-theme-subtle mb-1">Weekly Offs</span>
-                    <span className="text-2xl font-black text-theme-fg">{employeeData?.weekly_off_allotment || "0.0"}</span>
+                    <span className="text-xl font-black text-theme-fg">{employeeData?.weekly_off_allotment || "0.0"}</span>
                   </div>
-                  <div className="flex flex-col gap-2 items-center">
+                  <div className="flex flex-col gap-1.5 items-center">
                     <button 
                       onClick={() => setTakeLeaveType('Weekly Off')}
                       disabled={Number(employeeData?.weekly_off_allotment || 0) === 0}
-                      className="w-10 h-10 rounded-full bg-theme-raised text-theme-subtle flex items-center justify-center hover:bg-theme-border hover:scale-110 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      className="w-8 h-8 rounded-full bg-theme-raised text-theme-subtle flex items-center justify-center hover:bg-theme-border hover:scale-110 transition-all disabled:opacity-50"
                     >
-                      <CalendarDays size={16} />
+                      <CalendarDays size={14} />
                     </button>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-theme-primary">
-                      Take Off
-                    </span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-theme-primary">TAKE OFF</span>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-8 pt-6 border-t border-theme-border">
-                <Button 
-                  disabled={Number(employeeData?.monthly_leave_quota || 0) > 0 || Number(employeeData?.weekly_off_allotment || 0) > 0}
-                  onClick={() => setTakeLeaveType('Request')}
-                  className="w-full text-xs font-black uppercase tracking-widest h-12 rounded-xl"
-                >
-                  {(Number(employeeData?.monthly_leave_quota || 0) > 0 || Number(employeeData?.weekly_off_allotment || 0) > 0) 
-                    ? "Exhaust Allocations First" 
-                    : "Submit Leave Request"}
-                </Button>
-              </div>
+              <Button 
+                size="sm"
+                disabled={Number(employeeData?.monthly_leave_quota || 0) > 0 || Number(employeeData?.weekly_off_allotment || 0) > 0}
+                onClick={() => setTakeLeaveType('Request')}
+                className="w-full text-[10px] font-black uppercase tracking-widest h-10 rounded-xl"
+              >
+                {(Number(employeeData?.monthly_leave_quota || 0) > 0 || Number(employeeData?.weekly_off_allotment || 0) > 0) 
+                  ? "Exhaust Allocations First" 
+                  : "Submit Leave Request"}
+              </Button>
             </div>
 
-            <div className="enterprise-card bg-theme-surface p-0 overflow-hidden flex-1 flex flex-col">
-              <div className="p-6 border-b border-theme-border bg-theme-page/50">
-                <h3 className="text-xs font-black uppercase tracking-widest text-theme-muted">Leave History & Approvals</h3>
+            <div className="enterprise-card bg-theme-surface p-0 overflow-hidden border border-theme-border shadow-lg flex flex-col min-h-[250px]">
+              <div className="p-4 border-b border-theme-border bg-theme-page/50 flex items-center justify-between">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Leave History</h3>
+                <ListFilter size={12} className="text-theme-subtle" />
               </div>
-              <div className="flex-1 overflow-y-auto max-h-[300px]">
+              <div className="flex-1 overflow-y-auto max-h-[250px]">
                 {leaveRequests.length === 0 ? (
-                  <div className="p-10 text-center flex flex-col items-center">
-                    <CalendarDays size={32} className="text-theme-subtle/30 mb-4" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">No Leave Requests Found</p>
+                  <div className="p-8 text-center flex flex-col items-center">
+                    <CalendarDays size={24} className="text-theme-subtle/20 mb-3" />
+                    <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted">No Requests</p>
                   </div>
                 ) : (
                   <ul className="divide-y divide-theme-border">
                     {leaveRequests.map((req) => (
-                      <li key={req.id} className="p-4 hover:bg-theme-page transition-colors">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-black text-theme-fg">{req.type}</span>
+                      <li key={req.id} className="p-3 hover:bg-theme-page transition-colors">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-black text-theme-fg">{req.type}</span>
                           <Badge 
                             variant={req.status === 'Approved' ? 'success' : req.status === 'Rejected' ? 'danger' : 'warning'}
-                            className="text-[9px] uppercase tracking-widest"
+                            className="text-[7px] uppercase tracking-widest py-0.5 px-1.5"
                           >
                             {req.status}
                           </Badge>
                         </div>
-                        <div className="flex items-center justify-between text-[10px] text-theme-subtle font-mono">
+                        <div className="flex items-center justify-between text-[9px] text-theme-subtle font-mono font-bold">
                           <span>{dayjs(req.start_date).format('MMM DD')} - {dayjs(req.end_date).format('MMM DD')}</span>
                         </div>
                       </li>

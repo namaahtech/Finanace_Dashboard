@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 
-export function GlobalAttendanceWidget() {
+export function GlobalAttendanceWidget({ floating = false }: { floating?: boolean }) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [activeSession, setActiveSession] = useState<any>(null);
@@ -131,55 +131,55 @@ export function GlobalAttendanceWidget() {
   if (loading) return null;
 
   return (
-    <div className="flex items-center gap-4 bg-theme-surface border border-theme-border rounded-xl px-4 py-2 shadow-sm">
-      <div className="hidden sm:flex items-center gap-2 border-r border-theme-border pr-4">
-        <Clock size={16} className="text-theme-primary" />
-        <span className="text-sm font-black tabular-nums text-theme-fg tracking-tight">
-          {currentTime.format("hh:mm:ss A")}
-        </span>
+    <div className="flex items-center gap-4">
+      <div className={cn(
+        "flex items-center gap-4 bg-theme-surface border border-theme-border rounded-2xl px-5 py-2 shadow-sm transition-all duration-300",
+        floating && "bg-theme-surface/70 backdrop-blur-xl border-theme-border/50 shadow-2xl shadow-black/10 scale-105"
+      )}>
+        <div className="flex items-center gap-3 border-r border-theme-border pr-5 py-1">
+          <Clock size={18} className="text-theme-fg" />
+          <span className="text-base font-black tabular-nums text-theme-fg tracking-tight">
+            {currentTime.format("hh:mm:ss A")}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-5">
+          {activeSession && activeSession.clock_in && !activeSession.clock_out ? (
+            <div className="flex items-center gap-5">
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span className="text-base font-black text-emerald-500 tabular-nums">
+                  {formatTime(elapsed)}
+                </span>
+              </div>
+              <button 
+                onClick={handleCheckOut}
+                disabled={actionLoading}
+                className="h-10 px-6 rounded-xl bg-[#f44336] hover:bg-[#d32f2f] text-white font-black text-[11px] uppercase tracking-[0.15em] flex items-center gap-3 shadow-lg shadow-red-500/20 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <div className="w-3.5 h-3.5 bg-white rounded-sm" />
+                Check Out
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={handleCheckIn}
+              disabled={actionLoading}
+              className="h-10 px-6 rounded-xl bg-theme-primary hover:bg-theme-primary/90 text-white font-black text-[11px] uppercase tracking-[0.15em] flex items-center gap-3 shadow-lg shadow-theme-primary/20 active:scale-95 transition-all disabled:opacity-50"
+            >
+              <Play size={14} className="fill-current text-white" />
+              Check In
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        {activeSession && activeSession.clock_in && !activeSession.clock_out ? (
-          <>
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-xs font-bold text-emerald-500 uppercase tracking-widest tabular-nums">
-                {formatTime(elapsed)}
-              </span>
-            </div>
-            <Button 
-              onClick={handleCheckOut}
-              loading={actionLoading}
-              variant="danger"
-              size="sm"
-              className="h-8 px-4 rounded-lg font-bold text-[10px] uppercase tracking-widest bg-red-500 hover:bg-red-600 text-white"
-            >
-              <Square size={12} className="mr-1.5 fill-current" />
-              Check Out
-            </Button>
-          </>
-        ) : activeSession?.clock_out ? (
-          <div className="flex items-center gap-2">
-            <Timer size={14} className="text-theme-muted" />
-            <span className="text-xs font-bold text-theme-muted">
-              {dayjs(`2000-01-01 ${activeSession.clock_out}`).diff(dayjs(`2000-01-01 ${activeSession.clock_in}`), 'minute')} Mins Logged
-            </span>
-          </div>
-        ) : (
-          <Button 
-            onClick={handleCheckIn}
-            loading={actionLoading}
-            size="sm"
-            className="h-8 px-4 rounded-lg bg-theme-primary hover:bg-theme-primary/90 font-bold text-[10px] uppercase tracking-widest text-white"
-          >
-            <Play size={12} className="mr-1.5 fill-current" />
-            Check In
-          </Button>
-        )}
+      <div className="hidden lg:flex items-center gap-2 px-3 py-1.5">
+        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest whitespace-nowrap">System Live</span>
       </div>
     </div>
   );
