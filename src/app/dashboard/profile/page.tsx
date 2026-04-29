@@ -7,81 +7,46 @@ import { useAuth } from "@/components/layout/AuthProvider";
 import { useApi } from "@/hooks/useApi";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import { formatCurrency, cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import {
   Mail,
-  Phone,
-  MapPin,
   Briefcase,
   Calendar,
   Award,
   TrendingUp,
   Users,
-  Building2,
   FileText,
   ArrowLeft,
-  Edit3,
-  Clock,
   DollarSign,
+  User,
 } from "lucide-react";
 
 interface Employee {
-  id: string;
-  name: string;
-  email: string;
-  employee_id: string;
-  role: string;
-  department: string;
-  designation: string;
-  team_id?: string;
-  joining_date?: string;
-  employment_type?: string;
-  salary_structure?: string;
-  base_salary?: number;
-  salary_min?: number;
-  salary_max?: number;
-  salary_step?: number;
-  hourly_rate?: number;
-  daily_rate?: number;
-  stipend_amount?: number;
-  kpi_weight?: number;
-  kra_weight?: number;
-  behavioral_weight?: number;
-  kpi_enabled?: boolean;
-  enable_salary_linkage?: boolean;
-  is_active: boolean;
+  id: string; name: string; email: string; employee_id: string;
+  role: string; department: string; designation: string; team_id?: string;
+  joining_date?: string; employment_type?: string; salary_structure?: string;
+  base_salary?: number; salary_min?: number; salary_max?: number; salary_step?: number;
+  hourly_rate?: number; daily_rate?: number; stipend_amount?: number;
+  kpi_weight?: number; kra_weight?: number; behavioral_weight?: number;
+  kpi_enabled?: boolean; enable_salary_linkage?: boolean; is_active: boolean;
 }
 
 interface KpiScore {
-  id: string;
-  kpi_score: number;
-  kra_score: number;
-  behavioral_score: number;
-  final_score: number;
-  month: number;
-  year: number;
+  id: string; kpi_score: number; kra_score: number; behavioral_score: number; final_score: number; month: number; year: number;
 }
 
-interface WalletData {
-  earned_total: number;
-  locked_amount: number;
-  claimable_amount: number;
-}
-
-interface TeamData {
-  id: string;
-  name: string;
-  department: string;
-}
+interface WalletData { earned_total: number; locked_amount: number; claimable_amount: number; this_month_payout?: number }
+interface TeamData   { id: string; name: string; department: string }
 
 export default function EmployeeProfile() {
   const { user } = useAuth();
   const { request } = useApi();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [kpiScore, setKpiScore] = useState<KpiScore | null>(null);
-  const [wallet, setWallet] = useState<WalletData | null>(null);
-  const [team, setTeam] = useState<TeamData | null>(null);
+  const [wallet, setWallet]   = useState<WalletData | null>(null);
+  const [team, setTeam]       = useState<TeamData | null>(null);
   const [loading, setLoading] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
 
@@ -89,554 +54,440 @@ export default function EmployeeProfile() {
     if (!user) return;
     setLoading(true);
     try {
-      // Fetch complete employee data from API
+      let currentEmployee: Employee | null = null;
+      
       try {
         const empRes = await request<any>({ url: `/api/employees/${user.id}` });
-
-        if (empRes?.data) {
-          setEmployee(empRes.data as Employee);
-          setUsingFallback(false);
+        if (empRes?.data) { 
+          currentEmployee = empRes.data as Employee;
+          setEmployee(currentEmployee); 
+          setUsingFallback(false); 
         } else {
-          throw new Error("No data returned");
+          throw new Error("No data");
         }
-      } catch (apiErr: any) {
-        // Fall back to auth context - no error logging to avoid console spam
-        const employeeData: Employee = {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          employee_id: user.employee_id,
-          role: user.role,
-          department: user.department || "Not assigned",
-          designation: user.designation || "Not specified",
-          is_active: true,
-        };
-        setEmployee(employeeData);
+      } catch {
+        currentEmployee = { id: user.id, name: user.name, email: user.email, employee_id: user.employee_id, role: user.role, department: user.department || "Not assigned", designation: user.designation || "Not specified", is_active: true };
+        setEmployee(currentEmployee);
         setUsingFallback(true);
       }
 
-      // Fetch KPI and wallet separately (non-critical, don't fail if missing)
       try {
-        const kpiRes = await request<any>({ url: `/api/kpi?month=${dayjs().month() + 1}&year=${dayjs().year()}` });
-        if (kpiRes?.data?.[0]) {
-          setKpiScore(kpiRes.data[0] as KpiScore);
-        }
-      } catch (e) {
-        // Silently fail for non-critical data
+        const kpiRes = await request<any>({ url: `/api/kpi?employeeId=${user.id}&month=${dayjs().month() + 1}&year=${dayjs().year()}` });
+        if (kpiRes?.data?.[0]) setKpiScore(kpiRes.data[0] as KpiScore);
+      } catch (err) {
+        console.error("KPI Error:", err);
       }
 
       try {
         const walletRes = await request<{ wallet: WalletData }>({ url: "/api/wallet" });
         if (walletRes?.wallet) setWallet(walletRes.wallet);
-      } catch (e) {
-        // Silently fail for non-critical data
+      } catch {}
+      
+      // Fetch Team Info
+      if (currentEmployee?.team_id) {
+        try {
+          const { data: teamData } = await supabase
+            .from("teams")
+            .select("id, name, department")
+            .eq("id", currentEmployee.team_id)
+            .single();
+          if (teamData) setTeam(teamData as TeamData);
+        } catch (err) {
+          console.error("Team Fetch Error:", err);
+        }
       }
     } finally {
       setLoading(false);
     }
   }, [user, request]);
 
-  useEffect(() => {
-    loadProfile();
-  }, [loadProfile]);
+  useEffect(() => { loadProfile(); }, [loadProfile]);
 
-  // Real-time subscription: detect if employee is deleted
   useEffect(() => {
     if (!user?.id) return;
-
-    const channel = supabase
-      .channel(`employee_${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'employees',
-          filter: `id=eq.${user.id}`
-        },
-        (payload) => {
-          // Show notification
-          const notification = document.createElement('div');
-          notification.innerHTML = `
-            <div style="position: fixed; top: 20px; right: 20px; background: #ef4444; color: white; padding: 16px; border-radius: 8px; z-index: 9999;">
-              Your employee profile was deleted. Logging out...
-            </div>
-          `;
-          document.body.appendChild(notification);
-
-          // Auto-logout after 2 seconds
-          setTimeout(() => {
-            supabase.auth.signOut().then(() => {
-              window.location.href = '/login';
-            });
-          }, 2000);
-        }
-      )
+    const channel = supabase.channel(`employee_${user.id}`)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "employees", filter: `id=eq.${user.id}` }, () => {
+        const el = document.createElement("div");
+        el.innerHTML = `<div style="position:fixed;top:20px;right:20px;background:#ef4444;color:white;padding:16px;border-radius:8px;z-index:9999;">Your profile was deleted. Logging out…</div>`;
+        document.body.appendChild(el);
+        setTimeout(() => supabase.auth.signOut().then(() => { window.location.href = "/login"; }), 2000);
+      })
       .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
+    return () => { channel.unsubscribe(); };
   }, [user?.id]);
-
-  const getStatusColor = (status: boolean) => {
-    return status ? "text-emerald-600" : "text-red-600";
-  };
-
-  const getStatusLabel = (status: boolean) => {
-    return status ? "Active" : "Inactive";
-  };
 
   return (
     <DashboardShell
-      title="Employee Profile"
-      subtitle="View and manage your professional information"
+      title="My Profile"
+      subtitle="Your professional information and performance overview."
       actions={
         <Link href="/dashboard">
-          <Button variant="outline" size="sm" className="font-black uppercase tracking-widest text-[10px] h-9">
-            <ArrowLeft size={14} className="mr-2" /> Back
+          <Button variant="secondary" size="sm">
+            <ArrowLeft size={13} className="mr-1.5" /> Back
           </Button>
         </Link>
       }
     >
-      <div className="space-y-6 animate-in fade-in duration-700">
+      <div className="space-y-5">
+
         {usingFallback && (
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-start gap-3">
-            <div className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-[10px] font-black text-amber-600">!</span>
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-amber-700 mb-1">Incomplete Profile Data</p>
-              <p className="text-xs text-amber-600">Your profile information is still being synced. Salary details and other employment information will appear once fully synchronized. Please refresh the page if data doesn't update within a few moments.</p>
+          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-900/10">
+            <span className="mt-0.5 text-amber-600 text-sm font-bold shrink-0">!</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Incomplete Profile Data</p>
+              <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
+                Profile is still syncing. Salary and employment details will appear once fully synchronized.
+              </p>
             </div>
           </div>
         )}
+
         {loading ? (
           <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-theme-raised animate-pulse rounded-2xl" />
-            ))}
+            {[1, 2, 3].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl bg-theme-raised" />)}
           </div>
         ) : employee ? (
           <>
             {/* Header Card */}
-            <div className="enterprise-card bg-gradient-to-r from-theme-primary/10 to-theme-primary/5 p-8 border border-theme-primary/20 shadow-xl rounded-2xl">
-              <div className="flex items-start justify-between gap-6">
-                <div className="flex-1">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-16 h-16 rounded-2xl bg-theme-primary/20 border-2 border-theme-primary flex items-center justify-center">
-                      <span className="text-2xl font-black text-theme-primary">
-                        {employee.name.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div>
-                      <h1 className="text-3xl font-black text-theme-fg mb-1">{employee.name}</h1>
-                      <p className="text-sm font-bold text-theme-primary uppercase tracking-widest">{employee.designation}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3 mt-4">
+            <div className="page-card flex items-start justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-lg font-black">
+                  {employee.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-theme-fg leading-tight">{employee.name}</h2>
+                  <p className="text-sm text-theme-muted mt-0.5">{employee.designation || "—"}</p>
+                  <div className="flex items-center gap-2 mt-2">
                     <span className={cn(
-                      "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border",
-                      getStatusColor(employee.is_active)
-                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
-                        : "bg-red-500/10 border-red-500/20 text-red-600"
+                      "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold",
+                      employee.is_active
+                        ? "bg-emerald-500/10 text-emerald-600"
+                        : "bg-red-500/10 text-red-500"
                     )}>
-                      {getStatusLabel(employee.is_active)}
+                      <span className={cn("h-1 w-1 rounded-full", employee.is_active ? "bg-emerald-500" : "bg-red-500")} />
+                      {employee.is_active ? "Active" : "Inactive"}
                     </span>
-                    <span className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-theme-raised border border-theme-border text-theme-fg">
+                    <span className="rounded-md bg-theme-raised px-2 py-0.5 text-[11px] font-semibold text-theme-fg">
                       {employee.role}
                     </span>
-                    <span className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-theme-page border border-theme-border text-theme-muted">
-                      {employee.employment_type}
-                    </span>
+                    {employee.employment_type && (
+                      <span className="rounded-md bg-theme-raised px-2 py-0.5 text-[11px] font-semibold text-theme-muted capitalize">
+                        {employee.employment_type.replace(/_/g, " ")}
+                      </span>
+                    )}
                   </div>
                 </div>
+              </div>
+              <Link href="/dashboard">
+                <Button size="sm" variant="secondary">
+                  Edit Profile
+                </Button>
+              </Link>
+            </div>
 
-                <Link href="/dashboard">
-                  <Button className="font-black uppercase tracking-widest text-[10px] h-10">
-                    <Edit3 size={14} className="mr-2" /> Edit Profile
+            {/* Info Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Contact */}
+              <div className="page-card overflow-hidden p-0">
+                <div className="flex items-center gap-2 border-b border-theme-border px-5 py-4">
+                  <Mail size={15} className="text-theme-muted" />
+                  <h3 className="text-sm font-semibold text-theme-fg">Contact Information</h3>
+                </div>
+                <div className="px-5 py-4 space-y-3">
+                  <div>
+                    <p className="text-xs text-theme-muted">Email Address</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5 break-all">{employee.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-theme-muted">Employee ID</p>
+                    <p className="text-sm font-mono font-bold text-theme-primary mt-0.5">{employee.employee_id}</p>
+                  </div>
+                  <div className="pt-2 border-t border-theme-border">
+                    <a href={`mailto:${employee.email}`}>
+                      <Button variant="outline" size="sm" className="w-full">
+                        <Mail size={12} className="mr-1.5" /> Send Email
+                      </Button>
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Professional */}
+              <div className="page-card overflow-hidden p-0">
+                <div className="flex items-center gap-2 border-b border-theme-border px-5 py-4">
+                  <Briefcase size={15} className="text-theme-muted" />
+                  <h3 className="text-sm font-semibold text-theme-fg">Professional Details</h3>
+                </div>
+                <div className="px-5 py-4 space-y-3">
+                  <div>
+                    <p className="text-xs text-theme-muted">Department</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5">{employee.department || "Not assigned"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-theme-muted">Designation</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5">{employee.designation || "Not specified"}</p>
+                  </div>
+                  <div className="pt-2 border-t border-theme-border">
+                    <p className="text-xs text-theme-muted">Salary Structure</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5 capitalize">
+                      {employee.salary_structure?.replace(/_/g, " ") || "Not set"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Employment */}
+              <div className="page-card overflow-hidden p-0">
+                <div className="flex items-center gap-2 border-b border-theme-border px-5 py-4">
+                  <Calendar size={15} className="text-theme-muted" />
+                  <h3 className="text-sm font-semibold text-theme-fg">Employment Information</h3>
+                </div>
+                <div className="px-5 py-4 space-y-3">
+                  <div>
+                    <p className="text-xs text-theme-muted">Joining Date</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5">
+                      {employee.joining_date ? dayjs(employee.joining_date).format("DD MMMM YYYY") : "Not specified"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-theme-muted">Employment Type</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5 capitalize">
+                      {employee.employment_type?.replace(/_/g, " ") || "Not set"}
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t border-theme-border">
+                    <p className="text-xs text-theme-muted">Tenure</p>
+                    <p className="text-sm font-bold text-theme-primary mt-0.5">
+                      {employee.joining_date ? `${dayjs().diff(dayjs(employee.joining_date), "months")} months` : "N/A"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Team */}
+              <div className="page-card overflow-hidden p-0">
+                <div className="flex items-center gap-2 border-b border-theme-border px-5 py-4">
+                  <Users size={15} className="text-theme-muted" />
+                  <h3 className="text-sm font-semibold text-theme-fg">Team Information</h3>
+                </div>
+                <div className="px-5 py-4 space-y-3">
+                  <div>
+                    <p className="text-xs text-theme-muted">Team Name</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5">{team?.name || "Not assigned to a team"}</p>
+                  </div>
+                  {team && (
+                    <div>
+                      <p className="text-xs text-theme-muted">Team Department</p>
+                      <p className="text-sm font-semibold text-theme-fg mt-0.5">{team.department}</p>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-theme-border">
+                    <Link href="/dashboard">
+                      <Button variant="outline" size="sm" className="w-full">
+                        <Briefcase size={12} className="mr-1.5" /> View Assigned Projects
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Performance & Financial */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* KPI */}
+              <div className="page-card overflow-hidden p-0">
+                <div className="flex items-center gap-2 border-b border-theme-border px-5 py-4">
+                  <Award size={15} className="text-theme-muted" />
+                  <h3 className="text-sm font-semibold text-theme-fg">Current KPI Score</h3>
+                </div>
+                <div className="px-5 py-4">
+                  {kpiScore ? (
+                    <div className="space-y-3">
+                      <div className="text-center py-2">
+                        <p className="text-3xl font-black text-theme-primary">{kpiScore.final_score.toFixed(1)}%</p>
+                        <p className="text-xs text-theme-muted mt-1">{dayjs().format("MMMM YYYY")}</p>
+                      </div>
+                      {[
+                        { label: "KPI Score",        value: kpiScore.kpi_score,        color: "bg-sky-400" },
+                        { label: "KRA Score",        value: kpiScore.kra_score,        color: "bg-emerald-400" },
+                        { label: "Behavioral Score", value: kpiScore.behavioral_score, color: "bg-amber-400" },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-theme-muted">{label}</span>
+                            <span className="font-semibold text-theme-fg">{value.toFixed(1)}%</span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-theme-raised">
+                            <div className={cn("h-full rounded-full", color)} style={{ width: `${value}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-theme-subtle py-4 text-center">No KPI data available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Financial Overview */}
+              <div className="page-card overflow-hidden p-0">
+                <div className="flex items-center gap-2 border-b border-theme-border px-5 py-4">
+                  <DollarSign size={15} className="text-theme-muted" />
+                  <h3 className="text-sm font-semibold text-theme-fg">Financial Overview</h3>
+                </div>
+                <div className="px-5 py-4">
+                  {wallet ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-4 rounded-2xl bg-theme-primary/10 border border-theme-primary/20 mb-2">
+                         <div>
+                            <p className="text-[10px] uppercase font-black tracking-widest text-theme-primary/80">Monthly Settlement</p>
+                            <p className="text-2xl font-black text-theme-fg">{formatCurrency(wallet.this_month_payout || 0)}</p>
+                            <p className="text-[9px] font-bold text-theme-muted mt-1 uppercase tracking-tighter">Current month payout calculated</p>
+                         </div>
+                         <div className="bg-theme-primary text-theme-surface h-10 w-10 flex items-center justify-center rounded-xl shadow-lg shadow-theme-primary/20">
+                            <DollarSign size={20} />
+                         </div>
+                      </div>
+                      <div>
+                        <p className="text-xs text-theme-muted">Total Earned (Lifetime)</p>
+                        <p className="text-sm font-bold text-theme-fg mt-0.5">{formatCurrency(wallet.earned_total)}</p>
+                      </div>
+                      <div className="space-y-2 pt-3 border-t border-theme-border">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-theme-muted">Claimable Balance</span>
+                          <span className="font-bold text-emerald-600">{formatCurrency(wallet.claimable_amount)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-theme-muted">Locked in Vault</span>
+                          <span className="font-bold text-amber-600">{formatCurrency(wallet.locked_amount)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-theme-subtle py-4 text-center">No wallet data available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Compensation */}
+              <div className="page-card overflow-hidden p-0">
+                <div className="flex items-center gap-2 border-b border-theme-border px-5 py-4">
+                  <TrendingUp size={15} className="text-theme-muted" />
+                  <h3 className="text-sm font-semibold text-theme-fg">Compensation</h3>
+                </div>
+                <div className="px-5 py-4 space-y-4">
+                  {employee.salary_min && employee.salary_max ? (
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Base Range</p>
+                          <p className="text-sm font-black text-theme-fg">{formatCurrency(employee.salary_min)} - {formatCurrency(employee.salary_max)}</p>
+                        </div>
+                        <Badge variant="info" className="text-[9px]">Performance Linked</Badge>
+                      </div>
+                      <div className="h-2 w-full bg-theme-raised rounded-full overflow-hidden flex">
+                        <div className="h-full bg-theme-primary/40" style={{ width: '30%' }} />
+                        <div className="h-full bg-theme-primary" style={{ width: '40%' }} />
+                        <div className="h-full bg-theme-primary/40" style={{ width: '30%' }} />
+                      </div>
+                      <div className="flex justify-between text-[9px] font-black text-theme-muted uppercase tracking-tighter">
+                        <span>Min Guaranteed</span>
+                        <span>Target Range</span>
+                        <span>Max Potential</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="text-xs text-theme-muted uppercase font-bold tracking-tighter mb-1 opacity-70">
+                          {employee.salary_structure === "hourly" ? "Hourly Rate" : 
+                           employee.salary_structure === "daily" ? "Daily Rate" : 
+                           employee.salary_structure === "stipend" ? "Stipend Amount" : 
+                           "Base Salary"}
+                        </p>
+                        <p className="text-2xl font-black text-theme-primary">
+                          {employee.hourly_rate ? `₹${employee.hourly_rate}/hr` : 
+                           employee.daily_rate ? `₹${employee.daily_rate}/day` : 
+                           employee.stipend_amount ? formatCurrency(employee.stipend_amount) : 
+                           formatCurrency(employee.base_salary || 0)}
+                        </p>
+                      </div>
+                      <div className="pt-3 border-t border-theme-border">
+                        <p className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">Payment Frequency</p>
+                        <p className="text-sm font-semibold text-theme-fg mt-0.5">
+                          {employee.salary_structure === "hourly" ? "Cycle: Per Hour" : 
+                           employee.salary_structure === "daily" ? "Cycle: Per Day" : 
+                           "Cycle: Monthly Settlement"}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* KPI Weights (if set) */}
+            {employee.kpi_weight !== undefined && (
+              <div className="page-card overflow-hidden p-0">
+                <div className="flex items-center gap-2 border-b border-theme-border px-5 py-4">
+                  <Award size={15} className="text-theme-muted" />
+                  <h3 className="text-sm font-semibold text-theme-fg">Performance Weights</h3>
+                </div>
+                <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {[
+                    { label: "KPI Weight",        value: employee.kpi_weight ?? 0,        color: "bg-sky-400",   textColor: "text-sky-600" },
+                    { label: "KRA Weight",        value: employee.kra_weight ?? 0,        color: "bg-emerald-400", textColor: "text-emerald-600" },
+                    { label: "Behavioral Weight", value: employee.behavioral_weight ?? 0, color: "bg-amber-400", textColor: "text-amber-600" },
+                  ].map(({ label, value, color, textColor }) => (
+                    <div key={label} className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-theme-muted">{label}</span>
+                        <span className={cn("font-bold", textColor)}>{value}%</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-theme-raised">
+                        <div className={cn("h-full rounded-full", color)} style={{ width: `${value}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Links */}
+            <div className="page-card">
+              <div className="flex items-center gap-2 mb-4">
+                <FileText size={15} className="text-theme-muted" />
+                <h3 className="text-sm font-semibold text-theme-fg">Quick Links</h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/dashboard/attendance">
+                  <Button variant="secondary" size="sm">
+                    <Calendar size={13} className="mr-1.5" /> Attendance
+                  </Button>
+                </Link>
+                <Link href="/dashboard/incentives">
+                  <Button variant="secondary" size="sm">
+                    <Award size={13} className="mr-1.5" /> Incentives
+                  </Button>
+                </Link>
+                <Link href="/dashboard/payslips">
+                  <Button variant="secondary" size="sm">
+                    <FileText size={13} className="mr-1.5" /> Payslips
+                  </Button>
+                </Link>
+                <Link href="/dashboard/performance">
+                  <Button variant="secondary" size="sm">
+                    <TrendingUp size={13} className="mr-1.5" /> Performance
                   </Button>
                 </Link>
               </div>
             </div>
-
-            {/* Contact & Details Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Contact Information */}
-              <div className="enterprise-card bg-theme-surface p-6 border border-theme-border shadow-lg rounded-2xl">
-                <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg mb-5 flex items-center gap-2">
-                  <Mail size={14} className="text-theme-primary" />
-                  Contact Information
-                </h3>
-
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Email Address</p>
-                    <p className="text-sm font-semibold text-theme-fg break-all">{employee.email}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Employee ID</p>
-                    <p className="text-sm font-mono font-bold text-theme-primary">{employee.employee_id}</p>
-                  </div>
-
-                  <div className="pt-2 border-t border-theme-border/30">
-                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-2">Quick Actions</p>
-                    <div className="flex gap-2">
-                      <a href={`mailto:${employee.email}`} className="flex-1">
-                        <Button variant="outline" size="sm" className="w-full text-[10px] font-bold h-8">
-                          <Mail size={12} className="mr-1" /> Email
-                        </Button>
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Professional Details */}
-              <div className="enterprise-card bg-theme-surface p-6 border border-theme-border shadow-lg rounded-2xl">
-                <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg mb-5 flex items-center gap-2">
-                  <Briefcase size={14} className="text-theme-primary" />
-                  Professional Details
-                </h3>
-
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Department</p>
-                    <p className="text-sm font-semibold text-theme-fg">{employee.department || "Not assigned"}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Designation</p>
-                    <p className="text-sm font-semibold text-theme-fg">{employee.designation || "Not specified"}</p>
-                  </div>
-
-                  <div className="pt-2 border-t border-theme-border/30">
-                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Salary Structure</p>
-                    <p className="text-sm font-semibold text-theme-fg capitalize">{employee.salary_structure?.replace(/_/g, " ") || "Not set"}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Employment & Team Details */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Employment Information */}
-              <div className="enterprise-card bg-theme-surface p-6 border border-theme-border shadow-lg rounded-2xl">
-                <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg mb-5 flex items-center gap-2">
-                  <Calendar size={14} className="text-theme-primary" />
-                  Employment Information
-                </h3>
-
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Joining Date</p>
-                    <p className="text-sm font-semibold text-theme-fg">
-                      {employee.joining_date
-                        ? dayjs(employee.joining_date).format("DD MMMM YYYY")
-                        : "Not specified"}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Employment Type</p>
-                    <p className="text-sm font-semibold text-theme-fg capitalize">{employee.employment_type?.replace(/_/g, " ") || "Not set"}</p>
-                  </div>
-
-                  <div className="pt-2 border-t border-theme-border/30">
-                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Tenure</p>
-                    <p className="text-sm font-bold text-theme-primary">
-                      {employee.joining_date
-                        ? `${dayjs().diff(dayjs(employee.joining_date), "months")} months`
-                        : "N/A"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Team Information */}
-              <div className="enterprise-card bg-theme-surface p-6 border border-theme-border shadow-lg rounded-2xl">
-                <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg mb-5 flex items-center gap-2">
-                  <Users size={14} className="text-theme-primary" />
-                  Team Information
-                </h3>
-
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Team Name</p>
-                    <p className="text-sm font-semibold text-theme-fg">{team?.name || "Not assigned to a team"}</p>
-                  </div>
-
-                  {team && (
-                    <div>
-                      <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Team Department</p>
-                      <p className="text-sm font-semibold text-theme-fg">{team.department}</p>
-                    </div>
-                  )}
-
-                  <div className="pt-2 border-t border-theme-border/30">
-                    <Link href="/dashboard/projects">
-                      <Button variant="outline" size="sm" className="w-full text-[10px] font-bold h-8">
-                        <Briefcase size={12} className="mr-1" /> View Assigned Projects
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Performance & Financial Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* KPI Score Card */}
-              <div className="enterprise-card bg-theme-surface p-6 border border-theme-border shadow-lg rounded-2xl">
-                <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg mb-5 flex items-center gap-2">
-                  <Award size={14} className="text-theme-primary" />
-                  Current KPI Score
-                </h3>
-
-                {kpiScore ? (
-                  <div className="space-y-4">
-                    <div className="text-center">
-                      <div className="text-4xl font-black text-theme-primary mb-2">{kpiScore.final_score.toFixed(1)}%</div>
-                      <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider">
-                        {dayjs().format("MMMM YYYY")}
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-theme-muted">KPI Score</span>
-                        <span className="text-xs font-black text-theme-fg">{kpiScore.kpi_score.toFixed(1)}%</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-theme-page rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 rounded-full transition-all"
-                          style={{ width: `${kpiScore.kpi_score}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-theme-muted">KRA Score</span>
-                        <span className="text-xs font-black text-theme-fg">{kpiScore.kra_score.toFixed(1)}%</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-theme-page rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 rounded-full transition-all"
-                          style={{ width: `${kpiScore.kra_score}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-theme-muted">Behavioral Score</span>
-                        <span className="text-xs font-black text-theme-fg">{kpiScore.behavioral_score.toFixed(1)}%</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-theme-page rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-amber-500 rounded-full transition-all"
-                          style={{ width: `${kpiScore.behavioral_score}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-theme-muted">No KPI data available</p>
-                )}
-              </div>
-
-              {/* Financial Overview */}
-              <div className="enterprise-card bg-theme-surface p-6 border border-theme-border shadow-lg rounded-2xl">
-                <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg mb-5 flex items-center gap-2">
-                  <DollarSign size={14} className="text-theme-primary" />
-                  Financial Overview
-                </h3>
-
-                {wallet ? (
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-2">Total Earned</p>
-                      <p className="text-2xl font-black text-emerald-600">{formatCurrency(wallet.earned_total)}</p>
-                    </div>
-
-                    <div className="pt-3 border-t border-theme-border/30 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-theme-muted">Claimable</span>
-                        <span className="text-sm font-black text-emerald-600">{formatCurrency(wallet.claimable_amount)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-theme-muted">Locked</span>
-                        <span className="text-sm font-bold text-amber-600">{formatCurrency(wallet.locked_amount)}</span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-theme-muted">No wallet data available</p>
-                )}
-              </div>
-
-              {/* Base Salary Card */}
-              <div className="enterprise-card bg-theme-surface p-6 border border-theme-border shadow-lg rounded-2xl">
-                <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg mb-5 flex items-center gap-2">
-                  <TrendingUp size={14} className="text-theme-primary" />
-                  Compensation
-                </h3>
-
-                <div className="space-y-4">
-                  {employee.salary_structure === "stipend" ? (
-                    <>
-                      <div>
-                        <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-2">Stipend Range</p>
-                        <div className="flex gap-2">
-                          <div className="flex-1">
-                            <p className="text-[10px] text-theme-muted mb-1">Min</p>
-                            <p className="text-lg font-black text-emerald-600">{formatCurrency(employee.salary_min || 0)}</p>
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-[10px] text-theme-muted mb-1">Max</p>
-                            <p className="text-lg font-black text-theme-primary">{formatCurrency(employee.salary_max || 0)}</p>
-                          </div>
-                        </div>
-                      </div>
-                      {employee.enable_salary_linkage && (
-                        <div className="pt-3 border-t border-theme-border/30">
-                          <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-2">Salary Linked to KPI/KRA</p>
-                          <p className="text-xs font-semibold text-emerald-600">✓ Enabled</p>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-2">
-                          {employee.salary_structure === "hourly" ? "Hourly Rate" : employee.salary_structure === "daily" ? "Daily Rate" : "Base Salary"}
-                        </p>
-                        <p className="text-2xl font-black text-theme-primary">
-                          {employee.hourly_rate ? `₹${employee.hourly_rate}/hr` : employee.daily_rate ? `₹${employee.daily_rate}/day` : formatCurrency(employee.base_salary || 0)}
-                        </p>
-                      </div>
-                      <div className="pt-3 border-t border-theme-border/30">
-                        <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-2">Payment Frequency</p>
-                        <p className="text-sm font-semibold text-theme-fg capitalize">Monthly</p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Salary Range & KPI Weights */}
-            {(employee.salary_min || employee.kpi_weight) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Salary Range */}
-                {employee.salary_structure === "stipend" && (
-                  <div className="enterprise-card bg-theme-surface p-6 border border-theme-border shadow-lg rounded-2xl">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg mb-5 flex items-center gap-2">
-                      <DollarSign size={14} className="text-theme-primary" />
-                      Salary Range Details
-                    </h3>
-
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Minimum Salary</p>
-                        <p className="text-lg font-black text-emerald-600">{formatCurrency(employee.salary_min || 0)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Maximum Salary</p>
-                        <p className="text-lg font-black text-theme-primary">{formatCurrency(employee.salary_max || 0)}</p>
-                      </div>
-                      {employee.salary_step && (
-                        <div>
-                          <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Increment Step</p>
-                          <p className="text-sm font-semibold text-theme-fg">{formatCurrency(employee.salary_step)}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* KPI Weights */}
-                {employee.kpi_weight !== undefined && (
-                  <div className="enterprise-card bg-theme-surface p-6 border border-theme-border shadow-lg rounded-2xl">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg mb-5 flex items-center gap-2">
-                      <Award size={14} className="text-theme-primary" />
-                      Performance Weights
-                    </h3>
-
-                    <div className="space-y-3">
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[10px] font-bold text-theme-muted uppercase tracking-wider">KPI Weight</span>
-                          <span className="text-xs font-black text-blue-600">{employee.kpi_weight}%</span>
-                        </div>
-                        <div className="h-2 w-full bg-theme-page rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${employee.kpi_weight}%` }} />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[10px] font-bold text-theme-muted uppercase tracking-wider">KRA Weight</span>
-                          <span className="text-xs font-black text-emerald-600">{employee.kra_weight}%</span>
-                        </div>
-                        <div className="h-2 w-full bg-theme-page rounded-full overflow-hidden">
-                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${employee.kra_weight}%` }} />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[10px] font-bold text-theme-muted uppercase tracking-wider">Behavioral Weight</span>
-                          <span className="text-xs font-black text-amber-600">{employee.behavioral_weight}%</span>
-                        </div>
-                        <div className="h-2 w-full bg-theme-page rounded-full overflow-hidden">
-                          <div className="h-full bg-amber-500 rounded-full" style={{ width: `${employee.behavioral_weight}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Additional Information */}
-            <div className="enterprise-card bg-theme-page/30 p-6 border border-theme-border rounded-2xl">
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-theme-primary/10 border border-theme-primary/20">
-                  <FileText size={18} className="text-theme-primary" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-black uppercase tracking-widest text-theme-fg mb-2">Quick Links</h3>
-                  <p className="text-[10px] text-theme-muted mb-4">Access other sections of your profile</p>
-                  <div className="flex flex-wrap gap-3">
-                    <Link href="/dashboard/attendance">
-                      <Button variant="outline" size="sm" className="text-[10px] font-bold h-8">
-                        <Calendar size={12} className="mr-1" /> Attendance
-                      </Button>
-                    </Link>
-                    <Link href="/dashboard/incentives">
-                      <Button variant="outline" size="sm" className="text-[10px] font-bold h-8">
-                        <Award size={12} className="mr-1" /> Incentives
-                      </Button>
-                    </Link>
-                    <Link href="/dashboard/payslips">
-                      <Button variant="outline" size="sm" className="text-[10px] font-bold h-8">
-                        <FileText size={12} className="mr-1" /> Payslips
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center py-12 gap-4">
-            <p className="text-theme-muted font-bold">Limited profile data available</p>
-            <p className="text-sm text-theme-muted text-center max-w-md">
-              Your profile appears to have just been created. Please contact your administrator or check back shortly for full profile details.
+          <div className="page-card py-16 text-center">
+            <p className="text-sm font-semibold text-theme-muted">Limited profile data available</p>
+            <p className="text-xs text-theme-subtle mt-1 max-w-md mx-auto">
+              Your profile appears to have just been created. Please contact your administrator or check back shortly.
             </p>
           </div>
         )}

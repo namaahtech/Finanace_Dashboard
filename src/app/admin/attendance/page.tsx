@@ -216,8 +216,8 @@ export default function AdminAttendancePage() {
         if (profile) setUserRole(profile.role);
       }
 
-      const { data: emps } = await supabase.from("employees").select("id, name, department, designation, employee_id, monthly_leave_quota, leave_balance").order("name");
-      setEmployees(emps || []);
+      const empRes = await fetch('/api/employees').then(r => r.json());
+      setEmployees(empRes.employees || []);
 
       await loadLogsForDate(selectedDate);
     } finally {
@@ -531,8 +531,8 @@ export default function AdminAttendancePage() {
   return (
     <>
       <DashboardShell
-        title="Attendance Command Center"
-        subtitle="Track, manage and audit workforce attendance records."
+        title="Attendance Dashboard"
+        subtitle="View and manage employee attendance records."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" className="h-10 px-4 rounded-xl font-bold">
@@ -545,12 +545,12 @@ export default function AdminAttendancePage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5 shadow-inner">
               {[
-                { key: "daily", label: "Daily Log", icon: List },
+                { key: "daily", label: "Daily Attendance", icon: List },
                 { key: "logsheet", label: "Log Sheet", icon: LayoutGrid },
                 { key: "summary", label: "Monthly Summary", icon: CalendarRange },
                 { key: "leaves", label: "Leave Approval", icon: Palmtree },
-                { key: "holidays", label: "System Holidays", icon: Palmtree },
-                { key: "protocols", label: "Timing Protocols", icon: AlarmClock },
+                { key: "holidays", label: "Holidays", icon: Palmtree },
+                { key: "protocols", label: "Shift Times", icon: AlarmClock },
               ].map(({ key, label, icon: Icon }) => (
                 <button key={key} onClick={() => setTab(key as ViewTab)}
                   className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all", tab === key ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}>
@@ -622,7 +622,7 @@ export default function AdminAttendancePage() {
                     </thead>
                     <tbody className="divide-y divide-theme-border">
                       {loading ? (
-                        <tr><td colSpan={7} className="px-6 py-12 text-center text-xs text-theme-muted">Synchronizing Protocols...</td></tr>
+                        <tr><td colSpan={7} className="px-6 py-12 text-center text-xs text-theme-muted">Loading attendance data...</td></tr>
                       ) : filtered.map(emp => {
                         const log: any = dailyLogs[emp.id];
                         const isAdmin = userRole === "super_admin";

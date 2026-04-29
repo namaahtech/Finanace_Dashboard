@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { X, Grid3x3, List } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect } from "react";
 import { ProjectCard } from "./ProjectCard";
 import { ProjectKanban } from "./ProjectKanban";
 
@@ -25,16 +27,30 @@ interface ProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
   projects: Project[];
+  initialProjectId?: string;
 }
 
-export function ProjectModal({ isOpen, onClose, projects }: ProjectModalProps) {
+export function ProjectModal({ isOpen, onClose, projects, initialProjectId }: ProjectModalProps) {
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+
+  useEffect(() => {
+    if (isOpen && initialProjectId) {
+      const proj = projects.find(p => p.id === initialProjectId);
+      if (proj) {
+        setSelectedProject(proj);
+        setViewMode("kanban");
+      }
+    } else if (!isOpen) {
+      setSelectedProject(null);
+      setViewMode("list");
+    }
+  }, [isOpen, initialProjectId, projects]);
 
   if (!isOpen) return null;
 
   const handleProjectClick = (project: Project) => {
-    setSelectedProject(project);
     setViewMode("kanban");
   };
 

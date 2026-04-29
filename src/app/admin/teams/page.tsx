@@ -318,7 +318,7 @@ export default function TeamsPage() {
                     
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
-                        onClick={() => { setEditingItem(item); setForm({ ...item, parent_id: item.parent_id || "none" }); setShowForm(true); }}
+                        onClick={() => { setEditingItem(item); setForm({ ...item, head_designation: item.head_designation || "", parent_id: item.parent_id || "none" }); setShowForm(true); }}
                         className="p-1.5 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-colors"
                       >
                          <Edit2 size={13} />
@@ -423,7 +423,7 @@ export default function TeamsPage() {
                       type="text"
                       required
                       placeholder="e.g. Sales Division"
-                      value={form.name}
+                      value={form.name || ""}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
                       className="field h-10 px-4"
                     />
@@ -434,7 +434,7 @@ export default function TeamsPage() {
                       type="text"
                       required
                       placeholder="e.g. General Manager"
-                      value={form.head_designation}
+                      value={form.head_designation || ""}
                       onChange={(e) => setForm({ ...form, head_designation: e.target.value })}
                       className="field h-10 px-4"
                     />

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -16,8 +16,9 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       );
     }
 
-    // Query with all available columns
+    // Query with all available columns using Admin client to ensure full profile sync
     console.log("[API] Querying Supabase for employee...");
+    const supabase = getSupabaseAdmin();
     const { data: dataArray, error } = await supabase
       .from("employees")
       .select("*")

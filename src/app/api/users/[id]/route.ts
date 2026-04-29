@@ -52,6 +52,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (typeof body.isActive === "boolean") updates.is_active = body.isActive;
   if (body.name) updates.name = body.name;
   if (body.designation) updates.designation = body.designation;
+  if (body.matrix_role !== undefined) updates.matrix_role = body.matrix_role;
   if (body.role) updates.role = body.role;
   if (body.department) updates.department = body.department;
   if (body.shift_id !== undefined) updates.shift_id = body.shift_id;

@@ -10,7 +10,7 @@ import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 
 export function GlobalAttendanceWidget({ floating = false }: { floating?: boolean }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { showToast } = useToast();
   const [activeSession, setActiveSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -26,8 +26,11 @@ export function GlobalAttendanceWidget({ floating = false }: { floating?: boolea
   }, []);
 
   const fetchSession = async () => {
-    if (!user) return;
+    if (!user || authLoading) return;
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return; // Stop if session is truly missing
+
       const today = dayjs().format("YYYY-MM-DD");
       const { data, error } = await supabase
         .from("attendance_logs")
@@ -51,12 +54,15 @@ export function GlobalAttendanceWidget({ floating = false }: { floating?: boolea
   };
 
   useEffect(() => {
-    fetchSession();
+    if (!authLoading && user) {
+      fetchSession();
+    }
     // Subscribe to realtime updates
-    if (user) {
+    if (!authLoading && user) {
       const chan = supabase.channel("global_att")
         .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs', filter: `employee_id=eq.${user.id}` }, () => {
-          fetchSession();
+          // Add a small delay to avoid race conditions
+          setTimeout(fetchSession, 500);
         }).subscribe();
       return () => { supabase.removeChannel(chan); };
     }
@@ -130,7 +136,7 @@ export function GlobalAttendanceWidget({ floating = false }: { floating?: boolea
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  if (loading) return null;
+  if (loading || authLoading) return null;
 
   return (
     <div className="flex items-center gap-4">

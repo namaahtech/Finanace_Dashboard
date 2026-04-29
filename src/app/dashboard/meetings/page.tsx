@@ -5,19 +5,38 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useMeetings, Meeting } from "@/hooks/useMeetings";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useNotifications } from "@/components/layout/NotificationProvider";
-import { Video, Mic, Calendar, Clock, Users, Globe, Loader2, Play, Phone } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Video,
+  Mic,
+  Calendar,
+  Clock,
+  Users,
+  Globe,
+  Loader2,
+  Play,
+} from "lucide-react";
 import { format, isToday, isTomorrow } from "date-fns";
 
+const STATUS_STYLES: Record<Meeting["status"], string> = {
+  scheduled: "bg-sky-500/10 text-sky-600",
+  active:    "bg-emerald-500/10 text-emerald-600",
+  ended:     "bg-theme-raised text-theme-muted",
+  cancelled: "bg-red-500/10 text-red-500",
+};
+
 function StatusBadge({ status }: { status: Meeting["status"] }) {
-  const map = {
-    scheduled: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    active:    "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    ended:     "bg-theme-subtle/10 text-theme-muted border-theme-border",
-    cancelled: "bg-rose-500/10 text-rose-400 border-rose-500/20",
-  };
   return (
-    <span className={`px-2 py-0.5 rounded-lg border text-[9px] font-black uppercase tracking-wider ${map[status]}`}>
-      {status === "active" ? "● Live" : status}
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold",
+        STATUS_STYLES[status]
+      )}
+    >
+      {status === "active" && (
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      )}
+      {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
 }
@@ -28,63 +47,121 @@ export default function EmployeeMeetingsPage() {
   const { setActiveCall } = useNotifications();
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
 
-  const filtered = meetings.filter(m => {
-    const isParticipant = m.meeting_participants?.some(p => p.employee_id === user?.id) || m.host_id === user?.id;
-    const matchTab = tab === "past"
-      ? (m.status === "ended" || m.status === "cancelled")
-      : (m.status === "scheduled" || m.status === "active");
+  const filtered = meetings.filter((m) => {
+    const isParticipant =
+      m.meeting_participants?.some((p) => p.employee_id === user?.id) ||
+      m.host_id === user?.id;
+    const matchTab =
+      tab === "past"
+        ? m.status === "ended" || m.status === "cancelled"
+        : m.status === "scheduled" || m.status === "active";
     return isParticipant && matchTab;
   });
 
   return (
-    <DashboardShell title="Meetings" subtitle="Your scheduled and active meetings">
-      <div className="space-y-6">
-        <div className="flex bg-theme-card border border-theme-border rounded-xl p-1 w-fit">
-          {(["upcoming", "past"] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${tab === t ? "bg-theme-primary text-white" : "text-theme-muted hover:text-theme-fg"}`}>
+    <DashboardShell
+      title="Meetings"
+      subtitle="Your scheduled and active meetings."
+    >
+      <div className="space-y-5">
+
+        {/* Tab Selector */}
+        <div className="flex w-fit rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5">
+          {(["upcoming", "past"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "rounded-lg px-4 py-1.5 text-xs font-semibold capitalize transition-all",
+                tab === t
+                  ? "bg-theme-surface text-theme-fg shadow-sm"
+                  : "text-theme-muted hover:text-theme-fg"
+              )}
+            >
               {t}
             </button>
           ))}
         </div>
 
+        {/* Content */}
         {loading ? (
-          <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-theme-muted" /></div>
+          <div className="flex h-64 items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 size={20} className="animate-spin text-theme-muted" />
+              <p className="text-xs font-semibold text-theme-muted">Loading meetings…</p>
+            </div>
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4 text-theme-muted">
-            <Calendar size={48} strokeWidth={1} />
-            <p className="font-bold">No {tab} meetings</p>
-            <p className="text-sm">Your manager will schedule meetings and they'll appear here.</p>
+          <div className="page-card py-16 text-center text-theme-subtle">
+            <Calendar size={32} className="mx-auto mb-3 opacity-20" strokeWidth={1.5} />
+            <p className="text-sm font-medium">No {tab} meetings</p>
+            <p className="mt-1 text-xs">
+              Your manager will schedule meetings and they&apos;ll appear here.
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {filtered.map(m => {
+            {filtered.map((m) => {
               const when = m.scheduled_at
-                ? isToday(new Date(m.scheduled_at)) ? `Today ${format(new Date(m.scheduled_at), "h:mm a")}`
-                : isTomorrow(new Date(m.scheduled_at)) ? `Tomorrow ${format(new Date(m.scheduled_at), "h:mm a")}`
-                : format(new Date(m.scheduled_at), "MMM d, h:mm a")
+                ? isToday(new Date(m.scheduled_at))
+                  ? `Today ${format(new Date(m.scheduled_at), "h:mm a")}`
+                  : isTomorrow(new Date(m.scheduled_at))
+                  ? `Tomorrow ${format(new Date(m.scheduled_at), "h:mm a")}`
+                  : format(new Date(m.scheduled_at), "MMM d, h:mm a")
                 : "Instant";
               const Icon = m.type === "audio" ? Mic : Video;
+
               return (
-                <div key={m.id} className="bg-theme-card border border-theme-border rounded-2xl p-5 flex items-center gap-4 hover:border-theme-primary/30 transition-all group">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${m.status === "active" ? "bg-emerald-500/10 text-emerald-400" : "bg-theme-primary/10 text-theme-primary"}`}>
-                    <Icon size={20} />
+                <div
+                  key={m.id}
+                  className="page-card flex items-center gap-4"
+                >
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl",
+                      m.status === "active"
+                        ? "bg-emerald-500/10 text-emerald-600"
+                        : "border border-theme-border bg-theme-page text-theme-primary"
+                    )}
+                  >
+                    <Icon size={17} />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-sm font-black text-theme-fg truncate">{m.title}</h3>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center gap-2">
+                      <h3 className="truncate text-sm font-semibold text-theme-fg">{m.title}</h3>
                       <StatusBadge status={m.status} />
                     </div>
-                    <div className="flex items-center gap-4 text-[10px] text-theme-muted">
-                      <span className="flex items-center gap-1"><Clock size={10} />{when}</span>
-                      <span className="flex items-center gap-1"><Users size={10} />{m.meeting_participants?.length || 0} participants</span>
-                      {m.host && <span className="flex items-center gap-1"><Globe size={10} />Host: {m.host.name}</span>}
+                    <div className="flex items-center gap-4 text-xs text-theme-muted">
+                      <span className="flex items-center gap-1">
+                        <Clock size={11} />
+                        {when}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Users size={11} />
+                        {m.meeting_participants?.length || 0} participants
+                      </span>
+                      {m.host && (
+                        <span className="flex items-center gap-1">
+                          <Globe size={11} />
+                          {m.host.name}
+                        </span>
+                      )}
                     </div>
                   </div>
+
                   {m.status !== "ended" && m.status !== "cancelled" && (
-                    <button onClick={() => setActiveCall({ roomName: m.room_name, title: m.title, type: m.type })}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-theme-primary text-white text-xs font-black opacity-0 group-hover:opacity-100 hover:bg-theme-primary/90 transition-all">
-                      <Play size={12} /> Join
+                    <button
+                      onClick={() =>
+                        setActiveCall({
+                          roomName: m.room_name,
+                          title: m.title,
+                          type: m.type,
+                        })
+                      }
+                      className="flex items-center gap-1.5 rounded-lg bg-theme-primary px-3 py-1.5 text-xs font-semibold text-theme-surface transition-opacity hover:opacity-80"
+                    >
+                      <Play size={11} /> Join
                     </button>
                   )}
                 </div>
@@ -92,6 +169,7 @@ export default function EmployeeMeetingsPage() {
             })}
           </div>
         )}
+
       </div>
     </DashboardShell>
   );

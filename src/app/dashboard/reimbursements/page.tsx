@@ -2,165 +2,281 @@
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge, statusBadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { useAuth } from "@/components/layout/AuthProvider";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 import axios from "axios";
+import {
+  Receipt,
+  Plus,
+  X,
+  IndianRupee,
+  Clock,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
 
 interface Reimbursement {
- _id: string;
- title: string;
- category: string;
- amount: number;
- description: string;
- status: string;
- reject_reason?: string;
- createdAt: string;
- paid_at?: string;
+  _id: string;
+  title: string;
+  category: string;
+  amount: number;
+  description: string;
+  status: string;
+  reject_reason?: string;
+  createdAt: string;
+  paid_at?: string;
 }
 
-const categories = ["travel", "food", "accommodation", "equipment", "medical", "training", "other"];
+const CATEGORIES = [
+  "travel",
+  "food",
+  "accommodation",
+  "equipment",
+  "medical",
+  "training",
+  "other",
+];
 
 export default function ReimbursementsPage() {
- 
- const [items, setItems] = useState<Reimbursement[]>([]);
- const [loading, setLoading] = useState(true);
- const [showForm, setShowForm] = useState(false);
- const [submitting, setSubmitting] = useState(false);
- const [form, setForm] = useState({ title: "", category: "travel", amount: "", description: "" });
+  const { showToast } = useToast();
+  const [items, setItems] = useState<Reimbursement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    title: "",
+    category: "travel",
+    amount: "",
+    description: "",
+  });
 
- async function load() {
- try {
- const res = await axios.get("/api/reimbursements");
- setItems(res.data.reimbursements ?? []);
- } finally {
- setLoading(false);
- }
- }
+  async function load() {
+    try {
+      const res = await axios.get("/api/reimbursements");
+      setItems(res.data.reimbursements ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }
 
- useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
- async function handleSubmit(e: React.FormEvent) {
- e.preventDefault();
- setSubmitting(true);
- try {
- await axios.post(
- "/api/reimbursements",
- { ...form, amount: parseFloat(form.amount) }
- );
- setShowForm(false);
- setForm({ title: "", category: "travel", amount: "", description: "" });
- await load();
- } catch (err: unknown) {
- alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Error");
- } finally {
- setSubmitting(false);
- }
- }
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await axios.post("/api/reimbursements", {
+        ...form,
+        amount: parseFloat(form.amount),
+      });
+      setShowForm(false);
+      setForm({ title: "", category: "travel", amount: "", description: "" });
+      await load();
+      showToast("Reimbursement request submitted!", "success");
+    } catch (err: unknown) {
+      showToast(
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Error",
+        "error"
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
- return (
- <DashboardShell title="Reimbursements">
- <div className="mb-4 flex justify-end">
- <Button onClick={() => setShowForm(!showForm)}>
- {showForm ? "Cancel" : "+ New Request"}
- </Button>
- </div>
+  const pending = items.filter((i) => i.status === "pending").length;
+  const approved = items.filter((i) => i.status === "approved" || i.status === "paid").length;
+  const rejected = items.filter((i) => i.status === "rejected").length;
+  const totalAmount = items.reduce((s, i) => s + i.amount, 0);
 
- {showForm && (
- <Card className="mb-6">
- <CardHeader><CardTitle>New Reimbursement Request</CardTitle></CardHeader>
- <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
- <div>
- <label className="mb-1 block text-xs font-medium text-theme-fg dark:text-theme-subtle">Title</label>
- <input className="input-field" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
- </div>
- <div>
- <label className="mb-1 block text-xs font-medium text-theme-fg dark:text-theme-subtle">Category</label>
- <select className="input-field" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
- {categories.map((c) => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
- </select>
- </div>
- <div>
- <label className="mb-1 block text-xs font-medium text-theme-fg dark:text-theme-subtle">Amount (₹)</label>
- <input type="number" min="1" className="input-field" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
- </div>
- <div>
- <label className="mb-1 block text-xs font-medium text-theme-fg dark:text-theme-subtle">Description</label>
- <input className="input-field" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required />
- </div>
- <div className="sm:col-span-2 flex justify-end">
- <Button type="submit" loading={submitting}>Submit Request</Button>
- </div>
- </form>
- </Card>
- )}
+  return (
+    <DashboardShell
+      title="Reimbursements"
+      subtitle="Submit and track expense reimbursement requests."
+      actions={
+        <Button
+          onClick={() => setShowForm(!showForm)}
+          variant={showForm ? "secondary" : "primary"}
+          size="sm"
+        >
+          {showForm ? (
+            <><X size={13} className="mr-1.5" /> Cancel</>
+          ) : (
+            <><Plus size={13} className="mr-1.5" /> New Request</>
+          )}
+        </Button>
+      }
+    >
+      <div className="space-y-5">
 
- <Card>
- <CardHeader><CardTitle>My Requests</CardTitle></CardHeader>
- {loading ? (
- <div className="py-12 text-center text-sm text-theme-subtle">Loading...</div>
- ) : items.length === 0 ? (
- <div className="py-12 text-center text-sm text-theme-subtle">No reimbursement requests yet.</div>
- ) : (
- <div className="overflow-x-auto">
- <table className="w-full text-sm">
- <thead>
- <tr className="border-b border-theme-border dark:border-theme-border text-left text-xs text-theme-muted">
- <th className="pb-3 pr-4">Title</th>
- <th className="pb-3 pr-4">Category</th>
- <th className="pb-3 pr-4">Amount</th>
- <th className="pb-3 pr-4">Status</th>
- <th className="pb-3">Submitted</th>
- </tr>
- </thead>
- <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
- {items.map((item) => (
- <tr key={item._id}>
- <td className="py-3 pr-4 font-medium">{item.title}</td>
- <td className="py-3 pr-4 capitalize text-theme-muted">{item.category}</td>
- <td className="py-3 pr-4">{formatCurrency(item.amount)}</td>
- <td className="py-3 pr-4">
- <div>
- <Badge variant={statusBadgeVariant(item.status)}>
- {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
- </Badge>
- {item.reject_reason && (
- <p className="mt-1 text-xs text-red-500">{item.reject_reason}</p>
- )}
- </div>
- </td>
- <td className="py-3 text-theme-muted">{formatDate(item.createdAt)}</td>
- </tr>
- ))}
- </tbody>
- </table>
- </div>
- )}
- </Card>
+        {/* Summary Stat Cards */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { label: "Total Requested", value: formatCurrency(totalAmount), icon: IndianRupee, color: "text-theme-fg",    bg: "bg-theme-raised",    sub: `${items.length} requests` },
+            { label: "Pending Review",  value: String(pending),             icon: Clock,       color: "text-amber-600",   bg: "bg-amber-500/10",    sub: "Awaiting decision" },
+            { label: "Approved / Paid", value: String(approved),            icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-500/10",  sub: "Processed" },
+            { label: "Rejected",        value: String(rejected),            icon: XCircle,     color: "text-red-500",     bg: "bg-red-500/10",      sub: "Declined" },
+          ].map(({ label, value, icon: Icon, color, bg, sub }) => (
+            <div key={label} className="page-card flex items-center gap-3">
+              <div className={cn("flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
+                <Icon size={17} className={color} />
+              </div>
+              <div>
+                <p className="text-xs text-theme-muted">{label}</p>
+                <p className={cn("text-xl font-black leading-tight", color)}>{value}</p>
+                <p className="text-[10px] text-theme-subtle">{sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
 
- <style jsx>{`
- .input-field {
- width: 100%;
- border-radius: 0.5rem;
- border: 1px solid #e5e7eb;
- background: white;
- padding: 0.5rem 0.75rem;
- font-size: 0.875rem;
- color: #111827;
- }
- :global(.dark) .input-field {
- border-color: #374151;
- background: #1f2937;
- color: #f9fafb;
- }
- .input-field:focus {
- outline: none;
- border-color: #0ea5e9;
- box-shadow: 0 0 0 3px rgb(14 165 233 / 0.2);
- }
- `}</style>
- </DashboardShell>
- );
+        {/* New Request Form */}
+        {showForm && (
+          <div className="page-card overflow-hidden p-0">
+            <div className="flex items-center gap-2 border-b border-theme-border px-5 py-4">
+              <Receipt size={15} className="text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-fg">New Reimbursement Request</h3>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Title</label>
+                  <input
+                    className="field"
+                    placeholder="e.g. Client dinner at XYZ"
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Category</label>
+                  <select
+                    className="field"
+                    value={form.category}
+                    onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  >
+                    {CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c.charAt(0).toUpperCase() + c.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Amount (₹)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="field"
+                    placeholder="0.00"
+                    value={form.amount}
+                    onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Description</label>
+                  <input
+                    className="field"
+                    placeholder="Brief description of the expense"
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex justify-end border-t border-theme-border pt-4">
+                <Button type="submit" loading={submitting} size="sm">
+                  Submit Request
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Requests Table */}
+        <div className="page-card overflow-hidden p-0">
+          <div className="flex items-center justify-between border-b border-theme-border px-5 py-4">
+            <div className="flex items-center gap-2">
+              <Receipt size={15} className="text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-fg">My Requests</h3>
+            </div>
+            <span className="text-xs text-theme-subtle">
+              {items.length} request{items.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="flex h-48 items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-theme-primary border-t-transparent" />
+                <p className="text-xs font-semibold text-theme-muted">Loading requests…</p>
+              </div>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="py-16 text-center text-theme-subtle">
+              <p className="text-sm font-medium">No reimbursement requests yet</p>
+              <p className="mt-1 text-xs">Click &quot;New Request&quot; to submit your first expense.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
+                    <th className="px-5 py-3 font-semibold">Title</th>
+                    <th className="px-5 py-3 font-semibold">Category</th>
+                    <th className="px-5 py-3 font-semibold">Amount</th>
+                    <th className="px-5 py-3 font-semibold">Status</th>
+                    <th className="px-5 py-3 font-semibold">Submitted</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-theme-border">
+                  {items.map((item) => (
+                    <tr key={item._id} className="hover:bg-theme-raised/40 transition-colors">
+                      <td className="px-5 py-3">
+                        <p className="text-xs font-semibold text-theme-fg">{item.title}</p>
+                        {item.description && (
+                          <p className="max-w-[200px] truncate text-[10px] text-theme-subtle">
+                            {item.description}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-xs capitalize text-theme-muted">{item.category}</td>
+                      <td className="px-5 py-3 text-xs font-semibold text-theme-fg">
+                        {formatCurrency(item.amount)}
+                      </td>
+                      <td className="px-5 py-3">
+                        <div>
+                          <Badge variant={statusBadgeVariant(item.status)}>
+                            {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                          </Badge>
+                          {item.reject_reason && (
+                            <p className="mt-1 text-[10px] text-red-500">{item.reject_reason}</p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-xs text-theme-muted">{formatDate(item.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="border-t border-theme-border bg-theme-page px-5 py-2.5">
+            <span className="text-xs text-theme-subtle">
+              Expenses are reviewed by the finance team within 3–5 business days.
+            </span>
+          </div>
+        </div>
+
+      </div>
+    </DashboardShell>
+  );
 }

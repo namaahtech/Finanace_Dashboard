@@ -1,6 +1,31 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { id } = await params;
+    
+    const { data, error } = await supabase
+      .from("projects")
+      .select("*, client:clients(*), teams:project_teams(team:teams(*))")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...data,
+        teams: data.teams?.map((t: any) => t.team) || []
+      }
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const supabase = getSupabaseAdmin();

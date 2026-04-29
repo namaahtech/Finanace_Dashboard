@@ -10,8 +10,9 @@ import { useToast } from "@/components/ui/Toast";
 import {
   Users, UserPlus, Search, X, CreditCard, Building, UserCheck, UserX,
   ShieldCheck, FileText, Zap, CalendarDays, MoreVertical, Trash2, Edit2,
-  RefreshCw, Mail, ChevronDown, Check, Clock, LayoutGrid, Coffee
+  RefreshCw, Mail, ChevronDown, ChevronRight, Check, Clock, LayoutGrid, Coffee
 } from "lucide-react";
+import { useAuth } from "@/components/layout/AuthProvider";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
@@ -36,6 +37,7 @@ interface Shift {
 interface User {
   id: string; name: string; email: string; employeeId: string;
   role: string; department: string; designation: string;
+  matrix_role: string; // Added field
   joiningDate: string; isActive: boolean;
   shift_id: string | null;
   team_id: string | null;
@@ -53,10 +55,10 @@ interface User {
 
 const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger"> = {
   employee: "default", hr: "info", lead: "success",
-  super_admin: "purple", accounts: "warning", sales: "danger",
+  manager: "purple", super_admin: "purple", accounts: "warning", sales: "danger",
 };
 const ROLE_LABEL: Record<string, string> = {
-  employee: "Employee", hr: "HR", lead: "Team Lead",
+  employee: "Employee", hr: "HR", lead: "Team Lead", manager: "Department Manager",
   super_admin: "Super Admin", accounts: "Accounts", sales: "Sales",
 };
 
@@ -238,6 +240,7 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm }: {
 export default function AdminUsersPage() {
   const { showToast } = useToast();
   const { request } = useApi();
+  const { user, loading: authLoading } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -248,10 +251,11 @@ export default function AdminUsersPage() {
   const [activeTab, setActiveTab] = useState<"all" | "active" | "inactive">("all");
   const [deleteConfirm, setDeleteConfirm] = useState<User | null>(null);
   const [orgTeams, setOrgTeams] = useState<TeamNode[]>([]);
+  const [departments, setDepartments] = useState<{id: string, name: string}[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [form, setForm] = useState({
     name: "", email: "", role: "employee",
-    employeeId: "", department: "", designation: "", joiningDate: "",
+    employeeId: "", department: "", designation: "", matrix_role: "", joiningDate: "",
     shift_id: "", team_id: "", monthly_leave_quota: "1",
     employment_type: "full_time", salary_structure: "fixed_monthly", base_salary: "",
     salary_min: "", salary_max: "",
@@ -273,13 +277,21 @@ export default function AdminUsersPage() {
 
   async function loadOrg() {
     const { data: teamsData } = await supabase.from("teams").select("id, name, type, parent_id");
-    if (teamsData) setOrgTeams(teamsData);
+    if (teamsData) {
+      setOrgTeams(teamsData);
+      setDepartments(teamsData.filter(t => t.type === 'department').map(t => ({ id: t.id, name: t.name })));
+    }
     
     const { data: shiftsData } = await supabase.from("shifts").select("id, name, start_time, end_time, department, team_id");
     if (shiftsData) setShifts(shiftsData);
   }
 
-  useEffect(() => { load(); loadOrg(); }, []);
+  useEffect(() => { 
+    if (!authLoading && user) {
+      load(); 
+      loadOrg(); 
+    }
+  }, [authLoading, user]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => { 
@@ -302,7 +314,7 @@ export default function AdminUsersPage() {
     setEditingId(null);
     setForm({
       name: "", email: "", role: "employee", employeeId: "",
-      department: "", designation: "", shift_id: "", team_id: "",
+      department: "", designation: "", matrix_role: "", shift_id: "", team_id: "",
       monthly_leave_quota: "1", employment_type: "full_time",
       salary_structure: "fixed_monthly", base_salary: "",
       salary_min: "", salary_max: "",
@@ -323,6 +335,7 @@ export default function AdminUsersPage() {
       employeeId: user.employeeId,
       department: deptNode ? deptNode.id : user.department,
       designation: user.designation,
+      matrix_role: (user as any).matrix_role || "",
       joiningDate: user.joiningDate,
       shift_id: user.shift_id || "",
       team_id: user.team_id || "",
@@ -379,7 +392,12 @@ export default function AdminUsersPage() {
       setShowForm(false);
       await load();
     } catch (err: any) {
-      showToast(err.response?.data?.error || err.message, "error");
+      const msg = err.response?.data?.error || err.message;
+      if (msg.includes("updated_at") || msg.includes("500")) {
+        showToast("Configuration Error: Database triggers are misconfigured. Please run the SQL patch in your Supabase dashboard.", "error");
+      } else {
+        showToast(msg, "error");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -394,7 +412,20 @@ export default function AdminUsersPage() {
       setDeleteConfirm(null);
       await load();
     } catch (err: any) {
-      showToast(err.response?.data?.error || err.message, "error");
+      const errorMsg = err.response?.data?.error || err.message;
+      
+      // Plain English linkage detection
+      if (errorMsg.includes("attendance_logs")) {
+        showToast("Cannot Delete: Employee has Attendance records. You must clear their logs first.", "error");
+      } else if (errorMsg.includes("project_members")) {
+        showToast("Cannot Delete: Employee is still assigned to a Project. Remove them from the project team first.", "error");
+      } else if (errorMsg.includes("projects_team_lead_id_fkey")) {
+        showToast("Cannot Delete: Employee is a Project Lead. Assign a new Lead to their projects first.", "error");
+      } else if (errorMsg.includes("updated_at") || errorMsg.includes("42703")) {
+        showToast("System Error: Database script mismatch. Please verify the SQL patch was run in Supabase.", "error");
+      } else {
+        showToast("Security Block: " + errorMsg, "error");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -511,8 +542,16 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="px-5 py-3 text-xs text-theme-muted">{u.employeeId}</td>
                       <td className="px-5 py-3">
-                        <p className="text-xs font-semibold text-theme-fg">{u.department || 'General Nodes'}</p>
-                        <div className="flex items-center gap-2 mt-1.5!">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-semibold text-theme-fg">{u.department || 'General Nodes'}</span>
+                          {u.team_id && (
+                            <span className="text-[10px] text-theme-muted font-bold mt-0.5 flex items-center gap-1">
+                               <ChevronRight size={10} className="text-theme-primary/50" />
+                               {orgTeams.find(t => t.id === u.team_id)?.name || 'Unknown Unit'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
                           <Badge variant={ROLE_BADGE[u.role] ?? "default"} className="text-[10px] px-2 py-0.5 transition-all group-hover:bg-theme-primary group-hover:text-white">
                             {ROLE_LABEL[u.role] ?? u.role}
                           </Badge>
@@ -583,7 +622,7 @@ export default function AdminUsersPage() {
                       onChange={(v) => {
                          setForm({...form, department: v, team_id: "", shift_id: ""});
                       }} 
-                      options={orgTeams.filter(t => t.type === 'department').map(t => ({ label: t.name, value: t.id }))}
+                      options={departments.map(d => ({ label: d.name, value: d.id }))}
                     />
                   </div>
 
@@ -607,7 +646,14 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Matrix Role</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Matrix Role (Hierarchy Position)</label>
+                    <input value={form.matrix_role} onChange={(e) => setForm({ ...form, matrix_role: e.target.value })}
+                      placeholder="e.g. Lead Frontend Architect"
+                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Access Level</label>
                     <CustomSelect 
                       icon={<ShieldCheck size={14} className="text-theme-primary" />}
                       placeholder="Select Role"
@@ -694,14 +740,14 @@ export default function AdminUsersPage() {
                     <>
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Minimum Stipend (₹)</label>
-                        <input type="number" required value={form.salary_min} onChange={(e) => setForm({ ...form, salary_min: e.target.value })}
+                        <input type="number" required value={form.salary_min || ""} onChange={(e) => setForm({ ...form, salary_min: e.target.value })}
                           placeholder="e.g., 10000"
                           className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
                         <p className="text-[10px] text-theme-muted">Base amount when KPI linkage is disabled</p>
                       </div>
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Maximum Stipend (₹)</label>
-                        <input type="number" required value={form.salary_max} onChange={(e) => setForm({ ...form, salary_max: e.target.value })}
+                        <input type="number" required value={form.salary_max || ""} onChange={(e) => setForm({ ...form, salary_max: e.target.value })}
                           placeholder="e.g., 15000"
                           className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
                         <p className="text-[10px] text-theme-muted">Maximum range (performance-based when linked to KPI)</p>
@@ -765,20 +811,20 @@ export default function AdminUsersPage() {
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-blue-600">KPI Weight (%)</label>
-                        <input type="number" min="0" max="100" step="1" defaultValue="40"
-                          onChange={(e) => setForm({ ...form, kpi_weight: parseFloat(e.target.value) })}
+                        <input type="number" min="0" max="100" step="1" value={form.kpi_weight ?? 40}
+                          onChange={(e) => setForm({ ...form, kpi_weight: parseFloat(e.target.value) || 0 })}
                           className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
                       </div>
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600">KRA Weight (%)</label>
-                        <input type="number" min="0" max="100" step="1" defaultValue="40"
-                          onChange={(e) => setForm({ ...form, kra_weight: parseFloat(e.target.value) })}
+                        <input type="number" min="0" max="100" step="1" value={form.kra_weight ?? 40}
+                          onChange={(e) => setForm({ ...form, kra_weight: parseFloat(e.target.value) || 0 })}
                           className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
                       </div>
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-amber-600">Behavioral Weight (%)</label>
-                        <input type="number" min="0" max="100" step="1" defaultValue="20"
-                          onChange={(e) => setForm({ ...form, behavioral_weight: parseFloat(e.target.value) })}
+                        <input type="number" min="0" max="100" step="1" value={form.behavioral_weight ?? 20}
+                          onChange={(e) => setForm({ ...form, behavioral_weight: parseFloat(e.target.value) || 0 })}
                           className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
                       </div>
                     </div>

@@ -28,6 +28,7 @@ const superAdminNav: NavSection[] = [
     { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
     { href: "/admin/teams", label: "Teams", icon: Building2 },
     { href: "/admin/org-chart", label: "Org Chart", icon: Network },
+    { href: "/admin/career", label: "Career Path", icon: GitBranch },
   ]},
   { title: "Operations", items: [
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
@@ -37,6 +38,8 @@ const superAdminNav: NavSection[] = [
     { href: "/admin/claims", label: "Claims", icon: FileText },
     { href: "/admin/reimbursements", label: "Reimbursements", icon: Receipt },
     { href: "/admin/priority", label: "Priority Payout", icon: Zap },
+    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
+    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
   ]},
   { title: "Finance", items: [
     { href: "/admin/invoicing", label: "Invoicing", icon: CreditCard },
@@ -92,6 +95,7 @@ const hrNav: NavSection[] = [
     { href: "/admin/users", label: "Employees", icon: Users },
     { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
     { href: "/admin/teams", label: "Teams", icon: Building2 },
+    { href: "/admin/career", label: "Career Path", icon: GitBranch },
   ]},
   { title: "People", items: [
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
@@ -100,6 +104,8 @@ const hrNav: NavSection[] = [
     { href: "/admin/claims", label: "Claims", icon: FileText },
     { href: "/admin/reimbursements", label: "Reimbursements", icon: Receipt },
     { href: "/admin/priority", label: "Priority Payout", icon: Zap },
+    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
+    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
   ]},
   { title: "Comms", items: [
     { href: "/admin/messaging", label: "Messages", icon: MessageSquare },
@@ -139,6 +145,26 @@ const salesNav: NavSection[] = [
   ]},
 ];
 
+const managerNav: NavSection[] = [
+  { title: "Department", items: [
+    { href: "/manager/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/manager/teams", label: "Teams", icon: Building2 },
+    { href: "/manager/org-chart", label: "Org Chart", icon: Network },
+    { href: "/admin/career", label: "Career Path", icon: GitBranch },
+    { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
+  ]},
+  { title: "My Workspace", items: [
+    { href: "/dashboard/profile", label: "My Profile", icon: User },
+    { href: "/dashboard/attendance", label: "Attendance", icon: CalendarDays },
+    { href: "/dashboard/incentives", label: "Incentives", icon: Wallet },
+    { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
+  ]},
+  { title: "Comms", items: [
+    { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
+    { href: "/dashboard/meetings", label: "Meetings", icon: CalendarClock },
+  ]},
+];
+
 const employeeNav: NavSection[] = [
   { title: "My Workspace", items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -162,6 +188,7 @@ function getNav(role?: string): NavSection[] {
     case "accounts": return accountsNav;
     case "hr": return hrNav;
     case "lead": return leadNav;
+    case "manager": return managerNav;
     case "sales": return salesNav;
     default: return employeeNav;
   }
@@ -172,6 +199,7 @@ const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
   accounts: { label: "Accounts", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
   hr: { label: "HR", cls: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
   lead: { label: "Team Lead", cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  manager: { label: "Department Manager", cls: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
   employee: { label: "Employee", cls: "bg-theme-raised text-theme-muted" },
   sales: { label: "Sales", cls: "bg-rose-500/10 text-rose-500" },
 };
