@@ -31,7 +31,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const supabase = getSupabaseAdmin();
     const { id } = await params;
     const body = await req.json();
-    const { name, description, budget, client_id, phase, issued_date, due_date, team_ids, is_active, budget_id } = body;
+    const { name, description, budget, client_id, phase, issued_date, due_date, team_ids, is_active, budget_id, department_id, progress } = body;
 
     const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (name        !== undefined) payload.name        = name;
@@ -43,6 +43,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (due_date    !== undefined) payload.due_date    = due_date;
     if (is_active   !== undefined) payload.is_active   = is_active;
     if (budget_id   !== undefined) payload.budget_id   = budget_id || null;
+    if (department_id !== undefined) payload.department_id = department_id || null;
+
+    // Progress can only be set once; once locked, cannot be changed
+    if (progress !== undefined) {
+      const { data: existing } = await supabase.from("projects").select("progress_locked").eq("id", id).single();
+      if (!existing?.progress_locked) {
+        payload.progress = Number(progress);
+        payload.progress_locked = true; // lock after first save
+      }
+    }
 
     const { error: pError } = await supabase.from("projects").update(payload).eq("id", id);
     if (pError) throw pError;

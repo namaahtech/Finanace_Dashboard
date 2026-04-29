@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type BadgeVariant = "default" | "success" | "warning" | "danger" | "info" | "purple";
+type BadgeVariant = "default" | "success" | "warning" | "danger" | "info" | "purple" | "secondary";
 
 interface BadgeProps {
  variant?: BadgeVariant;
@@ -16,6 +16,7 @@ const variants: Record<BadgeVariant, string> = {
  danger: "bg-theme-danger-bg text-theme-danger-fg",
  info: "bg-theme-info-bg text-theme-info-fg",
  purple: "bg-theme-purple-bg text-theme-purple-fg",
+ secondary: "bg-theme-raised/50 text-theme-muted border border-theme-border",
 };
 
 export function Badge({ variant = "default", children, className, style }: BadgeProps) {

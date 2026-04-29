@@ -28,7 +28,12 @@ const superAdminNav: NavSection[] = [
     { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
     { href: "/admin/teams", label: "Teams", icon: Building2 },
     { href: "/admin/org-chart", label: "Org Chart", icon: Network },
-    { href: "/admin/career", label: "Career Path", icon: GitBranch },
+  ]},
+  { title: "HR", items: [
+    { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
+    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
+    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
+    { href: "/admin/interviews", label: "Interviews", icon: MessageSquare },
   ]},
   { title: "Operations", items: [
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
@@ -38,8 +43,6 @@ const superAdminNav: NavSection[] = [
     { href: "/admin/claims", label: "Claims", icon: FileText },
     { href: "/admin/reimbursements", label: "Reimbursements", icon: Receipt },
     { href: "/admin/priority", label: "Priority Payout", icon: Zap },
-    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
-    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
   ]},
   { title: "Finance", items: [
     { href: "/admin/invoicing", label: "Invoicing", icon: CreditCard },
@@ -95,7 +98,12 @@ const hrNav: NavSection[] = [
     { href: "/admin/users", label: "Employees", icon: Users },
     { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
     { href: "/admin/teams", label: "Teams", icon: Building2 },
-    { href: "/admin/career", label: "Career Path", icon: GitBranch },
+  ]},
+  { title: "HR", items: [
+    { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
+    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
+    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
+    { href: "/admin/interviews", label: "Interviews", icon: MessageSquare },
   ]},
   { title: "People", items: [
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
@@ -104,8 +112,6 @@ const hrNav: NavSection[] = [
     { href: "/admin/claims", label: "Claims", icon: FileText },
     { href: "/admin/reimbursements", label: "Reimbursements", icon: Receipt },
     { href: "/admin/priority", label: "Priority Payout", icon: Zap },
-    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
-    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
   ]},
   { title: "Comms", items: [
     { href: "/admin/messaging", label: "Messages", icon: MessageSquare },
@@ -118,7 +124,10 @@ const hrNav: NavSection[] = [
 
 const leadNav: NavSection[] = [
   { title: "Team", items: [
+    { href: "/admin/projects", label: "Projects", icon: Folder },
     { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
+    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
+    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
     { href: "/admin/budgets", label: "Team Budget", icon: PiggyBank },
     { href: "/admin/subscriptions", label: "Subscriptions", icon: Tag },
@@ -148,9 +157,12 @@ const salesNav: NavSection[] = [
 const managerNav: NavSection[] = [
   { title: "Department", items: [
     { href: "/manager/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/admin/projects", label: "Projects", icon: Folder },
     { href: "/manager/teams", label: "Teams", icon: Building2 },
     { href: "/manager/org-chart", label: "Org Chart", icon: Network },
-    { href: "/admin/career", label: "Career Path", icon: GitBranch },
+    { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
+    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
+    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
     { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
   ]},
   { title: "My Workspace", items: [

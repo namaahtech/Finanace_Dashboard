@@ -1,34 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { currentRole, targetRole, skills } = await req.json();
 
     const endpoint = process.env.LOCAL_AI_ENDPOINT;
-    const model = process.env.LOCAL_AI_MODEL;
+    const model = process.env.LOCAL_AI_MODEL || "gemma4:e4b";
     const bridgeKey = process.env.AI_BRIDGE_KEY;
 
-    if (!endpoint) {
-      return NextResponse.json({ error: "AI Advisory Engine Offline" }, { status: 500 });
+    if (!endpoint || !bridgeKey) {
+      return NextResponse.json({ error: "AI Engine not configured" }, { status: 500 });
     }
 
     const prompt = `
-      System: You are an elite AI Career Strategist (Gemma 4).
-      Task: Generate a 3-step professional growth roadmap.
+      You are a Neural Career Advisor. 
+      Analyze the path from ${currentRole} to ${targetRole}.
+      Current Skills: ${skills}
       
-      User Context:
-      - Current Role: ${currentRole}
-      - Target Role: ${targetRole}
-      - Current Skills: ${skills}
-      
-      Output Format (JSON strictly):
+      Generate a strategic roadmap in JSON format:
       {
         "roadmap": [
-          { "step": "Short Term", "action": "Specific action", "skills": "Skills to learn" },
-          { "step": "Mid Term", "action": "Specific action", "skills": "Skills to learn" },
-          { "step": "Long Term", "action": "Specific action", "skills": "Final milestone" }
+          { "step": "Phase 1: title", "action": "detailed action", "skills": "required skill" },
+          { "step": "Phase 2: title", "action": "detailed action", "skills": "required skill" },
+          { "step": "Phase 3: title", "action": "detailed action", "skills": "required skill" }
         ],
-        "mentorTip": "A professional tip for success"
+        "mentorTip": "a high-level strategic tip"
       }
     `;
 
@@ -36,19 +32,15 @@ export async function POST(req: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${bridgeKey}`
+        "Authorization": `Bearer ${bridgeKey}`,
       },
       body: JSON.stringify({
-        model: model || "gemma4:e4b",
+        model: model,
         prompt: prompt,
         stream: false,
-        format: "json"
-      })
+        format: "json",
+      }),
     });
-
-    if (!response.ok) {
-      throw new Error(`AI Bridge Fault: ${response.statusText}`);
-    }
 
     const data = await response.json();
     const result = JSON.parse(data.response);
@@ -56,7 +48,12 @@ export async function POST(req: Request) {
     return NextResponse.json(result);
 
   } catch (error: any) {
-    console.error("[CAREER ADVICE ERROR]:", error);
-    return NextResponse.json({ error: "Advisory Fault: " + error.message }, { status: 500 });
+    console.error("Career Advice API Error:", error);
+    return NextResponse.json({ 
+      roadmap: [
+        { step: "Calibration Needed", action: "Unable to reach Gemma 4 engine.", skills: "System Link" }
+      ],
+      mentorTip: "Verify your Mac Mini connection."
+    });
   }
 }

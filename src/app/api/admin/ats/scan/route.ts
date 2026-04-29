@@ -1,24 +1,24 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { resumeText, jobDescription } = await req.json();
 
     if (!resumeText || !jobDescription) {
-      return NextResponse.json({ error: "Missing highly critical parameters (Resume, JD)" }, { status: 400 });
+      return NextResponse.json({ error: "Missing resume or job description" }, { status: 400 });
     }
 
     const endpoint = process.env.LOCAL_AI_ENDPOINT;
-    const model = process.env.LOCAL_AI_MODEL;
+    const model = process.env.LOCAL_AI_MODEL || "gemma4:e4b";
     const bridgeKey = process.env.AI_BRIDGE_KEY;
 
-    if (!endpoint) {
-      return NextResponse.json({ error: "AI Engine Offline (No Endpoint)" }, { status: 500 });
+    if (!endpoint || !bridgeKey) {
+      console.error("AI Configuration missing");
+      return NextResponse.json({ error: "AI Engine not configured" }, { status: 500 });
     }
 
     const prompt = `
-      System: You are an elite Recruitment Intelligence Engine (Gemma 4).
-      Task: Perform a deep cognitive audit and ATS scan of the following resume against the job description.
+      Perform a Cognitive ATS Audit.
       
       Resume:
       ${resumeText}
@@ -26,13 +26,13 @@ export async function POST(req: Request) {
       Job Description:
       ${jobDescription}
       
-      Output Format (JSON strictly):
+      Analyze the alignment between the resume and the job description.
+      Return a JSON object with the following structure:
       {
-        "score": (0-100 integer),
-        "match": ["Keyword1", "Keyword2", ...],
-        "missing": ["Gap1", "Gap2", ...],
-        "tips": ["Advice1", "Advice2", ...],
-        "decision": "Proceed" | "Hold" | "Reject"
+        "score": number (0-100),
+        "match": string[] (list of matching keywords/skills),
+        "missing": string[] (list of missing critical keywords/skills),
+        "tips": string[] (at least 3 actionable tips to improve the resume)
       }
     `;
 
@@ -40,41 +40,34 @@ export async function POST(req: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${bridgeKey}`
+        "Authorization": `Bearer ${bridgeKey}`,
       },
       body: JSON.stringify({
-        model: model || "gemma4:e4b",
+        model: model,
         prompt: prompt,
         stream: false,
-        format: "json"
-      })
+        format: "json",
+      }),
     });
 
     if (!response.ok) {
-      throw new Error(`AI Bridge Fault: ${response.statusText}`);
+      throw new Error(`Ollama API error: ${response.statusText}`);
     }
 
     const data = await response.json();
-    
-    // Ollama returns { response: "stringified json" }
-    let result;
-    try {
-      result = JSON.parse(data.response);
-    } catch (e) {
-      // Fallback if AI didn't return valid JSON
-      result = {
-        score: 50,
-        match: ["Parsing Failed"],
-        missing: ["AI Response Error"],
-        tips: ["Retry with cleaner text"],
-        decision: "Hold"
-      };
-    }
+    const result = JSON.parse(data.response);
 
     return NextResponse.json(result);
 
   } catch (error: any) {
-    console.error("[ATS SCAN ERROR]:", error);
-    return NextResponse.json({ error: "Cognitive Audit Fault: " + error.message }, { status: 500 });
+    console.error("ATS Scan API Error:", error);
+    return NextResponse.json({ 
+      error: "AI Scan Failed", 
+      details: error.message,
+      score: 0,
+      match: [],
+      missing: ["Connection failed"],
+      tips: ["Check if Mac Mini is online and Ollama is running"]
+    }, { status: 500 });
   }
 }

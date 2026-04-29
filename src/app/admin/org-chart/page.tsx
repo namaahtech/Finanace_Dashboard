@@ -23,7 +23,9 @@ interface OrgNode {
   id: string;
   name: string;
   role: string;
-  type: "root" | "dept" | "team";
+  type: "root" | "dept" | "team" | "employee";
+  employee_id?: string;
+  matrix_role?: string;
   children?: OrgNode[];
 }
 
@@ -48,6 +50,7 @@ function NodeCard({
   const typeLabel =
     node.type === "root" ? "HQ Root" :
     node.type === "dept" ? "Department" :
+    node.type === "employee" ? "Employee" :
     hasChildren ? "Lead Team" : "Sub-Team";
 
   return (
@@ -72,6 +75,7 @@ function NodeCard({
           {node.type === "root" && <Crown size={13} />}
           {node.type === "dept" && <Building2 size={13} />}
           {node.type === "team" && <Users size={13} />}
+          {node.type === "employee" && <ShieldCheck size={13} />}
         </div>
         <div className="flex-1 min-w-0">
           <p className={cn(
@@ -98,17 +102,22 @@ function NodeCard({
         )}
       </div>
 
-      {/* Role badge */}
+      {/* Role & Info badge */}
       <div className={cn(
-        "rounded-lg px-2.5 py-1 text-center",
+        "rounded-lg px-2.5 py-1 text-center space-y-0.5",
         isRoot ? "bg-white/10" : "bg-theme-raised"
       )}>
         <p className={cn(
-          "text-[10px] font-semibold truncate",
+          "text-[10px] font-black truncate uppercase tracking-widest",
           isRoot ? "text-white/60" : "text-theme-muted"
         )}>
-          {node.role}
+          {node.matrix_role || node.role}
         </p>
+        {node.employee_id && (
+          <p className="text-[9px] font-bold text-theme-primary/60 tracking-widest uppercase">
+            ID: {node.employee_id}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -167,36 +176,49 @@ export default function OrgChartPage() {
   async function hydrateChart() {
     try {
       setLoading(true);
-      const [{ data: config }, { data: teamsData }] = await Promise.all([
+      const [{ data: config }, { data: teamsData }, { data: employeesData }] = await Promise.all([
         supabase.from("system_config").select("*").limit(1).single(),
         supabase.from("teams").select("*"),
+        supabase.from("employees").select("id, name, employee_id, designation, matrix_role, team_id, department"),
       ]);
 
-      const seen = new Set<string>();
-      const teams = (teamsData || []).filter((t: { id: string }) => {
-        if (seen.has(t.id)) return false;
-        seen.add(t.id);
-        return true;
-      });
+      const teams = teamsData || [];
+      const employees = employeesData || [];
 
-      const buildTree = (parentId: string | null): OrgNode[] =>
-        (teams as Array<{ id: string; name: string; head_designation?: string; type: string; parent_id: string | null }>)
-          .filter((t) => t.parent_id === parentId)
-          .map((t) => ({
-            id: t.id,
-            name: t.name,
-            role: t.head_designation || (t.type === "department" ? "Dept Head" : "Team Lead"),
-            type: t.type === "department" ? ("dept" as const) : ("team" as const),
-            children: buildTree(t.id),
-          }));
+      const buildTree = (parentId: string | null): OrgNode[] => {
+        const childrenTeams = teams
+          .filter((t: any) => t.parent_id === parentId)
+          .map((t: any) => {
+             const teamEmployees = employees
+               .filter((e: any) => e.team_id === t.id)
+               .map((e: any) => ({
+                 id: e.id,
+                 name: e.name,
+                 employee_id: e.employee_id,
+                 role: e.designation,
+                 matrix_role: e.matrix_role,
+                 type: "employee" as const,
+               }));
+
+             return {
+               id: t.id,
+               name: t.name,
+               role: t.head_designation || (t.type === "department" ? "Dept Head" : "Team Lead"),
+               type: t.type === "department" ? ("dept" as const) : ("team" as const),
+               children: [...teamEmployees, ...buildTree(t.id)],
+             };
+          });
+        
+        return childrenTeams;
+      };
+
+      // Also handle employees directly under the root/top-level if needed
+      // But standard structure is Root -> Dept -> Team -> Employee
 
       const root: OrgNode = {
         id: "root_node",
-        name: (config as { company_name?: string } | null)?.company_name || "Company",
-        role:
-          [(config as { founder_name?: string; founder_designation?: string } | null)?.founder_name,
-           (config as { founder_name?: string; founder_designation?: string } | null)?.founder_designation]
-            .filter(Boolean).join(" · ") || "CEO",
+        name: config?.company_name || "Namaah Nexus HQ",
+        role: [config?.founder_name, config?.founder_designation].filter(Boolean).join(" · ") || "CEO",
         type: "root",
         children: buildTree(null),
       };

@@ -33,21 +33,20 @@ interface TeamMember {
   clock_in?: string;
 }
 
-interface Project {
-  id: string;
-  name: string;
-  progress: number;
-  pending_tasks: number;
-}
-
 export default function LeadDashboard() {
   const { user } = useAuth();
   const { request } = useApi();
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"attendance" | "projects">("attendance");
+
+  const openKanban = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    setShowProjectModal(true);
+  };
 
   const loadData = useCallback(async () => {
     if (!user?.id) return;
@@ -96,8 +95,10 @@ export default function LeadDashboard() {
         return {
           id: proj.id,
           name: proj.name,
+          description: proj.description,
+          phase: proj.phase,
           progress: proj.progress || 0,
-          pending_tasks: pTasks.filter(t => t.status === 'REVIEW').length
+          pending_tasks: pTasks.filter(t => t.status === 'SUBMITTED').length
         };
       }) || [];
 
@@ -114,6 +115,7 @@ export default function LeadDashboard() {
     const channel = supabase.channel('lead_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs' }, loadData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_tasks' }, loadData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, loadData)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [loadData]);
@@ -147,66 +149,119 @@ export default function LeadDashboard() {
           ))}
         </div>
 
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-theme-raised/50 border border-theme-border w-fit">
+          {[
+            { id: 'attendance', label: 'Team Attendance', icon: UserCheck },
+            { id: 'projects', label: 'Active Projects', icon: Briefcase },
+          ].map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id as any)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all",
+                activeTab === t.id ? "bg-theme-surface text-theme-primary shadow-sm border border-theme-border" : "text-theme-muted hover:text-theme-fg"
+              )}
+            >
+              <t.icon size={14} />
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Team Roster */}
-          <div className="lg:col-span-2 page-card p-0 overflow-hidden">
-            <div className="px-6 py-4 border-b border-theme-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users size={16} className="text-theme-muted" />
-                <h3 className="text-sm font-black text-theme-fg uppercase tracking-tight">Team Attendance</h3>
+          {/* Team Roster / Projects Grid */}
+          <div className="lg:col-span-2 space-y-6">
+            {activeTab === 'attendance' ? (
+              <div className="page-card p-0 overflow-hidden">
+                <div className="px-6 py-4 border-b border-theme-border flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users size={16} className="text-theme-muted" />
+                    <h3 className="text-sm font-black text-theme-fg uppercase tracking-tight">Team Attendance</h3>
+                  </div>
+                  <Badge variant="info" className="text-[10px]">Today, {dayjs().format('MMM DD')}</Badge>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-theme-raised/50 text-[10px] font-black uppercase text-theme-muted tracking-widest">
+                      <tr>
+                        <th className="px-6 py-3">Member</th>
+                        <th className="px-6 py-3">Status</th>
+                        <th className="px-6 py-3">Clock In</th>
+                        <th className="px-6 py-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-theme-border">
+                      {members.map((member) => (
+                        <tr key={member.id} className="hover:bg-theme-raised/30 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-8 w-8 rounded-full bg-theme-raised flex items-center justify-center text-[10px] font-black">
+                                {member.name.split(' ').map(n => n[0]).join('')}
+                              </div>
+                              <div>
+                                <p className="text-xs font-black text-theme-fg">{member.name}</p>
+                                <p className="text-[10px] text-theme-muted">{member.designation}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <Badge 
+                              variant={
+                                member.attendance_status === 'present' ? 'success' : 
+                                member.attendance_status === 'absent' ? 'danger' : 
+                                'warning'
+                              }
+                              className="capitalize text-[10px]"
+                            >
+                              {member.attendance_status}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-medium text-theme-muted">
+                            {member.clock_in ? dayjs(`2000-01-01 ${member.clock_in}`).format('hh:mm A') : '--:--'}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <Button variant="ghost" size="sm" className="text-[10px] font-black uppercase">
+                              View
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <Badge variant="info" className="text-[10px]">Today, {dayjs().format('MMM DD')}</Badge>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-theme-raised/50 text-[10px] font-black uppercase text-theme-muted tracking-widest">
-                  <tr>
-                    <th className="px-6 py-3">Member</th>
-                    <th className="px-6 py-3">Status</th>
-                    <th className="px-6 py-3">Clock In</th>
-                    <th className="px-6 py-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-theme-border">
-                  {members.map((member) => (
-                    <tr key={member.id} className="hover:bg-theme-raised/30 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-theme-raised flex items-center justify-center text-[10px] font-black">
-                            {member.name.split(' ').map(n => n[0]).join('')}
-                          </div>
-                          <div>
-                            <p className="text-xs font-black text-theme-fg">{member.name}</p>
-                            <p className="text-[10px] text-theme-muted">{member.designation}</p>
-                          </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {projects.map((proj) => (
+                  <div 
+                    key={proj.id} 
+                    onClick={() => openKanban(proj.id)}
+                    className="page-card group hover:border-theme-primary/50 cursor-pointer transition-all border border-theme-border"
+                  >
+                     <div className="flex items-center justify-between mb-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary/10 text-theme-primary">
+                           <Briefcase size={20} />
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge 
-                          variant={
-                            member.attendance_status === 'present' ? 'success' : 
-                            member.attendance_status === 'absent' ? 'danger' : 
-                            'warning'
-                          }
-                          className="capitalize text-[10px]"
-                        >
-                          {member.attendance_status}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 text-xs font-medium text-theme-muted">
-                        {member.clock_in ? dayjs(`2000-01-01 ${member.clock_in}`).format('hh:mm A') : '--:--'}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Button variant="ghost" size="sm" className="text-[10px] font-black uppercase">
-                          View
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        <Badge variant="info" className="text-[9px] font-black">{proj.phase}</Badge>
+                     </div>
+                     <h4 className="text-sm font-black text-theme-fg group-hover:text-theme-primary transition-colors mb-1">{proj.name}</h4>
+                     <p className="text-[10px] text-theme-muted mb-4 line-clamp-2 h-8">{proj.description}</p>
+                     
+                     <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[9px] font-black text-theme-muted uppercase tracking-widest">
+                           <span>Team Progress</span>
+                           <span className="text-theme-fg">{proj.progress || 0}%</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-theme-raised overflow-hidden">
+                           <div className="h-full bg-theme-primary transition-all duration-500" style={{ width: `${proj.progress || 0}%` }} />
+                        </div>
+                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Verification Queue */}
@@ -264,7 +319,7 @@ export default function LeadDashboard() {
           setShowProjectModal(false);
           setSelectedProjectId(null);
         }} 
-        projects={[]} // Passed from higher level or fetched in modal
+        projects={projects} 
         initialProjectId={selectedProjectId || undefined}
       />
     </DashboardShell>

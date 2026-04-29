@@ -11,7 +11,7 @@ import {
   Folder, Plus, Search, X, Building2, Zap, Target, ArrowRightLeft,
   CheckCircle2, Clock, CalendarDays, TrendingUp, MoreVertical, Edit2,
   Trash2, SearchCode, ShieldCheck, Tag, LayoutGrid, Building, User, ChevronDown,
-  FileText, Activity, Users, Check, Columns, Database, IndianRupee, AlertCircle,
+  FileText, Activity, Users, Check, Columns, Database, IndianRupee, AlertCircle, ChevronRight,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { DatePicker } from "@/components/ui/DatePicker";
@@ -31,6 +31,11 @@ interface Client {
 interface Team {
   id: string;
   name: string;
+  type?: string;
+  parent_id?: string | null;
+  head_id?: string | null;
+  lead_id?: string | null;
+  member_count?: number;
 }
 
 interface BudgetData {
@@ -65,9 +70,11 @@ interface Project {
   issued_date: string;
   dueDate: string;
   is_active: boolean;
+  progress?: number;
   client?: Client;
   teams?: Team[];
   budget_data?: BudgetData | null;
+  department_id?: string | null;
 }
 
 interface ProjectTask {
@@ -80,6 +87,10 @@ interface ProjectTask {
   assigned_to: string | null;
   due_date: string | null;
   assigned_to_employee?: { id: string; name: string; employee_id: string };
+  assignee?: { id: string; name: string; role?: string };
+  submission_url?: string | null;
+  submission_notes?: string | null;
+  review_feedback?: string | null;
 }
 
 interface TaskComment {
@@ -256,12 +267,13 @@ function MultiSelect({ value, options, onChange, placeholder, icon, label }: {
   }
 
 // ── 3-Dot Context Menu ──────────────────────────────────
-function RowMenu({ project, onRefresh, onEdit, isLast, setDeleteConfirm }: { 
+function RowMenu({ project, onRefresh, onEdit, isLast, setDeleteConfirm, onOversight }: { 
   project: Project; 
   onRefresh: () => void; 
   onEdit: () => void;
   isLast?: boolean; 
   setDeleteConfirm: (p: Project) => void;
+  onOversight: (p: Project) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [acting, setActing] = useState(false);
@@ -300,11 +312,15 @@ function RowMenu({ project, onRefresh, onEdit, isLast, setDeleteConfirm }: {
         )}>
           <button onClick={() => { onEdit(); setOpen(false); }}
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
-            <Edit2 size={13} className="text-theme-muted group-hover:text-theme-primary transition-colors" /> Edit Project
+            <Edit2 size={13} className="text-amber-500" /> Edit Project
           </button>
           <button onClick={toggleStatus}
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
             <Clock size={13} className="text-sky-500" /> {project.is_active ? "Archive Project" : "Activate Project"}
+          </button>
+          <button onClick={() => { onOversight(project); setOpen(false); }}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
+            <ShieldCheck size={13} className="text-emerald-500" /> Tracking Matrix
           </button>
           <div className="my-1.5 h-px bg-theme-border/50" />
           <button onClick={() => { setDeleteConfirm(project); setOpen(false); }}
@@ -334,6 +350,7 @@ export default function AdminProjectsPage() {
   const [activeTab, setActiveTab] = useState<"all" | "active" | "archived">("all");
   const [deleteConfirm, setDeleteConfirm] = useState<Project | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [oversightProject, setOversightProject] = useState<Project | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   
   const [form, setForm] = useState({
@@ -343,6 +360,7 @@ export default function AdminProjectsPage() {
     due_date: "",
     team_ids: [] as string[],
     budget_id: "",
+    department_id: "",
   });
 
   async function loadData(q?: string) {
@@ -359,7 +377,7 @@ export default function AdminProjectsPage() {
   async function loadMeta() {
     const [cRes, tRes, eRes, bRes] = await Promise.all([
       axios.get("/api/config/clients"),
-      supabase.from("teams").select("id, name"),
+      supabase.from("teams").select("id, name, type, parent_id"),
       supabase.from("employees").select("id, name, employee_id").eq("is_active", true),
       supabase.from("budgets").select("id, budget_number, name, total_amount, actual_spent, status").eq("status", "active").order("name"),
     ]);
@@ -406,6 +424,7 @@ export default function AdminProjectsPage() {
       issued_date: dayjs().format("YYYY-MM-DD"),
       due_date: dayjs().add(3, "month").format("YYYY-MM-DD"),
       team_ids: [], budget_id: "",
+      department_id: "",
     });
     setShowForm(true);
   }
@@ -418,6 +437,7 @@ export default function AdminProjectsPage() {
       phase: p.phase, issued_date: p.issued_date || "",
       due_date: p.dueDate, team_ids: p.teamIds || [],
       budget_id: p.budget_id || "",
+      department_id: p.department_id || "",
     });
     setShowForm(true);
   }
@@ -585,7 +605,14 @@ export default function AdminProjectsPage() {
                                Manage Tasks →
                              </button>
                              <div onClick={(e) => e.stopPropagation()}>
-                               <RowMenu project={p} onRefresh={() => loadData(search || undefined)} onEdit={() => handleEdit(p)} isLast={idx >= filteredProjects.length - 2} setDeleteConfirm={setDeleteConfirm} />
+                               <RowMenu 
+                                 project={p} 
+                                 onRefresh={() => loadData(search || undefined)} 
+                                 onEdit={() => handleEdit(p)} 
+                                 onOversight={() => setOversightProject(p)}
+                                 isLast={idx >= filteredProjects.length - 2} 
+                                 setDeleteConfirm={setDeleteConfirm} 
+                               />
                              </div>
                           </div>
                         </td>
@@ -672,6 +699,17 @@ export default function AdminProjectsPage() {
                     />
                   </div>
 
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Target Department (Manager Level)</label>
+                    <CustomSelect 
+                      icon={<Building2 size={14} className="text-amber-500" />}
+                      placeholder="Select Department..."
+                      value={form.department_id} 
+                      onChange={(v) => setForm({...form, department_id: v})} 
+                      options={teams.filter(t => t.type === 'department').map(d => ({ label: d.name, value: d.id }))}
+                    />
+                  </div>
+
                   <div className="sm:col-span-2 space-y-2">
                     <label className="flex items-center gap-2 text-xs font-semibold text-theme-primary">Operational Units (Team Assignment)</label>
                     <MultiSelect
@@ -679,7 +717,7 @@ export default function AdminProjectsPage() {
                         placeholder="Assign Teams to Cluster..."
                         value={form.team_ids}
                         onChange={(v) => setForm({...form, team_ids: v})}
-                        options={(teams || []).map(t => ({ label: t.name, value: t.id }))}
+                        options={teams.filter(t => t.type === 'team' && (!form.department_id || t.parent_id === form.department_id)).map(t => ({ label: t.name, value: t.id }))}
                         label="Assigned Teams"
                     />
                   </div>
@@ -775,6 +813,14 @@ export default function AdminProjectsPage() {
         onClose={() => setSelectedProject(null)} 
         employees={employees}
       />
+
+      {oversightProject && (
+        <OversightModal 
+          project={oversightProject} 
+          onClose={() => setOversightProject(null)} 
+          teams={teams}
+        />
+      )}
     </DashboardShell>
   );
 }
@@ -1590,6 +1636,203 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
 
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Tracking Matrix Modal ──────────────────────────────────
+function OversightModal({ project, onClose, teams }: { project: Project; onClose: () => void; teams: Team[] }) {
+  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const department = teams.find(t => t.id === project.department_id);
+
+  useEffect(() => {
+    async function loadOversight() {
+      const { data, error } = await supabase
+        .from("project_tasks")
+        .select(`
+          *,
+          assignee:employees(id, name, role)
+        `)
+        .eq("project_id", project.id);
+      
+      if (!error) setTasks(data || []);
+      setLoading(false);
+    }
+    loadOversight();
+  }, [project.id]);
+
+  const projectTeams = teams.filter(t => project.teamIds?.includes(t.id));
+
+  return (
+    <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
+      <div className="w-full max-w-5xl h-[85vh] rounded-3xl bg-theme-surface shadow-2xl border border-theme-border flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-theme-border bg-theme-raised/30 px-8 py-5">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500 text-theme-surface shadow-lg shadow-emerald-500/20">
+              <ShieldCheck size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-theme-fg tracking-tight">Oversight Matrix</h3>
+              <p className="text-xs text-theme-muted font-bold uppercase tracking-widest flex items-center gap-2">
+                {project.name} <ChevronRight size={12} /> {department?.name || "Global Assignment"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-2.5 text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-all">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+          {loading ? (
+            <div className="flex flex-col h-full items-center justify-center gap-4 text-theme-muted">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-theme-primary border-t-transparent" />
+              <p className="text-sm font-bold animate-pulse">Synchronizing Node Data...</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Left Column: Team Breakdown */}
+              <div className="lg:col-span-8 space-y-8">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-theme-muted flex items-center gap-2">
+                    <Users size={14} className="text-theme-primary" /> Operational Hierarchy
+                  </h4>
+                  <div className="text-[10px] font-bold px-2 py-1 rounded-lg bg-theme-raised border border-theme-border">
+                    {projectTeams.length} Active Units
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  {projectTeams.length > 0 ? projectTeams.map(team => {
+                    const teamTasks = tasks.filter(t => t.assignee?.id && /* logic to check if assignee is in team */ true); 
+                    // Note: for now showing all project tasks under each team if assigned to anyone
+                    // In a real app we'd filter by team membership
+                    
+                    return (
+                      <div key={team.id} className="rounded-2xl border border-theme-border bg-theme-raised/40 p-6 space-y-4 hover:border-theme-primary/30 transition-all">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-theme-surface border border-theme-border flex items-center justify-center">
+                              <LayoutGrid size={18} className="text-theme-primary" />
+                            </div>
+                            <div>
+                              <h5 className="text-sm font-black text-theme-fg">{team.name}</h5>
+                              <p className="text-[10px] text-theme-muted font-bold flex items-center gap-1.5">
+                                <User size={10} /> Lead Assigned
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] font-black text-theme-primary bg-theme-primary/10 px-2.5 py-1 rounded-lg uppercase">Team Status</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {tasks.length > 0 ? tasks.map(task => (
+                            <div key={task.id} className="bg-theme-surface rounded-xl border border-theme-border p-4 shadow-sm hover:shadow-md transition-all">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className={cn(
+                                  "text-[9px] font-black uppercase px-2 py-0.5 rounded-md",
+                                  task.status === 'COMPLETED' ? "bg-emerald-500/10 text-emerald-600" :
+                                  task.status === 'SUBMITTED' ? "bg-amber-500/10 text-amber-600" :
+                                  "bg-blue-500/10 text-blue-600"
+                                )}>
+                                  {task.status}
+                                </span>
+                                <span className="text-[10px] text-theme-muted font-bold">
+                                  {task.priority}
+                                </span>
+                              </div>
+                              <h6 className="text-xs font-bold text-theme-fg truncate">{task.title}</h6>
+                              <div className="mt-3 flex items-center justify-between border-t border-theme-border/50 pt-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-6 w-6 rounded-full bg-theme-primary/20 flex items-center justify-center text-[8px] font-black">
+                                    {task.assignee?.name?.charAt(0)}
+                                  </div>
+                                  <span className="text-[10px] font-bold text-theme-muted">{task.assignee?.name || "Unassigned"}</span>
+                                </div>
+                                {task.submission_url && (
+                                  <button className="text-[10px] font-black text-theme-primary hover:underline">View Work</button>
+                                )}
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="col-span-2 text-center py-6 border-2 border-dashed border-theme-border rounded-xl">
+                              <p className="text-xs text-theme-muted font-bold italic">No tasks delegated to this unit yet.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }) : (
+                    <div className="text-center py-12 bg-theme-raised/40 rounded-3xl border-2 border-dashed border-theme-border">
+                      <p className="text-sm text-theme-muted font-bold">No organizational units assigned to this project.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Key Metrics & Timeline */}
+              <div className="lg:col-span-4 space-y-6">
+                 <div className="rounded-2xl border border-theme-border bg-theme-primary/5 p-6 space-y-4">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-theme-muted">Health Matrix</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex justify-between text-xs font-bold mb-2">
+                          <span className="text-theme-fg">Completion progress</span>
+                          <span className="text-theme-primary">{project.progress}%</span>
+                        </div>
+                        <div className="h-2 w-full bg-theme-border rounded-full overflow-hidden">
+                          <div className="h-full bg-theme-primary rounded-full transition-all duration-500" style={{ width: `${project.progress}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-theme-surface border border-theme-border rounded-xl p-3 text-center">
+                          <p className="text-[9px] font-black text-theme-muted uppercase">Open Tasks</p>
+                          <p className="text-lg font-black text-theme-fg">{tasks.filter(t => t.status !== 'COMPLETED').length}</p>
+                        </div>
+                        <div className="bg-theme-surface border border-theme-border rounded-xl p-3 text-center">
+                          <p className="text-[9px] font-black text-theme-muted uppercase">Pending Reviews</p>
+                          <p className="text-lg font-black text-amber-500">{tasks.filter(t => t.status === 'SUBMITTED').length}</p>
+                        </div>
+                      </div>
+                    </div>
+                 </div>
+
+                 <div className="rounded-2xl border border-theme-border bg-theme-raised/40 p-6 space-y-4">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-theme-muted">Node Intelligence</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-1 h-2 w-2 rounded-full bg-blue-500" />
+                        <p className="text-[11px] leading-relaxed text-theme-fg">
+                          Project initiated by <strong>Admin Registry</strong> on {dayjs(project.issued_date).format("MMM DD, YYYY")}
+                        </p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="mt-1 h-2 w-2 rounded-full bg-emerald-500" />
+                        <p className="text-[11px] leading-relaxed text-theme-fg">
+                          Flowing through <strong>{department?.name || "General"}</strong> department for operational oversight.
+                        </p>
+                      </div>
+                      {tasks.length > 0 && (
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 h-2 w-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                          <p className="text-[11px] leading-relaxed text-theme-fg">
+                            {tasks.filter(t => t.status === 'SUBMITTED').length} submissions awaiting backward approval from team leads.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                 </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

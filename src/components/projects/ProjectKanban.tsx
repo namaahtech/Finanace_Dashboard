@@ -4,14 +4,20 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
 import { cn } from "@/lib/utils";
-import { GripHorizontal, Calendar, User, AlertCircle, CheckCircle2 } from "lucide-react";
+import { GripHorizontal, Calendar, User, AlertCircle, CheckCircle2, X, Send, ShieldCheck, MessageSquare, ExternalLink } from "lucide-react";
 import dayjs from "dayjs";
+import { useAuth } from "@/components/layout/AuthProvider";
+import { useToast } from "@/components/ui/Toast";
+import { Button } from "@/components/ui/Button";
 
 interface Task {
   id: string;
   title: string;
   description?: string;
-  status: "TODO" | "IN_PROGRESS" | "REVIEW" | "COMPLETED";
+  status: "TODO" | "IN_PROGRESS" | "SUBMITTED" | "COMPLETED";
+  submission_notes?: string;
+  submission_url?: string;
+  review_feedback?: string;
   priority: "Low" | "Medium" | "High" | "Critical";
   assignee?: { id: string; name: string };
   due_date?: string;
@@ -29,7 +35,7 @@ interface KanbanProps {
 const statusConfig = {
   TODO: { label: "To Do", color: "bg-slate-500", bgLight: "bg-slate-100", textColor: "text-slate-700" },
   IN_PROGRESS: { label: "In Progress", color: "bg-blue-500", bgLight: "bg-blue-100", textColor: "text-blue-700" },
-  REVIEW: { label: "In Review", color: "bg-amber-500", bgLight: "bg-amber-100", textColor: "text-amber-700" },
+  SUBMITTED: { label: "Awaiting Review", color: "bg-amber-500", bgLight: "bg-amber-100", textColor: "text-amber-700" },
   COMPLETED: { label: "Completed", color: "bg-emerald-500", bgLight: "bg-emerald-100", textColor: "text-emerald-700" },
 };
 
@@ -44,9 +50,12 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
   const [tasks, setTasks] = useState<Record<string, Task[]>>({
     TODO: [],
     IN_PROGRESS: [],
-    REVIEW: [],
+    SUBMITTED: [],
     COMPLETED: [],
   });
+  const [submittingTask, setSubmittingTask] = useState<Task | null>(null);
+  const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
+  const { user } = useAuth(); // Assume we have useAuth or similar
   const [loading, setLoading] = useState(true);
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
   const [dragSource, setDragSource] = useState<string | null>(null);
@@ -65,6 +74,9 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
           due_date,
           estimated_hours,
           spent_hours,
+          submission_notes,
+          submission_url,
+          review_feedback,
           assignee:employees!assigned_to(id, name)
         `)
         .eq("project_id", projectId)
@@ -76,7 +88,7 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
       const grouped: Record<string, Task[]> = {
         TODO: [],
         IN_PROGRESS: [],
-        REVIEW: [],
+        SUBMITTED: [],
         COMPLETED: [],
       };
 
@@ -228,6 +240,24 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
                     </div>
                   )}
                 </div>
+                <div className="mt-3 pt-2 border-t border-theme-border/50 flex flex-col gap-2">
+                   {task.status === 'IN_PROGRESS' && task.assignee?.id === user?.id && (
+                      <button 
+                        onClick={() => setSubmittingTask(task)}
+                        className="w-full text-[9px] font-black uppercase text-theme-primary hover:bg-theme-primary/10 py-1.5 rounded-lg border border-theme-primary/20 transition-all"
+                      >
+                        Submit for Review
+                      </button>
+                   )}
+                   {task.status === 'SUBMITTED' && (user?.role === 'ADMIN' || user?.role === 'MANAGER' || user?.role === 'LEAD') && (
+                      <button 
+                        onClick={() => setReviewingTask(task)}
+                        className="w-full text-[9px] font-black uppercase text-amber-600 hover:bg-amber-600/10 py-1.5 rounded-lg border border-amber-600/20 transition-all"
+                      >
+                        Audit Submission
+                      </button>
+                   )}
+                </div>
               </div>
             ))
           )}
@@ -293,11 +323,207 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
         ))}
       </div>
 
-      {/* Footer Info */}
-      <div className="rounded-xl border border-theme-border/40 bg-theme-page/30 p-3">
-        <p className="text-[10px] text-theme-muted">
-          💡 Drag tasks between columns to update their status. Changes sync in real-time across all connected panels.
-        </p>
+      {/* Modals */}
+      {submittingTask && (
+        <SubmissionModal 
+          task={submittingTask} 
+          onClose={() => setSubmittingTask(null)} 
+          onSuccess={fetchTasks} 
+        />
+      )}
+      {reviewingTask && (
+        <AuditModal 
+          task={reviewingTask} 
+          onClose={() => setReviewingTask(null)} 
+          onSuccess={fetchTasks} 
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Submission Modal (Employee Tier) ──────────────────────────────────
+function SubmissionModal({ task, onClose, onSuccess }: { task: Task; onClose: () => void; onSuccess: () => void }) {
+  const [notes, setNotes] = useState("");
+  const [url, setUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { showToast } = useToast();
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("project_tasks")
+        .update({
+          status: "SUBMITTED",
+          submission_notes: notes,
+          submission_url: url,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", task.id);
+
+      if (error) throw error;
+      showToast("Work submitted for review", "success");
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      showToast(err.message || "Submission failed", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+      <div className="w-full max-w-lg rounded-2xl bg-theme-surface shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between border-b border-theme-border bg-theme-surface px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary text-theme-surface shadow-sm">
+              <Send size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-theme-fg uppercase tracking-tight">Submit Work</h3>
+              <p className="text-[10px] text-theme-muted font-bold mt-0.5">{task.title}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-theme-muted hover:bg-theme-raised transition-all">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-6 space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Submission Notes</label>
+            <textarea 
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Describe what you've accomplished..."
+              className="w-full h-32 rounded-xl border border-theme-border bg-theme-raised/50 p-4 text-xs font-bold outline-none focus:border-theme-primary transition-all resize-none"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Resource URL (Optional)</label>
+            <div className="relative">
+               <ExternalLink size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
+               <input 
+                type="text" 
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="Link to file, repository, or document"
+                className="w-full h-10 rounded-xl border border-theme-border bg-theme-raised/50 pl-9 pr-4 text-xs font-bold outline-none focus:border-theme-primary transition-all"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="bg-theme-raised/50 flex justify-end gap-3 border-t border-theme-border px-6 py-4">
+          <Button variant="secondary" size="sm" onClick={onClose} className="text-[10px] font-black uppercase">Cancel</Button>
+          <Button size="sm" onClick={handleSubmit} loading={submitting} className="text-[10px] font-black uppercase px-6">
+            Dispatch to Lead
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Audit Modal (Lead Tier) ──────────────────────────────────
+function AuditModal({ task, onClose, onSuccess }: { task: Task; onClose: () => void; onSuccess: () => void }) {
+  const [feedback, setFeedback] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { showToast } = useToast();
+  const { user } = useAuth();
+
+  const handleAudit = async (status: "COMPLETED" | "IN_PROGRESS") => {
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("project_tasks")
+        .update({
+          status,
+          review_feedback: feedback,
+          reviewer_id: user?.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", task.id);
+
+      if (error) throw error;
+      showToast(status === 'COMPLETED' ? "Submission Approved" : "Submission Rejected", "success");
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      showToast(err.message || "Audit failed", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+      <div className="w-full max-w-xl rounded-2xl bg-theme-surface shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between border-b border-theme-border bg-theme-surface px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-theme-surface shadow-sm shadow-amber-500/20">
+              <ShieldCheck size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-theme-fg uppercase tracking-tight">Audit Submission</h3>
+              <p className="text-[10px] text-theme-muted font-bold mt-0.5">{task.title}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-theme-muted hover:bg-theme-raised transition-all">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="rounded-xl border border-theme-border bg-theme-raised/40 p-5 space-y-4">
+            <div className="flex items-start gap-3">
+               <div className="h-8 w-8 rounded-full bg-theme-primary/10 flex items-center justify-center text-[10px] font-black text-theme-primary">
+                 {task.assignee?.name?.charAt(0)}
+               </div>
+               <div className="flex-1">
+                 <p className="text-xs font-black text-theme-fg">{task.assignee?.name}</p>
+                 <p className="text-[10px] text-theme-muted font-bold uppercase tracking-widest mt-0.5">Contributor</p>
+               </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[9px] font-black uppercase text-theme-muted">Submission Data</label>
+              <div className="p-3 rounded-lg bg-theme-surface border border-theme-border text-xs leading-relaxed text-theme-fg font-medium italic">
+                {task.submission_notes || "No notes provided."}
+              </div>
+            </div>
+            {task.submission_url && (
+               <a 
+                href={task.submission_url} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="flex items-center gap-2 text-[10px] font-black text-theme-primary hover:underline"
+               >
+                 <ExternalLink size={12} /> View Submission Resource
+               </a>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted flex items-center gap-2">
+               <MessageSquare size={12} className="text-theme-primary" /> Review Feedback
+            </label>
+            <textarea 
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              placeholder="Provide constructive feedback for the contributor..."
+              className="w-full h-24 rounded-xl border border-theme-border bg-theme-raised/50 p-4 text-xs font-bold outline-none focus:border-theme-primary transition-all resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="bg-theme-raised/50 flex justify-end gap-3 border-t border-theme-border px-6 py-4">
+          <Button variant="secondary" size="sm" onClick={() => handleAudit('IN_PROGRESS')} loading={submitting} className="text-[10px] font-black uppercase text-rose-500 hover:text-rose-600">
+            Request Revision
+          </Button>
+          <Button size="sm" onClick={() => handleAudit('COMPLETED')} loading={submitting} className="text-[10px] font-black uppercase px-6 bg-emerald-600 hover:bg-emerald-700">
+            Approve & Close
+          </Button>
+        </div>
       </div>
     </div>
   );

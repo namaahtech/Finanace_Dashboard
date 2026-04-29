@@ -33,6 +33,11 @@ export async function GET(req: Request) {
       teams:     p.project_teams?.map((pt: any) => pt.teams) || [],
       teamIds:   p.project_teams?.map((pt: any) => pt.team_id) || [],
       budget_data: p.budgets || null,
+      department_id: p.department_id,
+      progress: p.progress || 0,
+      progress_locked: p.progress_locked || false,
+      started_at: p.started_at || null,
+      accepted_by: p.accepted_by || null,
     }));
 
     return NextResponse.json({ projects, total: count || 0 });
@@ -45,7 +50,7 @@ export async function POST(req: Request) {
   try {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
-    const { name, description, budget, client_id, phase, issued_date, due_date, team_ids, budget_id } = body;
+    const { name, description, budget, client_id, phase, issued_date, due_date, team_ids, budget_id, department_id, assigned_by } = body;
 
     if (!name || !client_id) {
       return NextResponse.json({ error: "Name and Client are required" }, { status: 400 });
@@ -59,6 +64,8 @@ export async function POST(req: Request) {
         client_id, phase: phase || "SCOPING",
         issued_date, due_date,
         budget_id: budget_id || null,
+        department_id: department_id || null,
+        assigned_by: assigned_by || null,
         is_active: true,
       })
       .select()

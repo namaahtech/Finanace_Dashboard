@@ -40,7 +40,7 @@ import {
   Cell,
 } from "recharts";
 
-interface UserShape  { _id: string; name: string; }
+interface UserShape  { id: string; name: string; }
 interface ConfigShape {
   company_revenue: number;
   expense_percentage: number;
@@ -205,15 +205,15 @@ export default function AdminOverview() {
       const rows = await Promise.all(
         (usersRes.users ?? []).map(async (emp) => {
           const [kpiRes, incRes] = await Promise.all([
-            request<{ scores: any[] }>({ url: `/api/kpi?employeeId=${emp._id}` }),
-            request<{ incentives: any[] }>({ url: `/api/incentives?employeeId=${emp._id}` }),
+            request<{ scores: any[] }>({ url: `/api/kpi?employeeId=${emp.id}` }),
+            request<{ incentives: any[] }>({ url: `/api/incentives?employeeId=${emp.id}` }),
           ]);
           const score = kpiRes.scores?.[0]?.final_score ?? 80;
           const employeeMultiplier = getEmployeeMultiplier(score);
           const latestIncentive = incRes.incentives?.[0];
           const baseIncentive = latestIncentive?.base_amount ?? 10000;
           return {
-            id: emp._id,
+            id: emp.id,
             name: emp.name,
             score,
             baseIncentive,
@@ -257,8 +257,8 @@ export default function AdminOverview() {
   }, [loadDashboardData]);
 
   const currentMonth = new Date().getMonth();
-  const liveRevenue = analytics?.revenue[currentMonth] ?? 0;
-  const liveExpenses = analytics?.expenses[currentMonth] ?? 0;
+  const liveRevenue = analytics?.revenue?.[currentMonth] ?? 0;
+  const liveExpenses = analytics?.expenses?.[currentMonth] ?? 0;
   const liveNetRevenue = liveRevenue - liveExpenses;
   const expensePercentage = liveRevenue > 0 ? Math.round((liveExpenses / liveRevenue) * 100) : 0;
 

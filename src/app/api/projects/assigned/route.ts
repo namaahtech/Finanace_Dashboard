@@ -87,12 +87,13 @@ export async function GET(req: NextRequest) {
 
       tasks?.forEach((task: any) => {
         if (!taskStatsByProject[task.project_id]) {
-          taskStatsByProject[task.project_id] = { total: 0, completed: 0, inProgress: 0, todo: 0 };
+          taskStatsByProject[task.project_id] = { total: 0, completed: 0, inProgress: 0, todo: 0, submitted: 0 };
         }
         taskStatsByProject[task.project_id].total += 1;
         if (task.status === "COMPLETED") taskStatsByProject[task.project_id].completed += 1;
         if (task.status === "IN_PROGRESS") taskStatsByProject[task.project_id].inProgress += 1;
         if (task.status === "TODO") taskStatsByProject[task.project_id].todo += 1;
+        if (task.status === "SUBMITTED") taskStatsByProject[task.project_id].submitted += 1;
       });
     }
 
@@ -106,7 +107,7 @@ export async function GET(req: NextRequest) {
       dueDate: proj.due_date,
       budget: proj.budget,
       role: proj.role,
-      tasks: taskStatsByProject[proj.id] || { total: 0, completed: 0, inProgress: 0, todo: 0 },
+      tasks: taskStatsByProject[proj.id] || { total: 0, completed: 0, inProgress: 0, todo: 0, submitted: 0 },
     }));
 
     return NextResponse.json({

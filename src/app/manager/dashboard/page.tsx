@@ -12,8 +12,10 @@ import { supabase } from "@/lib/supabase";
 import dayjs from "dayjs";
 import {
   Building2, PieChart, BarChart3, ShieldCheck, TrendingUp, Users, Target, Zap, LayoutGrid, Filter, 
-  CalendarDays, ClipboardList, Search, Clock, ArrowRight, UserCheck, AlertCircle
+  CalendarDays, ClipboardList, Search, Clock, ArrowRight, UserCheck, AlertCircle, Briefcase, ChevronRight, X
 } from "lucide-react";
+import { MultiSelect } from "@/components/ui/MultiSelect";
+import { useToast } from "@/components/ui/Toast";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface DeptStats {
@@ -41,7 +43,18 @@ export default function ManagerDashboard() {
   const [attendance, setAttendance] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [search, setSearch] = useState("");
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [delegatingProject, setDelegatingProject] = useState<any | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const { showToast } = useToast();
+
+  const openKanban = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    setShowProjectModal(true);
+  };
 
   const loadDeptData = useCallback(async () => {
     if (!user?.id) return;
@@ -50,7 +63,6 @@ export default function ManagerDashboard() {
       // 1. Get Department ID for this Manager
       let activeDept: any = null;
       
-      // 1. Try to find department by Manager ID
       const { data: deptData } = await supabase
         .from('teams')
         .select('id, name')
@@ -60,7 +72,6 @@ export default function ManagerDashboard() {
 
       activeDept = deptData;
 
-      // 2. Fallback: Find by department name if direct ID link is missing
       if (!activeDept && user.department) {
         const { data: nameDept } = await supabase
           .from('teams')
@@ -76,15 +87,34 @@ export default function ManagerDashboard() {
         return;
       }
 
-      // 3. Fetch Teams and Employees in this department
+      // 3. Fetch Teams in this department
       const { data: teamsData } = await supabase
         .from('teams')
         .select('id, name, member_count, head_id, lead_id')
         .eq('department_id', activeDept.id);
       
       setTeams(teamsData || []);
-
       const teamIds = teamsData?.map(t => t.id) || [];
+
+      // 4. Fetch Projects assigned to this department OR its teams
+      const { data: deptProjects } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('department_id', activeDept.id);
+
+      const { data: projTeams } = await supabase
+        .from('project_teams')
+        .select('project_id, team_id')
+        .in('team_id', teamIds);
+      
+      const enrichedProjects = (deptProjects || []).map(p => ({
+        ...p,
+        teamIds: projTeams?.filter(pt => pt.project_id === p.id).map(pt => pt.team_id) || []
+      }));
+
+      setProjects(enrichedProjects);
+
+      // 5. Fetch Employees in this department
       const { data: empData } = await supabase
         .from('employees')
         .select('*, teams(name)')
@@ -92,7 +122,7 @@ export default function ManagerDashboard() {
       
       setEmployees(empData || []);
 
-      // 3. Fetch Attendance for today
+      // 6. Fetch Attendance for today
       const { data: attData } = await supabase
         .from('attendance_logs')
         .select('*, employees(name, designation)')
@@ -101,15 +131,15 @@ export default function ManagerDashboard() {
       
       setAttendance(attData || []);
 
-      // 4. Fetch Tasks for these employees
+      // 7. Fetch Tasks for these employees
       const { data: taskData } = await supabase
         .from('project_tasks')
-        .select('*, projects(title), employees(name)')
+        .select('*, projects(name), employees(name)')
         .in('assigned_to', empData?.map(e => e.id) || []);
       
       setTasks(taskData || []);
 
-      // 5. Aggregate Stats
+      // 8. Aggregate Stats
       const totalEmp = empData?.length || 0;
       const attPct = totalEmp > 0 ? Math.round((attData?.length || 0) / totalEmp * 100) : 0;
       const openTasksCount = taskData?.filter(t => t.status !== 'COMPLETED').length || 0;
@@ -136,6 +166,13 @@ export default function ManagerDashboard() {
 
   useEffect(() => {
     loadDeptData();
+    const channel = supabase.channel('manager_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => loadDeptData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_teams' }, () => loadDeptData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_tasks' }, () => loadDeptData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs' }, () => loadDeptData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [loadDeptData]);
 
   const filteredItems = useMemo(() => {
@@ -198,6 +235,7 @@ export default function ManagerDashboard() {
             { id: 'overview', label: 'Overview', icon: BarChart3 },
             { id: 'attendance', label: 'Live Attendance', icon: CalendarDays },
             { id: 'teams', label: 'Team Roster', icon: Users },
+            { id: 'projects', label: 'Delivery Hub', icon: Briefcase },
             { id: 'tasks', label: 'Task Pulse', icon: ClipboardList },
           ].map((t) => (
             <button
@@ -349,6 +387,57 @@ export default function ManagerDashboard() {
           </div>
         )}
 
+        {activeTab === 'projects' && (
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+             {projects.map((proj) => (
+                <div 
+                  key={proj.id} 
+                  className="page-card group hover:border-theme-primary/50 cursor-pointer transition-all border border-theme-border flex flex-col"
+                >
+                   <div className="flex items-center justify-between mb-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary/10 text-theme-primary">
+                         <Briefcase size={20} />
+                      </div>
+                      <Badge variant={proj.teamIds?.length > 0 ? "success" : "warning"} className="text-[9px] font-black">
+                        {proj.teamIds?.length > 0 ? "DELEGATED" : "PENDING DELEGATION"}
+                      </Badge>
+                   </div>
+                   <div onClick={() => openKanban(proj.id)} className="flex-1">
+                     <h4 className="text-sm font-black text-theme-fg group-hover:text-theme-primary transition-colors mb-1">{proj.name}</h4>
+                     <p className="text-[10px] text-theme-muted mb-4 line-clamp-2 h-8">{proj.description}</p>
+                     
+                     <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[9px] font-black text-theme-muted uppercase tracking-widest">
+                           <span>Delivery Progress</span>
+                           <span className="text-theme-fg">{proj.progress || 0}%</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-theme-raised overflow-hidden">
+                           <div className="h-full bg-theme-primary transition-all duration-500" style={{ width: `${proj.progress || 0}%` }} />
+                        </div>
+                     </div>
+                   </div>
+
+                   <div className="mt-4 pt-4 border-t border-theme-border">
+                      <Button 
+                        variant="secondary" 
+                        size="xs" 
+                        className="w-full text-[9px] font-black uppercase tracking-widest"
+                        onClick={(e) => { e.stopPropagation(); setDelegatingProject(proj); }}
+                      >
+                        <LayoutGrid size={12} className="mr-1.5" /> Delegate to Teams
+                      </Button>
+                   </div>
+                </div>
+             ))}
+             {projects.length === 0 && (
+                <div className="lg:col-span-3 py-40 text-center space-y-4 opacity-50">
+                   <Briefcase size={48} className="mx-auto text-theme-muted" />
+                   <p className="text-xs font-black uppercase tracking-[0.2em] text-theme-muted">No active projects in department</p>
+                </div>
+             )}
+           </div>
+        )}
+
         {activeTab === 'tasks' && (
           <div className="page-card p-0 overflow-hidden">
             <div className="overflow-x-auto">
@@ -407,6 +496,100 @@ export default function ManagerDashboard() {
         )}
 
       </div>
+
+      {delegatingProject && (
+        <DelegationModal 
+          project={delegatingProject} 
+          teams={teams}
+          onClose={() => setDelegatingProject(null)}
+          onSuccess={() => {
+            setDelegatingProject(null);
+            loadDeptData();
+          }}
+        />
+      )}
+
+      <ProjectModal 
+        isOpen={showProjectModal} 
+        onClose={() => {
+          setShowProjectModal(false);
+          setSelectedProjectId(null);
+        }} 
+        projects={projects} 
+        initialProjectId={selectedProjectId || undefined}
+      />
     </DashboardShell>
+  );
+}
+
+function DelegationModal({ project, teams, onClose, onSuccess }: { project: any, teams: any[], onClose: () => void, onSuccess: () => void }) {
+  const [selectedTeams, setSelectedTeams] = useState<string[]>(project.teamIds || []);
+  const [submitting, setSubmitting] = useState(false);
+  const { showToast } = useToast();
+
+  const handleSave = async () => {
+    setSubmitting(true);
+    try {
+      // 1. Clear existing team assignments for this project
+      await supabase.from('project_teams').delete().eq('project_id', project.id);
+      
+      // 2. Insert new ones
+      if (selectedTeams.length > 0) {
+        const { error } = await supabase.from('project_teams').insert(
+          selectedTeams.map(tid => ({ project_id: project.id, team_id: tid }))
+        );
+        if (error) throw error;
+      }
+      
+      showToast("Delegation updated successfully", "success");
+      onSuccess();
+    } catch (err: any) {
+      showToast(err.message || "Delegation failed", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+      <div className="w-full max-w-lg rounded-2xl bg-theme-surface shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between border-b border-theme-border bg-theme-surface px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary text-theme-surface shadow-sm">
+              <LayoutGrid size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-theme-fg uppercase tracking-tight">Delegate Project</h3>
+              <p className="text-[10px] text-theme-muted font-bold mt-0.5">{project.name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-theme-muted hover:bg-theme-raised transition-all">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Select Operational Units</label>
+            <MultiSelect 
+              icon={<Users size={14} className="text-theme-primary" />}
+              placeholder="Select teams..."
+              value={selectedTeams}
+              onChange={setSelectedTeams}
+              options={teams.map(t => ({ label: t.name, value: t.id }))}
+              label="Assigned Teams"
+            />
+            <p className="text-[9px] text-theme-muted italic">Assigned teams will be notified and can begin task breakdown.</p>
+          </div>
+        </div>
+
+        <div className="bg-theme-raised/50 flex justify-end gap-3 border-t border-theme-border px-6 py-4">
+          <Button variant="secondary" size="sm" onClick={onClose} className="text-[10px] font-black uppercase">Cancel</Button>
+          <Button size="sm" onClick={handleSave} loading={submitting} className="text-[10px] font-black uppercase px-6">
+            Sync Delegation
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

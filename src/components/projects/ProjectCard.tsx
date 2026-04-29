@@ -16,6 +16,7 @@ interface ProjectCardProps {
     completed: number;
     inProgress: number;
     todo: number;
+    submitted: number;
   };
   onClick?: () => void;
 }
@@ -94,6 +95,10 @@ export function ProjectCard({ id, name, description, progress, phase, dueDate, t
           <div className="rounded-lg bg-blue-100 dark:bg-blue-900/30 p-2 text-center">
             <p className="text-[10px] text-blue-700 dark:text-blue-400 font-bold">In Progress</p>
             <p className="text-sm font-black text-blue-600">{tasks.inProgress}</p>
+          </div>
+          <div className="rounded-lg bg-amber-100 dark:bg-amber-900/30 p-2 text-center">
+            <p className="text-[10px] text-amber-700 dark:text-amber-400 font-bold">Review</p>
+            <p className="text-sm font-black text-amber-600">{tasks.submitted || 0}</p>
           </div>
           <div className="rounded-lg bg-emerald-100 dark:bg-emerald-900/30 p-2 text-center">
             <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold">Done</p>

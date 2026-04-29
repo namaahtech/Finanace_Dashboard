@@ -51,6 +51,7 @@ export function ProjectModal({ isOpen, onClose, projects, initialProjectId }: Pr
   if (!isOpen) return null;
 
   const handleProjectClick = (project: Project) => {
+    setSelectedProject(project);
     setViewMode("kanban");
   };
 
