@@ -31,7 +31,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const supabase = getSupabaseAdmin();
     const { id } = await params;
     const body = await req.json();
-    const { name, description, budget, client_id, phase, issued_date, due_date, team_ids, is_active, budget_id, department_id, progress } = body;
+    const { 
+      name, description, budget, client_id, phase, issued_date, 
+      due_date, team_ids, is_active, budget_id, department_id, 
+      progress, manager_id, workflow_status 
+    } = body;
 
     const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (name        !== undefined) payload.name        = name;
@@ -44,6 +48,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (is_active   !== undefined) payload.is_active   = is_active;
     if (budget_id   !== undefined) payload.budget_id   = budget_id || null;
     if (department_id !== undefined) payload.department_id = department_id || null;
+    if (manager_id    !== undefined) payload.manager_id    = manager_id || null;
+    if (workflow_status !== undefined) payload.workflow_status = workflow_status;
 
     // Progress can only be set once; once locked, cannot be changed
     if (progress !== undefined) {

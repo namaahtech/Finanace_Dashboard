@@ -21,8 +21,11 @@ import {
   ArrowUpRight,
   UserCheck,
   UserX,
-  Coffee
+  Coffee,
+  Check,
+  LayoutGrid
 } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 
 interface TeamMember {
   id: string;
@@ -36,6 +39,7 @@ interface TeamMember {
 export default function LeadDashboard() {
   const { user } = useAuth();
   const { request } = useApi();
+  const { showToast } = useToast();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,10 +57,24 @@ export default function LeadDashboard() {
     setLoading(true);
     try {
       // 1. Fetch Team Members and their attendance
+      // First, find the team where this user is lead
+      const { data: teamData } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('lead_id', user.id)
+        .maybeSingle();
+
+      const targetTeamId = teamData?.id || (user as any).team_id;
+
+      if (!targetTeamId) {
+         setLoading(false);
+         return;
+      }
+
       const { data: memberData } = await supabase
         .from('employees')
         .select(`id, name, designation, is_active, team_id`)
-        .eq('team_id', (user as any).team_id);
+        .eq('team_id', targetTeamId);
 
       // Fetch today's attendance for these members
       const today = dayjs().format('YYYY-MM-DD');
@@ -76,20 +94,20 @@ export default function LeadDashboard() {
 
       setMembers(formattedMembers);
 
-      // 2. Fetch Team Projects and pending tasks
-      const { data: projectData } = await supabase
+      // 2. Fetch Team Projects assigned to this lead
+      const { data: projectTeamsData } = await supabase
         .from('project_teams')
-        .select(`project:projects(*)`)
-        .eq('team_id', (user as any).team_id);
+        .select(`*, project:projects(*)`)
+        .eq('lead_id', user.id);
 
       // Fetch task stats for these projects
-      const projIds = projectData?.map(p => (p.project as any).id) || [];
+      const projIds = projectTeamsData?.map(p => (p.project as any).id) || [];
       const { data: taskData } = await supabase
         .from('project_tasks')
         .select('project_id, status')
         .in('project_id', projIds);
 
-      const formattedProjects = projectData?.map(p => {
+      const formattedProjects = projectTeamsData?.map(p => {
         const proj = p.project as any;
         const pTasks = taskData?.filter(t => t.project_id === proj.id) || [];
         return {
@@ -98,7 +116,8 @@ export default function LeadDashboard() {
           description: proj.description,
           phase: proj.phase,
           progress: proj.progress || 0,
-          pending_tasks: pTasks.filter(t => t.status === 'SUBMITTED').length
+          pending_tasks: pTasks.filter(t => t.status === 'SUBMITTED').length,
+          assignment_status: p.status
         };
       }) || [];
 
@@ -116,21 +135,38 @@ export default function LeadDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs' }, loadData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_tasks' }, loadData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, loadData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_teams' }, loadData)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [loadData]);
+
+  async function acceptProject(projectId: string) {
+    try {
+      const { error } = await supabase
+        .from('project_teams')
+        .update({ status: 'accepted' })
+        .eq('project_id', projectId)
+        .eq('lead_id', user?.id);
+      
+      if (error) throw error;
+      showToast("Project accepted. You can now decompose into tasks.", "success");
+      loadData();
+    } catch (err: any) {
+      showToast(err.message, "error");
+    }
+  }
 
   const stats = [
     { label: "Team Size", value: members.length, icon: Users, color: "text-theme-fg", bg: "bg-theme-raised" },
     { label: "Present Today", value: members.filter(m => m.attendance_status === 'present').length, icon: UserCheck, color: "text-emerald-500", bg: "bg-emerald-500/10" },
     { label: "Awaiting Review", value: projects.reduce((acc, p) => acc + p.pending_tasks, 0), icon: AlertCircle, color: "text-amber-500", bg: "bg-amber-500/10" },
-    { label: "Active Projects", value: projects.length, icon: Briefcase, color: "text-sky-500", bg: "bg-sky-500/10" },
+    { label: "Active Units", value: projects.length, icon: Briefcase, color: "text-sky-500", bg: "bg-sky-500/10" },
   ];
 
   return (
     <DashboardShell
-      title="Team Operations Hub"
-      subtitle="Manage your team's attendance and verify project deliverables."
+      title="Tactical Operations Command"
+      subtitle="Operationalize assigned projects and monitor team execution."
     >
       <div className="space-y-6">
         
@@ -152,8 +188,8 @@ export default function LeadDashboard() {
         {/* Tab Switcher */}
         <div className="flex items-center gap-1 p-1 rounded-xl bg-theme-raised/50 border border-theme-border w-fit">
           {[
-            { id: 'attendance', label: 'Team Attendance', icon: UserCheck },
-            { id: 'projects', label: 'Active Projects', icon: Briefcase },
+            { id: 'attendance', label: 'Workforce', icon: UserCheck },
+            { id: 'projects', label: 'Deployment Hub', icon: Briefcase },
           ].map((t) => (
             <button
               key={t.id}
@@ -171,25 +207,24 @@ export default function LeadDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Team Roster / Projects Grid */}
           <div className="lg:col-span-2 space-y-6">
             {activeTab === 'attendance' ? (
-              <div className="page-card p-0 overflow-hidden">
-                <div className="px-6 py-4 border-b border-theme-border flex items-center justify-between">
+              <div className="page-card p-0 overflow-hidden shadow-lg border-theme-border/50">
+                <div className="px-6 py-4 border-b border-theme-border flex items-center justify-between bg-theme-surface/50">
                   <div className="flex items-center gap-2">
                     <Users size={16} className="text-theme-muted" />
-                    <h3 className="text-sm font-black text-theme-fg uppercase tracking-tight">Team Attendance</h3>
+                    <h3 className="text-sm font-black text-theme-fg uppercase tracking-tight">Team Roster</h3>
                   </div>
-                  <Badge variant="info" className="text-[10px]">Today, {dayjs().format('MMM DD')}</Badge>
+                  <Badge variant="info" className="text-[10px] font-black tracking-widest">REAL-TIME</Badge>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead className="bg-theme-raised/50 text-[10px] font-black uppercase text-theme-muted tracking-widest">
                       <tr>
-                        <th className="px-6 py-3">Member</th>
+                        <th className="px-6 py-3">Operative</th>
                         <th className="px-6 py-3">Status</th>
-                        <th className="px-6 py-3">Clock In</th>
-                        <th className="px-6 py-3 text-right">Action</th>
+                        <th className="px-6 py-3">Deployment</th>
+                        <th className="px-6 py-3 text-right">Metrics</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-theme-border">
@@ -197,12 +232,12 @@ export default function LeadDashboard() {
                         <tr key={member.id} className="hover:bg-theme-raised/30 transition-colors">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded-full bg-theme-raised flex items-center justify-center text-[10px] font-black">
+                              <div className="h-8 w-8 rounded-full bg-theme-primary/10 text-theme-primary flex items-center justify-center text-[10px] font-black">
                                 {member.name.split(' ').map(n => n[0]).join('')}
                               </div>
                               <div>
                                 <p className="text-xs font-black text-theme-fg">{member.name}</p>
-                                <p className="text-[10px] text-theme-muted">{member.designation}</p>
+                                <p className="text-[10px] text-theme-muted font-bold">{member.designation}</p>
                               </div>
                             </div>
                           </td>
@@ -213,18 +248,16 @@ export default function LeadDashboard() {
                                 member.attendance_status === 'absent' ? 'danger' : 
                                 'warning'
                               }
-                              className="capitalize text-[10px]"
+                              className="capitalize text-[10px] font-black"
                             >
                               {member.attendance_status}
                             </Badge>
                           </td>
-                          <td className="px-6 py-4 text-xs font-medium text-theme-muted">
-                            {member.clock_in ? dayjs(`2000-01-01 ${member.clock_in}`).format('hh:mm A') : '--:--'}
+                          <td className="px-6 py-4 text-xs font-bold text-theme-muted">
+                            {member.clock_in ? dayjs(`2000-01-01 ${member.clock_in}`).format('hh:mm A') : 'OFFLINE'}
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <Button variant="ghost" size="sm" className="text-[10px] font-black uppercase">
-                              View
-                            </Button>
+                            <Button variant="secondary" size="xs" className="text-[9px] font-black uppercase">Stats</Button>
                           </td>
                         </tr>
                       ))}
@@ -237,26 +270,57 @@ export default function LeadDashboard() {
                 {projects.map((proj) => (
                   <div 
                     key={proj.id} 
-                    onClick={() => openKanban(proj.id)}
-                    className="page-card group hover:border-theme-primary/50 cursor-pointer transition-all border border-theme-border"
+                    className={cn(
+                        "page-card group hover:border-theme-primary/50 cursor-pointer transition-all border border-theme-border flex flex-col",
+                        proj.assignment_status === 'pending' && "ring-2 ring-amber-500 ring-offset-4 ring-offset-theme-page animate-pulse-subtle"
+                    )}
                   >
                      <div className="flex items-center justify-between mb-4">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary/10 text-theme-primary">
                            <Briefcase size={20} />
                         </div>
-                        <Badge variant="info" className="text-[9px] font-black">{proj.phase}</Badge>
+                        <Badge 
+                            variant={proj.assignment_status === 'pending' ? "warning" : "info"} 
+                            className="text-[9px] font-black"
+                        >
+                            {proj.assignment_status === 'pending' ? "NEW ASSIGNMENT" : proj.phase}
+                        </Badge>
                      </div>
-                     <h4 className="text-sm font-black text-theme-fg group-hover:text-theme-primary transition-colors mb-1">{proj.name}</h4>
-                     <p className="text-[10px] text-theme-muted mb-4 line-clamp-2 h-8">{proj.description}</p>
-                     
-                     <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-[9px] font-black text-theme-muted uppercase tracking-widest">
-                           <span>Team Progress</span>
-                           <span className="text-theme-fg">{proj.progress || 0}%</span>
+                     <div onClick={() => openKanban(proj.id)} className="flex-1">
+                        <h4 className="text-sm font-black text-theme-fg group-hover:text-theme-primary transition-colors mb-1">{proj.name}</h4>
+                        <p className="text-[10px] text-theme-muted mb-4 line-clamp-2 h-8">{proj.description}</p>
+                        
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-[9px] font-black text-theme-muted uppercase tracking-widest">
+                            <span>Unit Progress</span>
+                            <span className="text-theme-fg">{proj.progress || 0}%</span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-theme-raised overflow-hidden">
+                            <div className="h-full bg-theme-primary transition-all duration-500" style={{ width: `${proj.progress || 0}%` }} />
+                            </div>
                         </div>
-                        <div className="h-1.5 w-full rounded-full bg-theme-raised overflow-hidden">
-                           <div className="h-full bg-theme-primary transition-all duration-500" style={{ width: `${proj.progress || 0}%` }} />
-                        </div>
+                     </div>
+
+                     <div className="mt-4 pt-4 border-t border-theme-border">
+                        {proj.assignment_status === 'pending' ? (
+                            <Button 
+                                variant="primary" 
+                                size="sm" 
+                                className="w-full text-[9px] font-black uppercase tracking-widest bg-amber-600 hover:bg-amber-700"
+                                onClick={(e) => { e.stopPropagation(); acceptProject(proj.id); }}
+                            >
+                                <Check size={12} className="mr-1.5" /> Accept & Decompose
+                            </Button>
+                        ) : (
+                            <Button 
+                                variant="secondary" 
+                                size="sm" 
+                                className="w-full text-[9px] font-black uppercase tracking-widest"
+                                onClick={(e) => { e.stopPropagation(); openKanban(proj.id); }}
+                            >
+                                <LayoutGrid size={12} className="mr-1.5" /> Break Down Tasks
+                            </Button>
+                        )}
                      </div>
                   </div>
                 ))}
@@ -265,11 +329,11 @@ export default function LeadDashboard() {
           </div>
 
           {/* Verification Queue */}
-          <div className="page-card p-0 overflow-hidden">
-            <div className="px-6 py-4 border-b border-theme-border">
+          <div className="page-card p-0 overflow-hidden shadow-lg border-theme-border/50">
+            <div className="px-6 py-4 border-b border-theme-border bg-theme-surface/50">
               <div className="flex items-center gap-2">
                 <CheckCircle2 size={16} className="text-theme-muted" />
-                <h3 className="text-sm font-black text-theme-fg uppercase tracking-tight">Review Queue</h3>
+                <h3 className="text-sm font-black text-theme-fg uppercase tracking-tight">Review Pipeline</h3>
               </div>
             </div>
             <div className="p-4 space-y-3">
@@ -278,8 +342,8 @@ export default function LeadDashboard() {
                   <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 mb-3">
                     <CheckCircle2 size={24} />
                   </div>
-                  <p className="text-xs font-bold text-theme-fg">Inbox Zero</p>
-                  <p className="text-[10px] text-theme-muted">No deliverables awaiting review.</p>
+                  <p className="text-xs font-black uppercase tracking-widest text-theme-fg">Clear Workspace</p>
+                  <p className="text-[10px] text-theme-muted font-bold">All deliverables reviewed.</p>
                 </div>
               ) : (
                 projects.filter(p => p.pending_tasks > 0).map((project) => (
@@ -304,7 +368,7 @@ export default function LeadDashboard() {
             </div>
             <div className="p-4 bg-theme-raised/30 border-t border-theme-border">
               <Button className="w-full text-[10px] font-black uppercase py-4" variant="secondary">
-                View All Projects <ArrowUpRight size={14} className="ml-2" />
+                Oversight Matrix <ArrowUpRight size={14} className="ml-2" />
               </Button>
             </div>
           </div>

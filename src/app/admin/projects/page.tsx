@@ -19,6 +19,7 @@ import { supabase } from "@/lib/supabase";
 import axios from "axios";
 import dayjs from "dayjs";
 import { useAuth } from "@/components/layout/AuthProvider";
+import { DelegationModal } from "@/components/projects/DelegationModal";
 
 type ProjectPhase = "SCOPING" | "IMPLEMENTATION" | "REVIEW" | "COMPLETED";
 
@@ -75,6 +76,8 @@ interface Project {
   teams?: Team[];
   budget_data?: BudgetData | null;
   department_id?: string | null;
+  manager_id?: string | null;
+  workflow_status?: string;
 }
 
 interface ProjectTask {
@@ -105,6 +108,9 @@ interface Employee {
   id: string;
   name: string;
   employee_id: string;
+  role: string;
+  department: string;
+  team_id?: string;
 }
 
 const PHASE_CONFIG: Record<ProjectPhase, { label: string; bg: string; text: string; icon: any; variant: any }> = {
@@ -266,12 +272,71 @@ function MultiSelect({ value, options, onChange, placeholder, icon, label }: {
     );
   }
 
-// ── 3-Dot Context Menu ──────────────────────────────────
-function RowMenu({ project, onRefresh, onEdit, isLast, setDeleteConfirm, onOversight }: { 
-  project: Project; 
-  onRefresh: () => void; 
+// ── Card Context Menu ────────────────────────────────────
+function CardMenu({ project, onRefresh, onEdit, setDeleteConfirm, onOversight }: {
+  project: Project;
+  onRefresh: () => void;
   onEdit: () => void;
-  isLast?: boolean; 
+  setDeleteConfirm: (p: Project) => void;
+  onOversight: (p: Project) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [acting, setActing] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  async function toggleStatus() {
+    setActing(true); setOpen(false);
+    try {
+      await axios.patch(`/api/projects/${project.id}`, { is_active: !project.is_active });
+      showToast(`Project is now ${!project.is_active ? "Active" : "Archived"}`, "success");
+      onRefresh();
+    } catch { showToast("Status change failed.", "error"); } finally { setActing(false); }
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }} disabled={acting}
+        className="w-7 h-7 rounded-lg flex items-center justify-center text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-colors">
+        <MoreVertical size={13} />
+      </button>
+      {open && (
+        <div className="absolute z-[1000] right-0 bottom-8 w-48 rounded-2xl border border-theme-border bg-theme-surface shadow-2xl p-1.5 animate-in zoom-in-95 duration-150">
+          <button onClick={() => { onEdit(); setOpen(false); }}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all">
+            <Edit2 size={12} className="text-amber-500" /> Edit
+          </button>
+          <button onClick={toggleStatus}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all">
+            <Clock size={12} className="text-sky-500" /> {project.is_active ? "Archive" : "Activate"}
+          </button>
+          <button onClick={() => { onOversight(project); setOpen(false); }}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all">
+            <ShieldCheck size={12} className="text-emerald-500" /> Tracking Matrix
+          </button>
+          <div className="my-1 h-px bg-theme-border/50" />
+          <button onClick={() => { setDeleteConfirm(project); setOpen(false); }}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-500/10 transition-all">
+            <Trash2 size={12} /> Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 3-Dot Context Menu (kept for backward compat) ─────────────────────────────
+function RowMenu({ project, onRefresh, onEdit, isLast, setDeleteConfirm, onOversight }: {
+  project: Project;
+  onRefresh: () => void;
+  onEdit: () => void;
+  isLast?: boolean;
   setDeleteConfirm: (p: Project) => void;
   onOversight: (p: Project) => void;
 }) {
@@ -352,6 +417,8 @@ export default function AdminProjectsPage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [oversightProject, setOversightProject] = useState<Project | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const { user } = useAuth();
+  const [delegationProject, setDelegationProject] = useState<Project | null>(null);
   
   const [form, setForm] = useState({
     name: "", description: "", budget: "",
@@ -361,6 +428,7 @@ export default function AdminProjectsPage() {
     team_ids: [] as string[],
     budget_id: "",
     department_id: "",
+    manager_id: "",
   });
 
   async function loadData(q?: string) {
@@ -375,20 +443,25 @@ export default function AdminProjectsPage() {
     }
   }
   async function loadMeta() {
-    const [cRes, tRes, eRes, bRes] = await Promise.all([
-      axios.get("/api/config/clients"),
-      supabase.from("teams").select("id, name, type, parent_id"),
-      supabase.from("employees").select("id, name, employee_id").eq("is_active", true),
-      supabase.from("budgets").select("id, budget_number, name, total_amount, actual_spent, status").eq("status", "active").order("name"),
-    ]);
-    setClients(cRes.data.clients || []);
-    setTeams(tRes.data || []);
-    setEmployees(eRes.data || []);
-    setBudgets(bRes.data || []);
+    try {
+      const [cRes, tRes, eRes, bRes] = await Promise.allSettled([
+        axios.get("/api/config/clients"),
+        supabase.from("teams").select("id, name, type, parent_id"),
+        supabase.from("employees").select("id, name, employee_id, role, department, team_id").eq("is_active", true),
+        supabase.from("budgets").select("id, budget_number, name, total_amount, actual_spent, status").eq("status", "active").order("name"),
+      ]);
+      
+      if (cRes.status === 'fulfilled') setClients(cRes.value.data.clients || []);
+      if (tRes.status === 'fulfilled') setTeams(tRes.value.data || []);
+      if (eRes.status === 'fulfilled') setEmployees(eRes.value.data || []);
+      if (bRes.status === 'fulfilled') setBudgets(bRes.value.data || []);
+    } catch (err) {
+      console.warn("Metadata load partial failure:", err);
+    }
   }
 
   useEffect(() => {
-    loadData();
+    loadData().catch(err => console.error("Initial load failed:", err));
     loadMeta();
 
     // REAL-TIME SYNC
@@ -425,6 +498,7 @@ export default function AdminProjectsPage() {
       due_date: dayjs().add(3, "month").format("YYYY-MM-DD"),
       team_ids: [], budget_id: "",
       department_id: "",
+      manager_id: "",
     });
     setShowForm(true);
   }
@@ -438,6 +512,7 @@ export default function AdminProjectsPage() {
       due_date: p.dueDate, team_ids: p.teamIds || [],
       budget_id: p.budget_id || "",
       department_id: p.department_id || "",
+      manager_id: p.manager_id || "",
     });
     setShowForm(true);
   }
@@ -486,246 +561,357 @@ export default function AdminProjectsPage() {
   const activeCount   = projects.filter((p) => p.is_active).length;
   const archivedCount = projects.filter((p) => !p.is_active).length;
   const totalBudget   = projects.reduce((acc, p) => acc + (p.budget || 0), 0);
+  
+  // Filter managers based on department
+  const filteredManagers = employees.filter(emp => {
+    const isManagerRole = emp.role === 'manager' || emp.role === 'super_admin';
+    if (!isManagerRole) return false;
+    
+    if (!form.department_id) return true;
+    
+    const dept = teams.find(t => t.id === form.department_id);
+    if (!dept) return true;
+
+    // Check by direct team_id link or case-insensitive department name
+    return emp.team_id === form.department_id || 
+           emp.department?.toLowerCase() === dept.name?.toLowerCase();
+  });
+
+  // ── phase colour helpers ────────────────────────────────────────
+  const PHASE_GRADIENT: Record<ProjectPhase, string> = {
+    SCOPING:        "from-amber-400 to-orange-500",
+    IMPLEMENTATION: "from-sky-400 to-blue-600",
+    REVIEW:         "from-violet-400 to-purple-600",
+    COMPLETED:      "from-emerald-400 to-teal-600",
+  };
+  const PROJECT_EMOJIS = ["📁","💼","🚀","⚡","🎯","🔧","📊","💡","🏗️","🎨"];
 
   return (
     <DashboardShell
-      title="Projects Management"
-      subtitle="Architect high-performance delivery cycles and manage client accounts."
+      title="Projects"
+      subtitle="Track and deliver client work across your teams."
       actions={
-        <Button variant="primary" size="sm" onClick={handleAdd}>
-            <Folder size={14} className="mr-1.5" /> Initialize Project
-        </Button>
+        <button
+          onClick={handleAdd}
+          className="inline-flex items-center gap-2 rounded-xl bg-theme-primary px-4 py-2 text-sm font-semibold text-theme-surface shadow-sm hover:opacity-90 transition-all"
+        >
+          <Plus size={15} />
+          New Project
+        </button>
       }
     >
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {[
-            { label: "Total Asset Depth", value: total || projects.length, icon: Folder,     color: "text-theme-fg",    bg: "bg-theme-raised" },
-            { label: "Active Cycles",    value: activeCount,           icon: Zap,        color: "text-emerald-500", bg: "bg-emerald-500/10" },
-            { label: "Archived Units",    value: archivedCount,         icon: Clock,      color: "text-rose-500",    bg: "bg-rose-500/10" },
-            { label: "Deployment Value",  value: formatCurrency(totalBudget).split('.')[0], icon: TrendingUp, color: "text-sky-500", bg: "bg-sky-500/10" },
-          ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="page-card flex items-center gap-3">
-              <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
-                <Icon size={16} className={color} />
-              </div>
-              <div>
-                <p className="text-xs text-theme-muted">{label}</p>
-                <p className={cn("text-xl font-bold leading-tight", color)}>{value}</p>
-              </div>
+      {/* ── STAT CARDS ──────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {[
+          { label: "Total Projects", value: total || projects.length, icon: Folder,     color: "text-theme-primary", bg: "bg-theme-primary/10" },
+          { label: "Active",         value: activeCount,              icon: Zap,         color: "text-emerald-500",  bg: "bg-emerald-500/10"  },
+          { label: "Archived",       value: archivedCount,            icon: Clock,       color: "text-rose-500",     bg: "bg-rose-500/10"     },
+          { label: "Total Budget",   value: formatCurrency(totalBudget).split('.')[0], icon: TrendingUp, color: "text-sky-500", bg: "bg-sky-500/10" },
+        ].map(({ label, value, icon: Icon, color, bg }) => (
+          <div key={label} className="page-card flex items-center gap-3">
+            <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
+              <Icon size={16} className={color} />
             </div>
+            <div>
+              <p className="text-xs text-theme-muted">{label}</p>
+              <p className={cn("text-xl font-bold leading-tight", color)}>{value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── TOOLBAR ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-1">
+          {([
+            { id: "all",      label: "All",      count: projects.length },
+            { id: "active",   label: "Active",   count: activeCount },
+            { id: "archived", label: "Archived", count: archivedCount },
+          ] as { id: "all" | "active" | "archived"; label: string; count: number }[]).map((t) => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={cn(
+                "rounded-lg px-4 py-1.5 text-xs font-semibold transition-all",
+                activeTab === t.id ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
+              )}>
+              {t.label}
+              <span className="ml-1.5 rounded-md bg-theme-page px-1.5 py-0.5 text-[10px] font-bold text-theme-muted">{t.count}</span>
+            </button>
           ))}
         </div>
 
-        <div className="page-card p-0 shadow-xl border-theme-border/50 overflow-hidden">
-          <div className="flex flex-col gap-4 border-b border-theme-border/50 px-8 py-6 sm:flex-row sm:items-center sm:justify-between bg-theme-raised/5">
-            <div className="flex rounded-2xl border border-theme-border bg-theme-raised p-1 gap-1">
-              {([
-                { id: "all",      label: "All Records", count: projects.length },
-                { id: "active",   label: "Active",      count: activeCount },
-                { id: "archived", label: "Archived",    count: archivedCount },
-              ] as { id: "all" | "active" | "archived"; label: string; count: number }[]).map((t) => (
-                <button key={t.id} onClick={() => setActiveTab(t.id)}
-                  className={cn("rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
-                    activeTab === t.id ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
-                  )}>
-                  {t.label} <span className="ml-1 opacity-40">({t.count})</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-theme-muted" size={14} />
-              <input type="text" placeholder="Search project clusters..." value={search}
-                onChange={(e) => { setSearch(e.target.value); loadData(e.target.value); }}
-                className="h-10 w-72 rounded-lg border border-theme-border bg-theme-page pl-10 pr-4 text-xs text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
-            </div>
-          </div>
-
-          {!loading && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
-                    <th className="px-5 py-3">Project Asset</th>
-                    <th className="px-5 py-3">Client Entity</th>
-                    <th className="px-5 py-3">Financial Weight</th>
-                    <th className="px-5 py-3">Operational Support</th>
-                    <th className="px-5 py-3 text-center">Status Matrix</th>
-                    <th className="px-5 py-3 text-right">Action Matrix</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-theme-border/30">
-                  {filteredProjects.map((p, idx) => {
-                    const phase = PHASE_CONFIG[p.phase];
-                    const PhaseIcon = phase.icon;
-                    return (
-                      <tr key={p.id} className="group hover:bg-theme-raised/30 transition-all duration-300 cursor-pointer" onClick={() => setSelectedProject(p)}>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-theme-primary/10 text-theme-primary text-xs font-bold border border-theme-primary/20 shadow-sm"><Folder size={14} /></div>
-                            <div>
-                              <p className="text-xs font-semibold text-theme-fg">{p.name}</p>
-                              <p className="text-[10px] text-theme-muted font-normal max-w-[180px] truncate">{p.description}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3">
-                           <div className="flex items-center gap-2">
-                             <Building2 size={12} className="text-theme-muted" />
-                             <p className="text-xs font-semibold text-theme-fg">{p.client?.name || "Independent Cluster"}</p>
-                           </div>
-                           <p className="text-[10px] text-theme-muted ml-5 font-normal">Lead: {p.client?.lead_name || 'System'}</p>
-                        </td>
-                        <td className="px-5 py-3">
-                           <p className="text-xs font-bold text-theme-fg">{formatCurrency(p.budget)}</p>
-                           <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted/50 mt-1">CAPEX ALLOCATION</p>
-                        </td>
-                        <td className="px-5 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {p.teams && p.teams.length > 0 ? p.teams.map(t => (
-                                <Badge key={t.id} variant="default" className="text-[9px] px-1.5 py-0 rounded-md bg-theme-raised text-theme-muted border-theme-border/50">
-                                    {t.name}
-                                </Badge>
-                            )) : <span className="text-[10px] text-theme-muted italic">No Teams Assigned</span>}
-                          </div>
-                        </td>
-                        <td className="px-5 py-3 text-center">
-                          <div className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase tracking-tight transition-all", phase.bg, phase.text)}>
-                              <PhaseIcon size={10} /> {phase.label}
-                          </div>
-                          <p className="text-[9px] text-theme-muted mt-1 font-bold">DUE: {formatDate(p.dueDate)}</p>
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                             <button
-                               onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
-                               className="px-3 py-1 text-[10px] font-black uppercase text-theme-primary hover:bg-theme-primary/10 rounded-lg transition-all"
-                             >
-                               Manage Tasks →
-                             </button>
-                             <div onClick={(e) => e.stopPropagation()}>
-                               <RowMenu 
-                                 project={p} 
-                                 onRefresh={() => loadData(search || undefined)} 
-                                 onEdit={() => handleEdit(p)} 
-                                 onOversight={() => setOversightProject(p)}
-                                 isLast={idx >= filteredProjects.length - 2} 
-                                 setDeleteConfirm={setDeleteConfirm} 
-                               />
-                             </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
+          <input
+            type="text"
+            placeholder="Search projects…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); loadData(e.target.value); }}
+            className="h-9 w-64 rounded-xl border border-theme-border bg-theme-raised pl-9 pr-4 text-xs text-theme-fg outline-none focus:border-theme-primary transition-all"
+          />
         </div>
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-          <div className="w-full max-w-2xl rounded-2xl bg-theme-surface shadow-2xl border border-theme-border relative animate-in zoom-in-95 duration-200 overflow-hidden">
-            <div className="flex items-center justify-between border-b border-theme-border bg-theme-surface px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary text-theme-surface shadow-sm">
-                  {editingId ? <Edit2 size={16} /> : <Folder size={16} />}
+      {/* ── CARD GRID ───────────────────────────────────────────────── */}
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[1,2,3,4,5,6].map(i => (
+            <div key={i} className="page-card animate-pulse h-52 rounded-2xl bg-theme-raised" />
+          ))}
+        </div>
+      ) : filteredProjects.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-theme-border py-20 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-theme-raised mb-4">
+            <Folder size={24} className="text-theme-muted" />
+          </div>
+          <p className="text-sm font-semibold text-theme-fg">No projects found</p>
+          <p className="text-xs text-theme-muted mt-1">Create your first project to get started</p>
+          <button
+            onClick={handleAdd}
+            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-theme-primary px-4 py-2 text-xs font-semibold text-theme-surface hover:opacity-90 transition-all"
+          >
+            <Plus size={13} /> New Project
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredProjects.map((p, idx) => {
+            const phase = PHASE_CONFIG[p.phase];
+            const PhaseIcon = phase.icon;
+            const grad = PHASE_GRADIENT[p.phase];
+            const emoji = PROJECT_EMOJIS[idx % PROJECT_EMOJIS.length];
+            const budgetPct = p.budget_data && p.budget_data.total_amount > 0
+              ? Math.min((p.budget_data.actual_spent / p.budget_data.total_amount) * 100, 100)
+              : 0;
+
+            return (
+              <div
+                key={p.id}
+                className="group relative flex flex-col rounded-2xl border border-theme-border bg-theme-surface shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 overflow-hidden cursor-pointer"
+                onClick={() => setSelectedProject(p)}
+              >
+                {/* gradient header */}
+                <div className={cn("relative h-24 bg-gradient-to-br", grad)}>
+                  <div className="absolute inset-0 bg-black/10" />
+                  <div className="absolute bottom-3 left-4 text-3xl">{emoji}</div>
+                  <div className="absolute top-3 right-3">
+                    <div className={cn("inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-bold bg-white/20 text-white backdrop-blur-sm border border-white/30")}>
+                      <PhaseIcon size={9} /> {phase.label}
+                    </div>
+                  </div>
+                  {!p.is_active && (
+                    <div className="absolute top-3 left-3 rounded-lg bg-black/30 px-2 py-0.5 text-[10px] font-bold text-white/80 backdrop-blur-sm">
+                      Archived
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-theme-fg">{editingId ? "Modify Project Unit" : "Initialize Project Cluster"}</h3>
-                  <p className="text-xs text-theme-muted mt-0.5">Enterprise Operations Registry</p>
+
+                {/* body */}
+                <div className="flex flex-1 flex-col gap-3 p-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-theme-fg line-clamp-1">{p.name}</h3>
+                    {p.description && (
+                      <p className="text-xs text-theme-muted mt-0.5 line-clamp-2">{p.description}</p>
+                    )}
+                  </div>
+
+                  {/* client + due */}
+                  <div className="flex items-center justify-between text-xs text-theme-muted">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 size={11} />
+                      <span className="font-medium text-theme-fg/80 truncate max-w-[110px]">
+                        {p.client?.name || "No client"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <CalendarDays size={11} />
+                      <span>{formatDate(p.dueDate)}</span>
+                    </div>
+                  </div>
+
+                  {/* budget bar */}
+                  {p.budget > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] text-theme-muted">
+                        <span className="font-semibold">Budget</span>
+                        <span className="font-bold text-theme-fg">{formatCurrency(p.budget).split('.')[0]}</span>
+                      </div>
+                      {p.budget_data && (
+                        <>
+                          <div className="h-1 w-full rounded-full bg-theme-raised overflow-hidden">
+                            <div
+                              className={cn("h-full rounded-full transition-all", budgetPct >= 100 ? "bg-rose-500" : budgetPct >= 80 ? "bg-amber-500" : "bg-emerald-500")}
+                              style={{ width: `${budgetPct}%` }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-theme-muted">{budgetPct.toFixed(0)}% used</p>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* teams */}
+                  {p.teams && p.teams.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {p.teams.slice(0, 3).map(t => (
+                        <span key={t.id} className="rounded-md bg-theme-raised px-2 py-0.5 text-[10px] font-medium text-theme-muted border border-theme-border/50">
+                          {t.name}
+                        </span>
+                      ))}
+                      {p.teams.length > 3 && (
+                        <span className="rounded-md bg-theme-raised px-2 py-0.5 text-[10px] font-medium text-theme-muted border border-theme-border/50">
+                          +{p.teams.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* hover action bar */}
+                <div className="absolute inset-x-0 bottom-0 translate-y-full group-hover:translate-y-0 transition-transform duration-200 flex items-center gap-2 bg-theme-surface/95 backdrop-blur-sm border-t border-theme-border px-4 py-3">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
+                    className="flex-1 rounded-lg bg-theme-primary px-3 py-1.5 text-xs font-semibold text-theme-surface hover:opacity-90 transition-all text-center"
+                  >
+                    Open Board
+                  </button>
+                  {(user?.role === 'manager' || user?.role === 'super_admin') && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDelegationProject(p); }}
+                      className="flex-1 rounded-lg border border-theme-border px-3 py-1.5 text-xs font-semibold text-theme-fg hover:bg-theme-raised transition-all text-center"
+                    >
+                      Delegate
+                    </button>
+                  )}
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <CardMenu
+                      project={p}
+                      onRefresh={() => loadData(search || undefined)}
+                      onEdit={() => handleEdit(p)}
+                      onOversight={() => setOversightProject(p)}
+                      setDeleteConfirm={setDeleteConfirm}
+                    />
+                  </div>
                 </div>
               </div>
-              <button onClick={() => setShowForm(false)} className="rounded-lg p-2 text-theme-muted hover:bg-theme-raised transition-all">
-                <X size={18} />
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── NEW / EDIT PROJECT MODAL ─────────────────────────────── */}
+      {showForm && (
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl rounded-2xl bg-theme-surface shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* modal header */}
+            <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-theme-primary/10 text-theme-primary">
+                  {editingId ? <Edit2 size={16} /> : <Plus size={16} />}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-theme-fg">{editingId ? "Edit project" : "New project"}</h3>
+                  <p className="text-xs text-theme-muted">{editingId ? "Update project details" : "Add a project to your workspace"}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowForm(false)} className="rounded-lg p-1.5 text-theme-muted hover:bg-theme-raised transition-all">
+                <X size={16} />
               </button>
             </div>
 
             <div className="p-6">
-              <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto px-1 pr-3 custom-scrollbar">
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  <div className="sm:col-span-2 space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Project Identification Name</label>
+              <form onSubmit={handleSubmit} className="space-y-5 max-h-[72vh] overflow-y-auto pr-1 custom-scrollbar">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <label className="text-xs font-semibold text-theme-muted">Project name</label>
                     <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="e.g. Titan Server Migration Layer-4"
-                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      placeholder="e.g. Website Redesign Q3"
+                      className="h-9 w-full rounded-xl border border-theme-border bg-theme-raised px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all" />
                   </div>
-                  
-                  <div className="sm:col-span-2 space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Operational Scope (Description)</label>
+
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <label className="text-xs font-semibold text-theme-muted">Description</label>
                     <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                      placeholder="Define the structural goals and boundaries..."
-                      className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm resize-none" />
+                      placeholder="What is this project about?"
+                      className="w-full rounded-xl border border-theme-border bg-theme-raised px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all resize-none" />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Financial Allocation (Budget)</label>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-theme-muted">Budget (₹)</label>
                     <input type="number" required value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })}
-                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      placeholder="0"
+                      className="h-9 w-full rounded-xl border border-theme-border bg-theme-raised px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all" />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Project Cycle Start (Issue Date)</label>
-                    <DatePicker value={form.issued_date} onChange={(d) => setForm({ ...form, issued_date: d })} label="" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Temporal Milestone (Due Date)</label>
-                    <DatePicker value={form.due_date} onChange={(d) => setForm({ ...form, due_date: d })} label="" />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Client Account Entity</label>
-                    <CustomSelect 
-                      icon={<Building size={14} className="text-theme-primary" />}
-                      placeholder="Select Client..."
-                      value={form.client_id} 
-                      onChange={(v) => setForm({...form, client_id: v})} 
-                      options={clients.map(c => ({ label: c.name, value: c.id }))}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Project Lifecycle Phase</label>
-                    <CustomSelect 
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-theme-muted">Phase</label>
+                    <CustomSelect
                       icon={<Zap size={14} className="text-theme-primary" />}
-                      placeholder="Select Phase..."
-                      value={form.phase} 
-                      onChange={(v) => setForm({...form, phase: v as ProjectPhase})} 
+                      placeholder="Select phase…"
+                      value={form.phase}
+                      onChange={(v) => setForm({ ...form, phase: v as ProjectPhase })}
                       options={Object.entries(PHASE_CONFIG).map(([v, l]) => ({ label: l.label, value: v }))}
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Target Department (Manager Level)</label>
-                    <CustomSelect 
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-theme-muted">Start date</label>
+                    <DatePicker value={form.issued_date} onChange={(d) => setForm({ ...form, issued_date: d })} label="" />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-theme-muted">Due date</label>
+                    <DatePicker value={form.due_date} onChange={(d) => setForm({ ...form, due_date: d })} label="" />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-theme-muted">Client</label>
+                    <CustomSelect
+                      icon={<Building size={14} className="text-theme-primary" />}
+                      placeholder="Select client…"
+                      value={form.client_id}
+                      onChange={(v) => setForm({ ...form, client_id: v })}
+                      options={clients.map(c => ({ label: c.name, value: c.id }))}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-theme-muted">Department</label>
+                    <CustomSelect
                       icon={<Building2 size={14} className="text-amber-500" />}
-                      placeholder="Select Department..."
-                      value={form.department_id} 
-                      onChange={(v) => setForm({...form, department_id: v})} 
+                      placeholder="Select department…"
+                      value={form.department_id}
+                      onChange={(v) => setForm({ ...form, department_id: v, manager_id: "" })}
                       options={teams.filter(t => t.type === 'department').map(d => ({ label: d.name, value: d.id }))}
                     />
                   </div>
 
-                  <div className="sm:col-span-2 space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-primary">Operational Units (Team Assignment)</label>
-                    <MultiSelect
-                        icon={<LayoutGrid size={14} className="text-theme-primary" />}
-                        placeholder="Assign Teams to Cluster..."
-                        value={form.team_ids}
-                        onChange={(v) => setForm({...form, team_ids: v})}
-                        options={teams.filter(t => t.type === 'team' && (!form.department_id || t.parent_id === form.department_id)).map(t => ({ label: t.name, value: t.id }))}
-                        label="Assigned Teams"
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-theme-muted">Project manager</label>
+                    <CustomSelect
+                      icon={<User size={14} className="text-sky-500" />}
+                      placeholder="Assign a manager…"
+                      value={form.manager_id}
+                      onChange={(v) => setForm({ ...form, manager_id: v })}
+                      options={filteredManagers.map(m => ({ label: m.name, value: m.id }))}
                     />
                   </div>
 
-                  <div className="sm:col-span-2 space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">
-                      <IndianRupee size={13} className="text-emerald-500" />
-                      Link to Budget (optional)
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <label className="text-xs font-semibold text-theme-primary">Teams</label>
+                    <MultiSelect
+                      icon={<LayoutGrid size={14} className="text-theme-primary" />}
+                      placeholder="Assign teams…"
+                      value={form.team_ids}
+                      onChange={(v) => setForm({ ...form, team_ids: v })}
+                      options={teams.filter(t => t.type === 'team' && (!form.department_id || t.parent_id === form.department_id)).map(t => ({ label: t.name, value: t.id }))}
+                      label="Assigned teams"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-theme-muted">
+                      <IndianRupee size={12} className="text-emerald-500" /> Link to budget (optional)
                     </label>
                     <CustomSelect
                       icon={<IndianRupee size={14} className="text-emerald-500" />}
@@ -749,17 +935,12 @@ export default function AdminProjectsPage() {
                         <div className="rounded-xl border border-theme-border bg-theme-raised p-3 space-y-1.5">
                           <div className="flex items-center justify-between text-[10px] font-semibold">
                             <span className="text-theme-muted">Current utilisation</span>
-                            <span className={isOver ? "text-red-500 font-bold" : "text-emerald-600 font-bold"}>
-                              {isOver ? "OVER BUDGET" : `${pct.toFixed(0)}%`}
-                            </span>
+                            <span className={isOver ? "text-red-500" : "text-emerald-600"}>{isOver ? "OVER BUDGET" : `${pct.toFixed(0)}%`}</span>
                           </div>
                           <div className="h-1.5 w-full rounded-full bg-theme-page overflow-hidden">
-                            <div
-                              className={cn("h-full rounded-full transition-all", isOver ? "bg-red-500" : pct >= 85 ? "bg-amber-500" : "bg-emerald-500")}
-                              style={{ width: `${pct}%` }}
-                            />
+                            <div className={cn("h-full rounded-full", isOver ? "bg-red-500" : pct >= 85 ? "bg-amber-500" : "bg-emerald-500")} style={{ width: `${pct}%` }} />
                           </div>
-                          <div className="flex justify-between text-[10px] text-theme-subtle">
+                          <div className="flex justify-between text-[10px] text-theme-muted">
                             <span>Spent: ₹{(b.actual_spent / 1000).toFixed(1)}K</span>
                             <span>Total: ₹{(b.total_amount / 1000).toFixed(1)}K</span>
                           </div>
@@ -769,10 +950,10 @@ export default function AdminProjectsPage() {
                   </div>
                 </div>
 
-                <div className="bg-theme-surface flex justify-end gap-3 border-t border-theme-border pt-4 mt-6">
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setShowForm(false)} className="px-6">Cancel</Button>
-                  <Button type="submit" size="sm" loading={submitting} className="px-6">
-                    {editingId ? "Sync Updates" : "Initialize Asset"}
+                <div className="flex justify-end gap-2 border-t border-theme-border pt-4">
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
+                  <Button type="submit" size="sm" loading={submitting}>
+                    {editingId ? "Save changes" : "Create project"}
                   </Button>
                 </div>
               </form>
@@ -781,43 +962,50 @@ export default function AdminProjectsPage() {
         </div>
       )}
 
-      {/* DELETE CONFIRMATION TOAST (PILL DESIGN) */}
+      {/* ── DELETE CONFIRM ──────────────────────────────────────── */}
       {deleteConfirm && (
-        <div className="fixed inset-x-0 top-8 z-[9000] flex justify-center px-4 animate-in slide-in-from-top-8 duration-300">
-           <div className="flex items-center gap-6 bg-theme-surface px-6 py-4 shadow-xl rounded-2xl border border-theme-border min-w-[400px]">
-              <div className="flex items-center gap-4">
-                 <div className="h-10 w-10 flex items-center justify-center bg-rose-500/10 text-rose-500 rounded-xl">
-                    <Trash2 size={20} />
-                 </div>
-                 <div className="flex flex-col">
-                    <p className="text-sm font-semibold text-theme-fg tracking-tight">Decommission <span className="text-rose-500 font-bold">"{deleteConfirm.name}"</span>?</p>
-                    <p className="text-xs text-theme-muted mt-0.5">Physical records will be permanently purged.</p>
-                 </div>
-              </div>
-              
-              <div className="flex items-center gap-3 ml-auto">
-                 <Button onClick={() => setDeleteConfirm(null)} disabled={submitting} variant="secondary" size="sm" className="px-4">
-                   Cancel
-                 </Button>
-                 <Button onClick={handleDelete} disabled={submitting} variant="primary" size="sm" className="bg-rose-600 hover:bg-rose-700 text-white px-5 border-rose-600">
-                   {submitting ? "Purging..." : "Confirm Purge"}
-                 </Button>
-              </div>
-           </div>
+        <div className="fixed inset-x-0 top-6 z-[9000] flex justify-center px-4 animate-in slide-in-from-top-4 duration-200">
+          <div className="flex items-center gap-5 rounded-2xl border border-theme-border bg-theme-surface px-6 py-4 shadow-2xl min-w-[380px]">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-500">
+              <Trash2 size={18} />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-theme-fg">Delete <span className="text-rose-500">"{deleteConfirm.name}"</span>?</p>
+              <p className="text-xs text-theme-muted mt-0.5">This action cannot be undone.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setDeleteConfirm(null)} disabled={submitting} variant="secondary" size="sm">Cancel</Button>
+              <Button onClick={handleDelete} disabled={submitting} variant="primary" size="sm" className="bg-rose-600 hover:bg-rose-700 border-rose-600">
+                {submitting ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* PROJECT TASKS DRAWER (NOTION STYLE) */}
-      <ProjectTasksDrawer 
-        project={selectedProject} 
-        onClose={() => setSelectedProject(null)} 
+      {/* ── DELEGATION MODAL ─────────────────────────────────── */}
+      {delegationProject && (
+        <DelegationModal
+          project={delegationProject}
+          teams={teams}
+          employees={employees}
+          onClose={() => setDelegationProject(null)}
+          onSuccess={() => { setDelegationProject(null); loadData(search || undefined); }}
+        />
+      )}
+
+      {/* ── TASKS DRAWER ─────────────────────────────────────── */}
+      <ProjectTasksDrawer
+        project={selectedProject}
+        onClose={() => setSelectedProject(null)}
         employees={employees}
       />
 
+      {/* ── OVERSIGHT MODAL ──────────────────────────────────── */}
       {oversightProject && (
-        <OversightModal 
-          project={oversightProject} 
-          onClose={() => setOversightProject(null)} 
+        <OversightModal
+          project={oversightProject}
+          onClose={() => setOversightProject(null)}
           teams={teams}
         />
       )}
@@ -1642,196 +1830,86 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
 }
 
 // ── Tracking Matrix Modal ──────────────────────────────────
+import { OversightMatrix } from "@/components/projects/OversightMatrix";
+
+// ... later in the file ...
+
 function OversightModal({ project, onClose, teams }: { project: Project; onClose: () => void; teams: Team[] }) {
-  const [loading, setLoading] = useState(true);
-  const [tasks, setTasks] = useState<any[]>([]);
-  const department = teams.find(t => t.id === project.department_id);
-
   useEffect(() => {
-    async function loadOversight() {
-      const { data, error } = await supabase
-        .from("project_tasks")
-        .select(`
-          *,
-          assignee:employees(id, name, role)
-        `)
-        .eq("project_id", project.id);
-      
-      if (!error) setTasks(data || []);
-      setLoading(false);
-    }
-    loadOversight();
-  }, [project.id]);
-
-  const projectTeams = teams.filter(t => project.teamIds?.includes(t.id));
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
-      <div className="w-full max-w-5xl h-[85vh] rounded-3xl bg-theme-surface shadow-2xl border border-theme-border flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-lg rounded-2xl bg-theme-surface shadow-2xl border border-theme-border flex flex-col overflow-hidden animate-in zoom-in-95 duration-200" style={{ maxHeight: "90vh" }}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-theme-border bg-theme-raised/30 px-8 py-5">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500 text-theme-surface shadow-lg shadow-emerald-500/20">
-              <ShieldCheck size={24} />
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-theme-border px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm">
+              <ShieldCheck size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-black text-theme-fg tracking-tight">Oversight Matrix</h3>
-              <p className="text-xs text-theme-muted font-bold uppercase tracking-widest flex items-center gap-2">
-                {project.name} <ChevronRight size={12} /> {department?.name || "Global Assignment"}
+              <h3 className="text-sm font-bold text-theme-fg">Project Health</h3>
+              <p className="text-xs text-theme-muted flex items-center gap-1">
+                {project.name} <ChevronRight size={11} /> 4-layer tracking
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-xl p-2.5 text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-all">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-theme-muted border border-theme-border rounded-md px-2 py-0.5">ESC</span>
+            <button onClick={onClose} className="rounded-lg p-1.5 text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-all">
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-          {loading ? (
-            <div className="flex flex-col h-full items-center justify-center gap-4 text-theme-muted">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-theme-primary border-t-transparent" />
-              <p className="text-sm font-bold animate-pulse">Synchronizing Node Data...</p>
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar space-y-4">
+          {/* Tier cards */}
+          <OversightMatrix project={project} />
+
+          {/* How it works */}
+          <div className="rounded-2xl border border-theme-border bg-theme-raised/40 p-4 space-y-2.5">
+            <p className="text-xs font-semibold text-theme-muted">How tracking works</p>
+            <div className="flex items-start gap-2">
+              <div className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-theme-primary" />
+              <p className="text-xs text-theme-fg">Progress flows through 4 levels: Admin → Manager → Team Lead → Employee</p>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              {/* Left Column: Team Breakdown */}
-              <div className="lg:col-span-8 space-y-8">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-theme-muted flex items-center gap-2">
-                    <Users size={14} className="text-theme-primary" /> Operational Hierarchy
-                  </h4>
-                  <div className="text-[10px] font-bold px-2 py-1 rounded-lg bg-theme-raised border border-theme-border">
-                    {projectTeams.length} Active Units
-                  </div>
-                </div>
+            <div className="flex items-start gap-2">
+              <div className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-500" />
+              <p className="text-xs text-theme-fg">Status updates in real time as tasks move through each level.</p>
+            </div>
+          </div>
 
-                <div className="space-y-6">
-                  {projectTeams.length > 0 ? projectTeams.map(team => {
-                    const teamTasks = tasks.filter(t => t.assignee?.id && /* logic to check if assignee is in team */ true); 
-                    // Note: for now showing all project tasks under each team if assigned to anyone
-                    // In a real app we'd filter by team membership
-                    
-                    return (
-                      <div key={team.id} className="rounded-2xl border border-theme-border bg-theme-raised/40 p-6 space-y-4 hover:border-theme-primary/30 transition-all">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-xl bg-theme-surface border border-theme-border flex items-center justify-center">
-                              <LayoutGrid size={18} className="text-theme-primary" />
-                            </div>
-                            <div>
-                              <h5 className="text-sm font-black text-theme-fg">{team.name}</h5>
-                              <p className="text-[10px] text-theme-muted font-bold flex items-center gap-1.5">
-                                <User size={10} /> Lead Assigned
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-[10px] font-black text-theme-primary bg-theme-primary/10 px-2.5 py-1 rounded-lg uppercase">Team Status</span>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {tasks.length > 0 ? tasks.map(task => (
-                            <div key={task.id} className="bg-theme-surface rounded-xl border border-theme-border p-4 shadow-sm hover:shadow-md transition-all">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className={cn(
-                                  "text-[9px] font-black uppercase px-2 py-0.5 rounded-md",
-                                  task.status === 'COMPLETED' ? "bg-emerald-500/10 text-emerald-600" :
-                                  task.status === 'SUBMITTED' ? "bg-amber-500/10 text-amber-600" :
-                                  "bg-blue-500/10 text-blue-600"
-                                )}>
-                                  {task.status}
-                                </span>
-                                <span className="text-[10px] text-theme-muted font-bold">
-                                  {task.priority}
-                                </span>
-                              </div>
-                              <h6 className="text-xs font-bold text-theme-fg truncate">{task.title}</h6>
-                              <div className="mt-3 flex items-center justify-between border-t border-theme-border/50 pt-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="h-6 w-6 rounded-full bg-theme-primary/20 flex items-center justify-center text-[8px] font-black">
-                                    {task.assignee?.name?.charAt(0)}
-                                  </div>
-                                  <span className="text-[10px] font-bold text-theme-muted">{task.assignee?.name || "Unassigned"}</span>
-                                </div>
-                                {task.submission_url && (
-                                  <button className="text-[10px] font-black text-theme-primary hover:underline">View Work</button>
-                                )}
-                              </div>
-                            </div>
-                          )) : (
-                            <div className="col-span-2 text-center py-6 border-2 border-dashed border-theme-border rounded-xl">
-                              <p className="text-xs text-theme-muted font-bold italic">No tasks delegated to this unit yet.</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }) : (
-                    <div className="text-center py-12 bg-theme-raised/40 rounded-3xl border-2 border-dashed border-theme-border">
-                      <p className="text-sm text-theme-muted font-bold">No organizational units assigned to this project.</p>
-                    </div>
-                  )}
-                </div>
+          {/* Project summary */}
+          <div className="rounded-2xl border border-theme-border bg-theme-primary/5 p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-theme-fg">Project Summary</p>
+              <p className="text-xs text-theme-muted mt-0.5">Overall progress and current status</p>
+            </div>
+            <div className="flex items-center gap-5 flex-shrink-0">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-theme-fg">{project.progress ?? 0}%</p>
+                <p className="text-[10px] text-theme-muted">Progress</p>
               </div>
-
-              {/* Right Column: Key Metrics & Timeline */}
-              <div className="lg:col-span-4 space-y-6">
-                 <div className="rounded-2xl border border-theme-border bg-theme-primary/5 p-6 space-y-4">
-                    <h4 className="text-xs font-black uppercase tracking-widest text-theme-muted">Health Matrix</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between text-xs font-bold mb-2">
-                          <span className="text-theme-fg">Completion progress</span>
-                          <span className="text-theme-primary">{project.progress}%</span>
-                        </div>
-                        <div className="h-2 w-full bg-theme-border rounded-full overflow-hidden">
-                          <div className="h-full bg-theme-primary rounded-full transition-all duration-500" style={{ width: `${project.progress}%` }} />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-theme-surface border border-theme-border rounded-xl p-3 text-center">
-                          <p className="text-[9px] font-black text-theme-muted uppercase">Open Tasks</p>
-                          <p className="text-lg font-black text-theme-fg">{tasks.filter(t => t.status !== 'COMPLETED').length}</p>
-                        </div>
-                        <div className="bg-theme-surface border border-theme-border rounded-xl p-3 text-center">
-                          <p className="text-[9px] font-black text-theme-muted uppercase">Pending Reviews</p>
-                          <p className="text-lg font-black text-amber-500">{tasks.filter(t => t.status === 'SUBMITTED').length}</p>
-                        </div>
-                      </div>
-                    </div>
-                 </div>
-
-                 <div className="rounded-2xl border border-theme-border bg-theme-raised/40 p-6 space-y-4">
-                    <h4 className="text-xs font-black uppercase tracking-widest text-theme-muted">Node Intelligence</h4>
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-1 h-2 w-2 rounded-full bg-blue-500" />
-                        <p className="text-[11px] leading-relaxed text-theme-fg">
-                          Project initiated by <strong>Admin Registry</strong> on {dayjs(project.issued_date).format("MMM DD, YYYY")}
-                        </p>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-1 h-2 w-2 rounded-full bg-emerald-500" />
-                        <p className="text-[11px] leading-relaxed text-theme-fg">
-                          Flowing through <strong>{department?.name || "General"}</strong> department for operational oversight.
-                        </p>
-                      </div>
-                      {tasks.length > 0 && (
-                        <div className="flex items-start gap-3">
-                          <div className="mt-1 h-2 w-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-                          <p className="text-[11px] leading-relaxed text-theme-fg">
-                            {tasks.filter(t => t.status === 'SUBMITTED').length} submissions awaiting backward approval from team leads.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                 </div>
+              <div className="h-10 w-px bg-theme-border" />
+              <div className="text-center">
+                <p className={cn("text-lg font-bold", project.is_active ? "text-emerald-500" : "text-rose-500")}>
+                  {project.is_active ? "Active" : "Stopped"}
+                </p>
+                <p className="text-[10px] text-theme-muted">Status</p>
               </div>
             </div>
-          )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 flex justify-end border-t border-theme-border px-5 py-3">
+          <button onClick={onClose} className="rounded-xl border border-theme-border px-4 py-2 text-xs font-semibold text-theme-fg hover:bg-theme-raised transition-all">
+            Close
+          </button>
         </div>
       </div>
     </div>

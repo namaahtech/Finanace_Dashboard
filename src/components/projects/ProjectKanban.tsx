@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
 import { cn } from "@/lib/utils";
-import { GripHorizontal, Calendar, User, AlertCircle, CheckCircle2, X, Send, ShieldCheck, MessageSquare, ExternalLink } from "lucide-react";
+import { GripHorizontal, Calendar, User, AlertCircle, CheckCircle2, X, Send, ShieldCheck, MessageSquare, ExternalLink, Clock, Plus, ListTodo } from "lucide-react";
 import dayjs from "dayjs";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useToast } from "@/components/ui/Toast";
@@ -23,6 +23,10 @@ interface Task {
   due_date?: string;
   estimated_hours?: number;
   spent_hours?: number;
+  task_type?: "strategic" | "operational";
+  last_updated_by?: { name: string };
+  updated_at: string;
+  project_id: string;
 }
 
 interface KanbanProps {
@@ -55,7 +59,8 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
   });
   const [submittingTask, setSubmittingTask] = useState<Task | null>(null);
   const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
-  const { user } = useAuth(); // Assume we have useAuth or similar
+  const [breakingTask, setBreakingTask] = useState<Task | null>(null);
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
   const [dragSource, setDragSource] = useState<string | null>(null);
@@ -77,7 +82,11 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
           submission_notes,
           submission_url,
           review_feedback,
-          assignee:employees!assigned_to(id, name)
+          task_type,
+          updated_at,
+          project_id,
+          assignee:employees!assigned_to(id, name),
+          last_updated_by_emp:employees!last_updated_by(name)
         `)
         .eq("project_id", projectId)
         .order("updated_at", { ascending: false });
@@ -93,7 +102,11 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
       };
 
       data?.forEach((task: any) => {
-        grouped[task.status].push(task);
+        const t: Task = {
+          ...task,
+          last_updated_by: task.last_updated_by_emp
+        };
+        grouped[task.status].push(t);
       });
 
       setTasks(grouped);
@@ -142,16 +155,28 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
     if (!draggedTask || !dragSource || dragSource === targetStatus) return;
 
     try {
-      // Update task status in API
-      await axios.put(`/api/tasks/${draggedTask.id}/status`, {
-        status: targetStatus,
-      });
+      // Update task status and audit info
+      const { error } = await supabase
+        .from("project_tasks")
+        .update({
+          status: targetStatus,
+          last_updated_by: user?.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", draggedTask.id);
+
+      if (error) throw error;
 
       // Update local state optimistically
       const updatedTasks = { ...tasks };
       updatedTasks[dragSource] = updatedTasks[dragSource].filter((t) => t.id !== draggedTask.id);
       updatedTasks[targetStatus as keyof typeof tasks] = [
-        { ...draggedTask, status: targetStatus as any },
+        { 
+          ...draggedTask, 
+          status: targetStatus as any, 
+          updated_at: new Date().toISOString(),
+          last_updated_by: { name: user?.name || 'Unknown' }
+        },
         ...updatedTasks[targetStatus as keyof typeof tasks],
       ];
       setTasks(updatedTasks);
@@ -200,62 +225,108 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
                 key={task.id}
                 draggable
                 onDragStart={() => handleDragStart(task, status)}
-                className="group p-3 rounded-xl bg-theme-surface border border-theme-border hover:border-theme-primary/40 hover:shadow-md transition-all cursor-grab active:cursor-grabbing"
+                className={cn(
+                  "group p-4 rounded-2xl bg-theme-surface border border-theme-border/60 hover:border-theme-primary/40 hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] transition-all cursor-grab active:cursor-grabbing relative overflow-hidden",
+                  task.task_type === 'strategic' && "ring-1 ring-theme-primary/30 bg-theme-primary/[0.02]"
+                )}
               >
+                {/* Visual Accent */}
+                <div className={cn("absolute top-0 left-0 w-1 h-full", 
+                    task.task_type === 'strategic' ? "bg-theme-primary" :
+                    task.priority === 'Critical' ? "bg-red-500" :
+                    task.priority === 'High' ? "bg-amber-500" :
+                    "bg-theme-border"
+                )} />
+
                 {/* Task Header */}
                 <div className="flex items-start gap-2 mb-2">
-                  <GripHorizontal size={14} className="text-theme-muted opacity-0 group-hover:opacity-100 flex-shrink-0 mt-0.5" />
-                  <h4 className="text-xs font-semibold text-theme-fg flex-1 leading-snug">{task.title}</h4>
+                  <div className="flex-1">
+                    {task.task_type === 'strategic' && (
+                      <span className="text-[8px] font-black uppercase text-theme-primary bg-theme-primary/10 px-1.5 py-0.5 rounded-md mb-1.5 inline-block tracking-tighter">Strategic Goal</span>
+                    )}
+                    <h4 className="text-xs font-black text-theme-fg leading-snug tracking-tight group-hover:text-theme-primary transition-colors">{task.title}</h4>
+                  </div>
+                  <GripHorizontal size={14} className="text-theme-muted opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
 
-                {/* Priority Badge */}
-                <div className="mb-2">
-                  <span className={cn("text-[10px] font-bold uppercase tracking-wide", priorityConfig[task.priority])}>
+                {/* Task Meta Row */}
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span className={cn("text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-theme-raised", priorityConfig[task.priority])}>
                     {task.priority}
                   </span>
-                </div>
-
-                {/* Task Meta */}
-                <div className="space-y-1.5">
-                  {task.assignee && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-theme-muted">
-                      <User size={12} />
-                      <span>{task.assignee.name}</span>
-                    </div>
-                  )}
-
                   {task.due_date && (
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      <Calendar size={12} />
-                      <span className={dayjs(task.due_date).isBefore(dayjs()) ? "text-red-600" : "text-theme-muted"}>
+                    <div className="flex items-center gap-1 text-[8px] font-bold text-theme-muted">
+                      <Calendar size={10} />
+                      <span className={dayjs(task.due_date).isBefore(dayjs()) ? "text-red-500" : ""}>
                         {dayjs(task.due_date).format("MMM DD")}
                       </span>
                     </div>
                   )}
+                  {/* Audit Info */}
+                  <div className="flex items-center gap-1 text-[8px] font-bold text-theme-muted italic">
+                    <Clock size={10} />
+                    <span>{dayjs(task.updated_at).format("HH:mm")}</span>
+                  </div>
+                </div>
 
+                {/* Footer with Assignee & Last Updater */}
+                <div className="flex items-center justify-between mt-auto pt-3 border-t border-theme-border/40">
+                  <div className="flex flex-col gap-1">
+                    {task.assignee ? (
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-5 w-5 rounded-full bg-theme-primary/10 flex items-center justify-center text-[7px] font-black text-theme-primary border border-theme-primary/20">
+                          {task.assignee.name.charAt(0)}
+                        </div>
+                        <span className="text-[9px] font-bold text-theme-muted">{task.assignee.name}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[8px] text-theme-subtle italic font-medium">Unassigned</span>
+                    )}
+                    {task.last_updated_by && (
+                      <p className="text-[7px] text-theme-muted font-bold uppercase tracking-tight">
+                        Updated: {task.last_updated_by.name}
+                      </p>
+                    )}
+                  </div>
+                  
                   {task.estimated_hours && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-theme-muted">
-                      <span>⏱️ {task.estimated_hours}h est.</span>
-                      {task.spent_hours && <span className="text-sky-600">({task.spent_hours}h spent)</span>}
-                    </div>
+                    <span className="text-[8px] font-black text-theme-muted uppercase tracking-tighter">
+                      {task.spent_hours || 0} / {task.estimated_hours}H
+                    </span>
                   )}
                 </div>
-                <div className="mt-3 pt-2 border-t border-theme-border/50 flex flex-col gap-2">
-                   {task.status === 'IN_PROGRESS' && task.assignee?.id === user?.id && (
-                      <button 
-                        onClick={() => setSubmittingTask(task)}
-                        className="w-full text-[9px] font-black uppercase text-theme-primary hover:bg-theme-primary/10 py-1.5 rounded-lg border border-theme-primary/20 transition-all"
+
+                {/* Quick Action Overlays */}
+                <div className="mt-3 flex flex-col gap-1.5">
+                   {task.task_type === 'strategic' && (user?.role === 'lead' || user?.role === 'manager' || user?.role === 'super_admin') && (
+                      <Button 
+                        size="xs" 
+                        variant="secondary"
+                        className="w-full text-[9px] font-black uppercase h-7 border-theme-primary/20 text-theme-primary hover:bg-theme-primary/10"
+                        onClick={(e) => { e.stopPropagation(); setBreakingTask(task); }}
                       >
-                        Submit for Review
-                      </button>
+                        Decompose Scope
+                      </Button>
                    )}
-                   {task.status === 'SUBMITTED' && (user?.role === 'ADMIN' || user?.role === 'MANAGER' || user?.role === 'LEAD') && (
-                      <button 
-                        onClick={() => setReviewingTask(task)}
-                        className="w-full text-[9px] font-black uppercase text-amber-600 hover:bg-amber-600/10 py-1.5 rounded-lg border border-amber-600/20 transition-all"
+                   {task.status === 'IN_PROGRESS' && task.assignee?.id === user?.id && (
+                      <Button 
+                        size="xs" 
+                        variant="primary"
+                        className="w-full text-[9px] font-black uppercase h-7 bg-theme-primary hover:bg-theme-primary/90"
+                        onClick={(e) => { e.stopPropagation(); setSubmittingTask(task); }}
                       >
-                        Audit Submission
-                      </button>
+                        Submit Review
+                      </Button>
+                   )}
+                   {task.status === 'SUBMITTED' && (user?.role === 'super_admin' || user?.role === 'manager' || user?.role === 'lead') && (
+                      <Button 
+                        size="xs" 
+                        variant="secondary"
+                        className="w-full text-[9px] font-black uppercase h-7 border-amber-500/20 text-amber-600 hover:bg-amber-500/10"
+                        onClick={(e) => { e.stopPropagation(); setReviewingTask(task); }}
+                      >
+                        Verify Deliverable
+                      </Button>
                    )}
                 </div>
               </div>
@@ -335,6 +406,13 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
         <AuditModal 
           task={reviewingTask} 
           onClose={() => setReviewingTask(null)} 
+          onSuccess={fetchTasks} 
+        />
+      )}
+      {breakingTask && (
+        <BreakdownModal 
+          task={breakingTask} 
+          onClose={() => setBreakingTask(null)} 
           onSuccess={fetchTasks} 
         />
       )}
@@ -522,6 +600,161 @@ function AuditModal({ task, onClose, onSuccess }: { task: Task; onClose: () => v
           </Button>
           <Button size="sm" onClick={() => handleAudit('COMPLETED')} loading={submitting} className="text-[10px] font-black uppercase px-6 bg-emerald-600 hover:bg-emerald-700">
             Approve & Close
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Breakdown Modal (Lead Tier) ──────────────────────────────────
+function BreakdownModal({ task, onClose, onSuccess }: { task: Task; onClose: () => void; onSuccess: () => void }) {
+  const [subtasks, setSubtasks] = useState<{ title: string; assignee_id: string }[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const { showToast } = useToast();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    // Fetch potential assignees (team members)
+    const fetchTeam = async () => {
+      const { data } = await supabase.from('employees').select('id, name, role');
+      setEmployees(data || []);
+    };
+    fetchTeam();
+  }, []);
+
+  const addSubtask = () => {
+    setSubtasks([...subtasks, { title: "", assignee_id: "" }]);
+  };
+
+  const removeSubtask = (index: number) => {
+    setSubtasks(subtasks.filter((_, i) => i !== index));
+  };
+
+  const handleBreakdown = async () => {
+    if (subtasks.length === 0) {
+      showToast("Please add at least one operational task.", "error");
+      return;
+    }
+    if (subtasks.some(s => !s.title || !s.assignee_id)) {
+      showToast("All tasks must have a title and assignee.", "error");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const tasksToInsert = subtasks.map(s => ({
+        project_id: task.project_id,
+        parent_task_id: task.id,
+        title: s.title,
+        status: 'TODO',
+        priority: 'Medium',
+        assigned_to: s.assignee_id,
+        task_type: 'operational',
+        last_updated_by: user?.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabase.from('project_tasks').insert(tasksToInsert);
+      if (error) throw error;
+
+      // Update parent strategic task to show it's being worked on
+      await supabase.from('project_tasks').update({ status: 'IN_PROGRESS', updated_at: new Date().toISOString() }).eq('id', task.id);
+
+      showToast(`Successfully decomposed into ${subtasks.length} tasks`, "success");
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      showToast(err.message || "Breakdown failed", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+      <div className="w-full max-w-2xl rounded-2xl bg-theme-surface shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between border-b border-theme-border bg-theme-surface px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary text-theme-surface shadow-sm">
+              <ListTodo size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-theme-fg uppercase tracking-tight">Decompose Strategic Goal</h3>
+              <p className="text-[10px] text-theme-muted font-bold mt-0.5">Define Operational Units for: {task.title}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-theme-muted hover:bg-theme-raised transition-all">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+          <div className="p-4 rounded-xl bg-theme-raised/50 border border-theme-border border-dashed">
+            <p className="text-[10px] font-black uppercase text-theme-primary tracking-widest mb-2">Goal Description</p>
+            <p className="text-xs font-bold text-theme-muted italic leading-relaxed">{task.description || "No specific scope details provided by manager."}</p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Operational Breakdown</label>
+              <Button size="xs" variant="secondary" onClick={addSubtask} className="h-7 text-[9px] font-black uppercase">
+                <Plus size={12} className="mr-1" /> Add Task
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {subtasks.map((s, i) => (
+                <div key={i} className="flex gap-3 items-start animate-in slide-in-from-top-2 duration-200">
+                  <div className="flex-1 space-y-2">
+                    <input 
+                      placeholder="Operational task title..."
+                      value={s.title}
+                      onChange={(e) => {
+                        const newS = [...subtasks];
+                        newS[i].title = e.target.value;
+                        setSubtasks(newS);
+                      }}
+                      className="w-full h-9 bg-theme-page border border-theme-border rounded-lg px-3 text-xs font-bold text-theme-fg outline-none focus:border-theme-primary"
+                    />
+                    <select 
+                      value={s.assignee_id}
+                      onChange={(e) => {
+                        const newS = [...subtasks];
+                        newS[i].assignee_id = e.target.value;
+                        setSubtasks(newS);
+                      }}
+                      className="w-full h-9 bg-theme-page border border-theme-border rounded-lg px-3 text-[10px] font-black uppercase text-theme-muted outline-none focus:border-theme-primary"
+                    >
+                      <option value="">Assign Member...</option>
+                      {employees.map(e => (
+                        <option key={e.id} value={e.id}>{e.name} ({e.role})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button 
+                    onClick={() => removeSubtask(i)}
+                    className="mt-2 p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-all"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+              {subtasks.length === 0 && (
+                <div className="text-center py-8 border-2 border-dashed border-theme-border rounded-2xl">
+                  <p className="text-[10px] font-bold text-theme-muted uppercase">No tasks defined yet.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-theme-raised/50 flex justify-end gap-3 border-t border-theme-border px-6 py-4">
+          <Button variant="secondary" size="sm" onClick={onClose} className="text-[10px] font-black uppercase">Cancel</Button>
+          <Button size="sm" onClick={handleBreakdown} loading={submitting} className="text-[10px] font-black uppercase px-8 bg-theme-primary hover:bg-theme-primary/90">
+            Publish Tasks
           </Button>
         </div>
       </div>

@@ -24,7 +24,9 @@ export async function getWalletSummary(employeeId: string) {
     .select("total_amount, status")
     .eq("employee_id", employeeId);
 
-  const earned_total = [...(payrollData || []), ...(incentiveData || [])].reduce((acc, curr) => acc + (Number(curr.net_pay || curr.total_amount) || 0), 0);
+  const payrollTotal = (payrollData || []).reduce((acc, p) => acc + (Number(p.net_pay) || 0), 0);
+  const incentiveTotal = (incentiveData || []).reduce((acc, i) => acc + (Number(i.total_amount) || 0), 0);
+  const earned_total = payrollTotal + incentiveTotal;
   
   const claimable_amount = (incentiveData || [])
     .filter(i => i.status === 'claimable')

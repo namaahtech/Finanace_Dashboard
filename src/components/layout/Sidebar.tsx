@@ -10,6 +10,7 @@ import {
   MessageSquare, CalendarClock, IndianRupee,
   Shield, RefreshCw, Mail, ChevronDown, Check,
   Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder, User,
+  BookOpen, Table2, Presentation, StickyNote, LayoutTemplate,
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
@@ -28,6 +29,13 @@ const superAdminNav: NavSection[] = [
     { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
     { href: "/admin/teams", label: "Teams", icon: Building2 },
     { href: "/admin/org-chart", label: "Org Chart", icon: Network },
+  ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
+    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
   ]},
   { title: "HR", items: [
     { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
@@ -99,6 +107,13 @@ const hrNav: NavSection[] = [
     { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
     { href: "/admin/teams", label: "Teams", icon: Building2 },
   ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
+    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
+  ]},
   { title: "HR", items: [
     { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
     { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
@@ -131,6 +146,13 @@ const leadNav: NavSection[] = [
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
     { href: "/admin/budgets", label: "Team Budget", icon: PiggyBank },
     { href: "/admin/subscriptions", label: "Subscriptions", icon: Tag },
+  ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
+    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
   ]},
   { title: "Comms", items: [
     { href: "/admin/messaging", label: "Messages", icon: MessageSquare },
@@ -171,6 +193,13 @@ const managerNav: NavSection[] = [
     { href: "/dashboard/incentives", label: "Incentives", icon: Wallet },
     { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
   ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
+    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
+  ]},
   { title: "Comms", items: [
     { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
     { href: "/dashboard/meetings", label: "Meetings", icon: CalendarClock },
@@ -187,6 +216,13 @@ const employeeNav: NavSection[] = [
     { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
     { href: "/dashboard/reimbursements", label: "Reimbursements", icon: Receipt },
     { href: "/dashboard/priority", label: "Priority Payout", icon: Zap },
+  ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
+    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
   ]},
   { title: "Comms", items: [
     { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
