@@ -4,17 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import {
-  StickyNote, Plus, Search, Pin, Archive, Trash2, X, Palette, Check,
-  MoreVertical, Sparkles, Layout, Settings, History, Share2, 
-  ArrowLeft, Globe, Filter, List, Grid, Info, Clock, CheckCircle2
+  StickyNote, Plus, Search, Pin, Archive, Trash2, X, Palette, MoreVertical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import axios from "axios";
-import Link from "next/link";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 
 dayjs.extend(relativeTime);
 
@@ -24,7 +19,6 @@ interface Note {
   content: string;
   color: string;
   is_pinned: boolean;
-  icon: string;
   status: string;
   tags: string[];
   last_edited_at: string;
@@ -32,23 +26,21 @@ interface Note {
 }
 
 const NOTE_COLORS = [
-  { bg: "#ffffff", label: "White", ring: "ring-gray-300" },
-  { bg: "#fef9c3", label: "Yellow", ring: "ring-yellow-300" },
-  { bg: "#dcfce7", label: "Green", ring: "ring-green-300" },
-  { bg: "#dbeafe", label: "Blue", ring: "ring-blue-300" },
-  { bg: "#fce7f3", label: "Pink", ring: "ring-pink-300" },
-  { bg: "#ede9fe", label: "Purple", ring: "ring-purple-300" },
-  { bg: "#ffedd5", label: "Orange", ring: "ring-orange-300" },
-  { bg: "#e0f2fe", label: "Sky", ring: "ring-sky-300" },
+  { bg: "#ffffff", label: "Default" },
+  { bg: "#fef9c3", label: "Yellow" },
+  { bg: "#dcfce7", label: "Green" },
+  { bg: "#dbeafe", label: "Blue" },
+  { bg: "#fce7f3", label: "Pink" },
+  { bg: "#ede9fe", label: "Purple" },
+  { bg: "#ffedd5", label: "Orange" },
+  { bg: "#e0f2fe", label: "Sky" },
 ];
 
-interface NoteCardProps {
+function NoteCard({ note, onUpdate, onDelete }: {
   note: Note;
   onUpdate: (id: string, updates: Partial<Note>) => void;
   onDelete: (id: string) => void;
-}
-
-function NoteCard({ note, onUpdate, onDelete }: NoteCardProps) {
+}) {
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(note.title);
   const [draftContent, setDraftContent] = useState(note.content);
@@ -56,7 +48,7 @@ function NoteCard({ note, onUpdate, onDelete }: NoteCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  function saveAndClose() {
+  function save() {
     if (draftTitle !== note.title || draftContent !== note.content) {
       onUpdate(note.id, { title: draftTitle, content: draftContent });
     }
@@ -66,83 +58,84 @@ function NoteCard({ note, onUpdate, onDelete }: NoteCardProps) {
   useEffect(() => {
     if (!editing) return;
     function handler(e: MouseEvent) {
-      if (cardRef.current && !cardRef.current.contains(e.target as Node)) saveAndClose();
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) save();
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [editing, draftTitle, draftContent]);
 
+  const isColored = note.color && note.color !== "#ffffff";
+  const cardStyle = isColored ? { backgroundColor: note.color } : undefined;
+
   return (
     <div
       ref={cardRef}
       className={cn(
-        "group relative rounded-[2rem] border-2 transition-all overflow-hidden",
-        editing ? "shadow-2xl z-20 scale-100" : "hover:shadow-xl hover:-translate-y-1",
-        !editing && "cursor-pointer",
+        "group relative rounded-xl border transition-all overflow-hidden",
+        editing ? "shadow-lg z-20 border-theme-strong" : "hover:shadow-md cursor-pointer",
+        isColored ? "border-transparent" : "border-theme-border bg-theme-card"
       )}
-      style={{
-        background: note.color || "#ffffff",
-        borderColor: note.color === "#ffffff" ? "var(--theme-border)" : "transparent",
-      }}
+      style={cardStyle}
       onClick={() => { if (!editing) setEditing(true); }}
     >
-      <div className="p-6">
-        {/* Title */}
+      <div className="p-4">
         {editing ? (
           <input
             autoFocus
             value={draftTitle}
             onChange={(e) => setDraftTitle(e.target.value)}
-            placeholder="Note Title"
-            className="w-full bg-transparent font-black text-lg text-slate-800 focus:outline-none mb-3 placeholder:text-slate-400"
+            placeholder="Title"
+            className="w-full bg-transparent font-bold text-sm text-theme-fg focus:outline-none mb-2 placeholder:text-theme-muted"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
           note.title && note.title !== "Untitled Note" && (
-            <p className="font-black text-base text-slate-800 mb-2 truncate leading-tight">{note.title}</p>
+            <p className="font-semibold text-sm text-theme-fg mb-2 truncate">{note.title}</p>
           )
         )}
 
-        {/* Content */}
         {editing ? (
           <textarea
             value={draftContent}
             onChange={(e) => setDraftContent(e.target.value)}
-            placeholder="Take a note..."
-            rows={6}
-            className="w-full bg-transparent text-sm text-slate-700 focus:outline-none resize-none placeholder:text-slate-400 leading-relaxed font-medium"
+            placeholder="Write something…"
+            rows={5}
+            className="w-full bg-transparent text-sm text-theme-fg focus:outline-none resize-none placeholder:text-theme-muted leading-relaxed"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <p className="text-sm text-slate-700 whitespace-pre-wrap line-clamp-8 leading-relaxed font-medium">
-            {note.content || "Empty note"}
+          <p className="text-sm text-theme-muted whitespace-pre-wrap line-clamp-6 leading-relaxed">
+            {note.content || <span className="italic opacity-50">Empty note</span>}
           </p>
         )}
 
-        {/* Tags */}
         {note.tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-4">
+          <div className="flex flex-wrap gap-1 mt-3">
             {note.tags.map((t) => (
-              <span key={t} className="text-[9px] bg-black/5 text-slate-600 px-3 py-1 rounded-full font-black uppercase tracking-widest">{t}</span>
+              <span key={t} className="text-[10px] bg-theme-raised text-theme-muted px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide">{t}</span>
             ))}
           </div>
         )}
 
-        {/* Footer */}
         {editing ? (
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-black/5">
-            <div className="relative" onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => setColorPicker(!colorPicker)} className="h-8 w-8 rounded-xl hover:bg-black/5 transition-all flex items-center justify-center">
-                <Palette size={16} className="text-slate-500" />
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-theme-border" onClick={(e) => e.stopPropagation()}>
+            <div className="relative">
+              <button
+                onClick={() => setColorPicker(!colorPicker)}
+                className="h-7 w-7 rounded-lg hover:bg-theme-raised flex items-center justify-center text-theme-muted transition-all"
+              >
+                <Palette size={14} />
               </button>
               {colorPicker && (
-                <div className="absolute bottom-10 left-0 z-50 bg-white rounded-2xl shadow-2xl border border-gray-100 p-3 flex gap-2 animate-in slide-in-from-bottom-2">
+                <div className="absolute bottom-9 left-0 z-50 bg-theme-surface border border-theme-border rounded-xl shadow-xl p-2.5 flex gap-2">
                   {NOTE_COLORS.map((c) => (
                     <button
                       key={c.bg}
                       onClick={() => { onUpdate(note.id, { color: c.bg }); setColorPicker(false); }}
-                      className={cn("w-7 h-7 rounded-full border-2 transition-all hover:scale-125",
-                        note.color === c.bg ? "border-slate-800 scale-110" : "border-transparent")}
+                      className={cn(
+                        "w-6 h-6 rounded-full border-2 transition-all hover:scale-110",
+                        note.color === c.bg ? "border-theme-strong scale-110" : "border-theme-border"
+                      )}
                       style={{ background: c.bg }}
                       title={c.label}
                     />
@@ -151,52 +144,58 @@ function NoteCard({ note, onUpdate, onDelete }: NoteCardProps) {
               )}
             </div>
             <div className="flex items-center gap-2">
-               <button onClick={(e) => { e.stopPropagation(); saveAndClose(); }}
-                className="px-4 py-2 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest hover:bg-black/5 transition-all">
+              <button
+                onClick={() => { setEditing(false); setDraftTitle(note.title); setDraftContent(note.content); }}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-theme-muted hover:bg-theme-raised transition-all"
+              >
                 Discard
               </button>
-              <button onClick={(e) => { e.stopPropagation(); saveAndClose(); }}
-                className="px-6 py-2 rounded-xl bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest shadow-lg">
+              <button
+                onClick={save}
+                className="px-4 py-1.5 rounded-lg bg-theme-primary text-white text-xs font-semibold transition-all"
+              >
                 Save
               </button>
             </div>
           </div>
         ) : (
-          <div className="mt-4 flex items-center justify-between">
-             <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-               <Clock size={10} /> {dayjs(note.last_edited_at).fromNow()}
-             </div>
-             <div className="h-2 w-2 rounded-full" style={{ background: note.color === '#ffffff' ? '#e2e8f0' : 'rgba(0,0,0,0.1)' }} />
-          </div>
+          <p className="text-[10px] text-theme-muted mt-3 font-medium">{dayjs(note.last_edited_at).fromNow()}</p>
         )}
       </div>
 
       {/* Hover actions */}
       {!editing && (
-        <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all"
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             onClick={() => onUpdate(note.id, { is_pinned: !note.is_pinned })}
-            className="w-9 h-9 rounded-2xl bg-white/80 backdrop-blur shadow-sm hover:shadow-md flex items-center justify-center transition-all"
+            className="w-7 h-7 rounded-lg bg-theme-surface/80 backdrop-blur border border-theme-border flex items-center justify-center transition-all hover:bg-theme-raised"
             title={note.is_pinned ? "Unpin" : "Pin"}
           >
-            <Pin size={14} className={note.is_pinned ? "text-amber-500" : "text-slate-400"} fill={note.is_pinned ? "currentColor" : "none"} />
+            <Pin size={12} className={note.is_pinned ? "text-amber-500" : "text-theme-muted"} fill={note.is_pinned ? "currentColor" : "none"} />
           </button>
           <div className="relative">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="w-9 h-9 rounded-2xl bg-white/80 backdrop-blur shadow-sm hover:shadow-md flex items-center justify-center transition-all"
+              className="w-7 h-7 rounded-lg bg-theme-surface/80 backdrop-blur border border-theme-border flex items-center justify-center transition-all hover:bg-theme-raised"
             >
-              <MoreVertical size={14} className="text-slate-400" />
+              <MoreVertical size={12} className="text-theme-muted" />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-10 z-[30] w-44 bg-white border border-gray-100 rounded-2xl shadow-2xl p-2 animate-in slide-in-from-top-2">
-                <button onClick={() => { onDelete(note.id); setMenuOpen(false); }}
-                  className="w-full text-left text-[10px] font-black uppercase tracking-widest px-4 py-3 rounded-xl hover:bg-rose-50 text-rose-500 flex items-center gap-3">
-                  <Trash2 size={14} /> Delete
+              <div className="absolute right-0 top-8 z-50 w-36 bg-theme-surface border border-theme-border rounded-xl shadow-xl p-1">
+                <button
+                  onClick={() => { onUpdate(note.id, { status: "archived" }); setMenuOpen(false); }}
+                  className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-theme-raised text-theme-fg flex items-center gap-2"
+                >
+                  <Archive size={12} /> Archive
                 </button>
-                <button onClick={() => { onUpdate(note.id, { status: "archived" }); setMenuOpen(false); }}
-                  className="w-full text-left text-[10px] font-black uppercase tracking-widest px-4 py-3 rounded-xl hover:bg-gray-50 text-slate-600 flex items-center gap-3">
-                  <Archive size={14} /> Archive
+                <button
+                  onClick={() => { onDelete(note.id); setMenuOpen(false); }}
+                  className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-rose-500/10 text-rose-500 flex items-center gap-2"
+                >
+                  <Trash2 size={12} /> Delete
                 </button>
               </div>
             )}
@@ -218,7 +217,7 @@ export default function NotesPage() {
   const [creating, setCreating] = useState(false);
   const quickRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { fetchNotes(); }, []);
+  useEffect(() => { if (user?.id) fetchNotes(); }, [user?.id]);
 
   useEffect(() => {
     if (!quickOpen) return;
@@ -235,7 +234,7 @@ export default function NotesPage() {
   async function fetchNotes() {
     setLoading(true);
     try {
-      const res = await axios.get("/api/workspace/notes");
+      const res = await axios.get(`/api/workspace/notes?userId=${user?.id}&userRole=${user?.role}`);
       setNotes(res.data.notes || []);
     } catch { } finally { setLoading(false); }
   }
@@ -250,9 +249,7 @@ export default function NotesPage() {
         owner_id: user?.id,
         color: "#ffffff",
       });
-      setQuickTitle("");
-      setQuickContent("");
-      setQuickOpen(false);
+      setQuickTitle(""); setQuickContent(""); setQuickOpen(false);
       fetchNotes();
     } catch { } finally { setCreating(false); }
   }
@@ -278,188 +275,141 @@ export default function NotesPage() {
   const rest = filtered.filter((n) => !n.is_pinned);
 
   return (
-    <div className="flex flex-col h-screen bg-theme-page overflow-hidden">
-      {/* PREMIUM GREEN HEADER */}
-      <header className="h-16 bg-[#10B981] flex items-center justify-between px-6 z-50 shadow-lg flex-shrink-0">
-        <div className="flex items-center gap-4 flex-1">
-          <Link href="/admin/workspace" className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all">
-            <ArrowLeft size={18} />
-          </Link>
-          
-          <div className="h-8 w-px bg-white/20 mx-1" />
-
-          <div className="text-2xl bg-white/10 p-1.5 rounded-xl">
-            🗒️
-          </div>
-
-          <div className="flex flex-col">
-            <h1 className="font-black text-white text-lg leading-none">Workspace Notes</h1>
-            <p className="text-[10px] font-bold text-white/70 uppercase tracking-widest mt-1">
-               {notes.length} Active Thoughts <span className="opacity-30">•</span> Gemma Sync Active
-            </p>
-          </div>
+    <DashboardShell
+      title="Notes"
+      subtitle="Quick notes, ideas and checklists"
+      actions={
+        <button
+          onClick={() => setQuickOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity"
+        >
+          <Plus size={14} /> New Note
+        </button>
+      }
+    >
+      {/* Search */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search notes…"
+            className="w-full pl-9 pr-4 py-2 rounded-lg border border-theme-border bg-theme-surface text-sm text-theme-fg placeholder:text-theme-muted focus:outline-none focus:border-theme-strong transition-colors"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+              <X size={13} className="text-theme-muted" />
+            </button>
+          )}
         </div>
+      </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative w-72">
-            <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/60" />
-            <input 
-              value={search} 
-              onChange={(e) => setSearch(e.target.value)} 
-              placeholder="Deep search notes..."
-              className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white/10 border-none text-white text-xs font-bold placeholder:text-white/40 focus:bg-white/20 transition-all outline-none" 
-            />
-            {search && <button onClick={() => setSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"><X size={14}/></button>}
-          </div>
-          <Button variant="ghost" className="bg-white/10 hover:bg-white/20 text-white border-none rounded-xl h-10 w-10 p-0">
-            <Filter size={18} />
-          </Button>
-          <Button variant="ghost" className="bg-white text-[#10B981] hover:bg-white/90 border-none rounded-xl h-10 px-4 font-black text-xs uppercase tracking-widest shadow-lg">
-            <Plus size={16} className="mr-2" /> New Note
-          </Button>
-        </div>
-      </header>
-
-      {/* NOTES CANVAS */}
-      <main className="flex-1 overflow-y-auto p-12 bg-theme-raised/10 scrollbar-hide">
-        {/* Quick create */}
-        <div className="mb-16 max-w-2xl mx-auto">
-          <div ref={quickRef} onClick={() => setQuickOpen(true)}
-            className={cn(
-              "rounded-[2.5rem] border-2 transition-all cursor-text bg-theme-surface",
-              quickOpen ? "shadow-2xl border-emerald-500/50 p-8" : "border-theme-border shadow-lg hover:shadow-xl p-5"
-            )}>
-            {quickOpen ? (
-              <div className="space-y-4">
-                <input
-                  autoFocus
-                  value={quickTitle}
-                  onChange={(e) => setQuickTitle(e.target.value)}
-                  placeholder="Note Title"
-                  className="w-full bg-transparent font-black text-xl text-theme-fg focus:outline-none placeholder:text-theme-muted/50"
-                />
-                <textarea
-                  value={quickContent}
-                  onChange={(e) => setQuickContent(e.target.value)}
-                  placeholder="What's on your mind?"
-                  rows={4}
-                  className="w-full bg-transparent text-base font-medium text-theme-fg/80 focus:outline-none resize-none placeholder:text-theme-muted/50 leading-relaxed"
-                />
-                <div className="flex items-center justify-between pt-4 border-t border-theme-border">
-                  <div className="flex gap-2">
-                    <button className="h-10 w-10 rounded-2xl bg-theme-raised flex items-center justify-center text-theme-muted"><Palette size={18}/></button>
-                    <button className="h-10 w-10 rounded-2xl bg-theme-raised flex items-center justify-center text-theme-muted"><Pin size={18}/></button>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => { setQuickOpen(false); setQuickTitle(""); setQuickContent(""); }}
-                      className="px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-theme-muted hover:text-theme-fg transition-all">
-                      Discard
-                    </button>
-                    <button onClick={saveQuick} disabled={creating}
-                      className="px-8 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-xl transition-all">
-                      Generate Note
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-[1.25rem] bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                    <PenTool size={20} />
-                  </div>
-                  <span className="text-base font-bold text-theme-muted/70 italic">Capture an idea...</span>
-                </div>
+      {/* Quick create */}
+      <div className="mb-6 max-w-xl">
+        <div
+          ref={quickRef}
+          onClick={() => setQuickOpen(true)}
+          className={cn(
+            "rounded-xl border transition-all cursor-text bg-theme-card",
+            quickOpen ? "shadow-md border-theme-strong p-4" : "border-theme-border p-3 hover:border-theme-strong"
+          )}
+        >
+          {quickOpen ? (
+            <div className="space-y-3">
+              <input
+                autoFocus
+                value={quickTitle}
+                onChange={(e) => setQuickTitle(e.target.value)}
+                placeholder="Title"
+                className="w-full bg-transparent font-semibold text-sm text-theme-fg focus:outline-none placeholder:text-theme-muted"
+              />
+              <textarea
+                value={quickContent}
+                onChange={(e) => setQuickContent(e.target.value)}
+                placeholder="What's on your mind?"
+                rows={3}
+                className="w-full bg-transparent text-sm text-theme-fg focus:outline-none resize-none placeholder:text-theme-muted leading-relaxed"
+              />
+              <div className="flex items-center justify-between pt-2 border-t border-theme-border">
+                <div />
                 <div className="flex items-center gap-2">
-                  <button className="h-10 w-10 rounded-2xl hover:bg-theme-raised text-theme-muted transition-all flex items-center justify-center"><Sparkles size={18}/></button>
-                  <button className="h-10 w-10 rounded-2xl bg-theme-raised text-theme-fg flex items-center justify-center shadow-sm"><Plus size={20}/></button>
+                  <button
+                    onClick={() => { setQuickOpen(false); setQuickTitle(""); setQuickContent(""); }}
+                    className="px-3 py-1.5 text-xs font-semibold text-theme-muted hover:text-theme-fg transition-all"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={saveQuick}
+                    disabled={creating}
+                    className="px-4 py-1.5 rounded-lg bg-theme-primary text-white text-xs font-semibold disabled:opacity-50"
+                  >
+                    Save Note
+                  </button>
                 </div>
               </div>
-            )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 text-theme-muted">
+              <StickyNote size={16} />
+              <span className="text-sm">Take a note…</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4">
+          {[...Array(8)].map((_, i) => (
+            <div
+              key={i}
+              className="mb-4 break-inside-avoid rounded-xl bg-theme-card border border-theme-border animate-pulse"
+              style={{ height: `${160 + (i % 3) * 50}px` }}
+            />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+          <div className="h-14 w-14 rounded-xl bg-theme-raised border border-theme-border flex items-center justify-center">
+            <StickyNote size={24} className="text-theme-muted opacity-40" />
+          </div>
+          <div>
+            <p className="font-semibold text-theme-fg mb-1">{search ? "No notes match your search" : "No notes yet"}</p>
+            <p className="text-sm text-theme-muted">{search ? "Try a different keyword" : "Create your first note above."}</p>
           </div>
         </div>
-
-        {loading ? (
-          <div className="columns-2 md:columns-3 lg:columns-4 gap-6 space-y-6">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="rounded-[2rem] bg-theme-surface border border-theme-border animate-pulse flex flex-col p-6 gap-4" style={{ height: `${200 + (i % 3) * 60}px`, breakInside: "avoid" }}>
-                 <div className="h-6 w-3/4 bg-theme-raised rounded-lg" />
-                 <div className="h-32 w-full bg-theme-raised rounded-2xl" />
-                 <div className="mt-auto h-4 w-1/2 bg-theme-raised rounded-lg" />
-              </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-20 animate-in fade-in slide-in-from-bottom-4">
-            <div className="h-24 w-24 rounded-[2rem] bg-theme-raised/50 border border-dashed border-theme-border flex items-center justify-center mx-auto mb-6">
-               <StickyNote size={40} className="text-theme-muted opacity-20" />
-            </div>
-            <p className="font-black text-xl text-theme-fg mb-1">{search ? "No matches found" : "Quiet in here"}</p>
-            <p className="text-xs text-theme-muted font-bold uppercase tracking-widest">
-              {search ? "Adjust your search filters" : "Start your creative journey above"}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-12">
-            {pinned.length > 0 && (
-              <div>
-                <div className="flex items-center gap-3 mb-6 px-2">
-                  <Pin size={14} className="text-emerald-500" fill="currentColor" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">Pinned Collection</span>
-                  <div className="h-px flex-1 bg-theme-border opacity-50" />
-                </div>
-                <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-6">
-                  {pinned.map((note) => (
-                    <div key={note.id} className="mb-6 break-inside-avoid animate-in zoom-in-95">
-                      <NoteCard note={note} onUpdate={updateNote} onDelete={deleteNote} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            <div>
-              {pinned.length > 0 && (
-                <div className="flex items-center gap-3 mb-6 px-2">
-                  <Layout size={14} className="text-theme-muted" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-theme-muted">All Notes</span>
-                  <div className="h-px flex-1 bg-theme-border opacity-50" />
-                </div>
-              )}
-              <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-6">
-                {rest.map((note) => (
-                  <div key={note.id} className="mb-6 break-inside-avoid animate-in zoom-in-95">
+      ) : (
+        <div className="space-y-8">
+          {pinned.length > 0 && (
+            <div className="space-y-3">
+              <p className="section-label px-1 flex items-center gap-2">
+                <Pin size={10} fill="currentColor" /> Pinned · {pinned.length}
+              </p>
+              <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4">
+                {pinned.map((note) => (
+                  <div key={note.id} className="mb-4 break-inside-avoid">
                     <NoteCard note={note} onUpdate={updateNote} onDelete={deleteNote} />
                   </div>
                 ))}
               </div>
             </div>
-          </div>
-        )}
-      </main>
+          )}
 
-      {/* FOOTER STATUS */}
-      <footer className="h-10 bg-theme-surface border-t border-theme-border flex items-center justify-between px-6 z-50 text-[9px] font-black text-theme-muted uppercase tracking-[0.2em]">
-         <div className="flex items-center gap-6">
-           <div className="flex items-center gap-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <span>Realtime Memory Sync</span>
-           </div>
-           <span>Storage: 4.2MB</span>
-         </div>
-         <div className="flex items-center gap-4">
-           <span className="text-theme-primary/60">Gemma 4: Intelligence Active</span>
-           <div className="flex items-center gap-2">
-              <CheckCircle2 size={10} className="text-emerald-500" />
-              <span>All Systems Nominal</span>
-           </div>
-         </div>
-      </footer>
-    </div>
+          {rest.length > 0 && (
+            <div className="space-y-3">
+              {pinned.length > 0 && <p className="section-label px-1">All Notes · {rest.length}</p>}
+              <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4">
+                {rest.map((note) => (
+                  <div key={note.id} className="mb-4 break-inside-avoid">
+                    <NoteCard note={note} onUpdate={updateNote} onDelete={deleteNote} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </DashboardShell>
   );
 }
-
-// Dummy PenTool since it's missing from lucide-react sometimes
-const PenTool = ({ size }: { size: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l1.5 1.5"/><path d="M13 18l1.5 1.5"/></svg>
-)

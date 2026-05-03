@@ -7,7 +7,7 @@ import { useAuth } from "@/components/layout/AuthProvider";
 import { ShareModal } from "@/components/workspace/ShareModal";
 import {
   BookOpen, Plus, Search, Pin, Archive, Trash2, MoreVertical,
-  Clock, Grid3X3, List, X, Share2,
+  Grid3X3, List, X, Share2, FileText, Clock, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
@@ -30,14 +30,15 @@ interface Doc {
 }
 
 const COVER_GRADIENTS = [
-  "from-blue-400 to-indigo-500",
-  "from-violet-400 to-purple-500",
-  "from-rose-400 to-pink-500",
-  "from-amber-400 to-orange-500",
-  "from-teal-400 to-emerald-500",
-  "from-sky-400 to-cyan-500",
+  "from-blue-500 to-indigo-600",
+  "from-violet-500 to-purple-600",
+  "from-rose-500 to-pink-600",
+  "from-amber-500 to-orange-500",
+  "from-teal-500 to-emerald-600",
+  "from-sky-500 to-cyan-600",
 ];
 
+// ── Doc Card (Grid) ───────────────────────────────────────────────────────────
 function DocCard({ doc, onPin, onArchive, onDelete, onShare, onClick }: {
   doc: Doc;
   onPin: () => void;
@@ -47,114 +48,137 @@ function DocCard({ doc, onPin, onArchive, onDelete, onShare, onClick }: {
   onClick: () => void;
 }) {
   const [menu, setMenu] = useState(false);
-  const colorIdx = doc.id.charCodeAt(0) % COVER_GRADIENTS.length;
-  const coverGrad = doc.cover_color ?? COVER_GRADIENTS[colorIdx];
+  const gradIdx = doc.id.charCodeAt(0) % COVER_GRADIENTS.length;
+  const grad = doc.cover_color ?? COVER_GRADIENTS[gradIdx];
 
   return (
     <div
       onClick={onClick}
-      className="group relative bg-theme-surface border border-theme-border rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer"
+      className="group relative bg-theme-card border border-theme-border rounded-xl overflow-hidden hover:border-theme-strong hover:shadow-sm transition-all cursor-pointer"
     >
-      {/* Cover */}
-      <div className={cn("h-24 bg-gradient-to-br", coverGrad, "relative")}>
-        <span className="absolute bottom-3 left-4 text-2xl">{doc.icon}</span>
-        {doc.is_pinned && (
-          <span className="absolute top-2 right-2">
-            <Pin size={12} className="text-white/80" />
-          </span>
-        )}
+      {/* Top row: icon swatch + actions */}
+      <div className="flex items-start justify-between p-4 pb-3">
+        {/* Coloured doc icon */}
+        <div className={cn("h-10 w-10 rounded-lg bg-gradient-to-br flex items-center justify-center text-lg flex-shrink-0 shadow-sm", grad)}>
+          <span className="leading-none drop-shadow">{doc.icon || "📄"}</span>
+        </div>
+
+        {/* Actions — always visible as subtle icons */}
+        <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+          {doc.is_pinned && (
+            <Pin size={11} className="text-amber-500 mr-1" fill="currentColor" />
+          )}
+          <button
+            onClick={onShare}
+            className="p-1.5 rounded-lg text-theme-muted hover:text-theme-fg hover:bg-theme-raised transition-all opacity-0 group-hover:opacity-100"
+            title="Share"
+          >
+            <Share2 size={12} />
+          </button>
+          <div className="relative">
+            <button
+              onClick={() => setMenu(!menu)}
+              className="p-1.5 rounded-lg text-theme-muted hover:text-theme-fg hover:bg-theme-raised transition-all opacity-0 group-hover:opacity-100"
+            >
+              <MoreVertical size={12} />
+            </button>
+            {menu && (
+              <div className="absolute top-7 right-0 z-[9999] w-36 rounded-xl border border-theme-border bg-theme-surface shadow-xl p-1">
+                <button onClick={() => { onPin(); setMenu(false); }}
+                  className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-theme-raised text-theme-fg flex items-center gap-2">
+                  <Pin size={12} /> {doc.is_pinned ? "Unpin" : "Pin"}
+                </button>
+                <button onClick={() => { onArchive(); setMenu(false); }}
+                  className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-theme-raised text-theme-fg flex items-center gap-2">
+                  <Archive size={12} /> Archive
+                </button>
+                <button onClick={() => { onDelete(); setMenu(false); }}
+                  className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-rose-500/10 text-rose-500 flex items-center gap-2">
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Body */}
-      <div className="p-4">
-        <h3 className="font-bold text-sm text-theme-fg truncate mb-1 group-hover:text-theme-primary transition-colors">
+      {/* Title + owner */}
+      <div className="px-4 pb-3">
+        <h3 className="font-semibold text-sm text-theme-fg leading-snug mb-0.5 group-hover:text-theme-primary transition-colors line-clamp-2">
           {doc.title}
         </h3>
-        <p className="text-xs text-theme-muted">
-          {doc.owner?.name ?? "You"} · {dayjs(doc.last_edited_at).fromNow()}
-        </p>
-        {doc.tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {doc.tags.slice(0, 3).map((t) => (
-              <span key={t} className="text-[10px] bg-theme-primary/10 text-theme-primary px-2 py-0.5 rounded-full font-semibold">
-                {t}
-              </span>
-            ))}
-          </div>
-        )}
+        <p className="text-[11px] text-theme-muted truncate">{doc.owner?.name ?? "You"}</p>
       </div>
 
-      {/* Hover action bar */}
-      <div
-        className="absolute bottom-0 left-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-theme-surface/95 to-transparent px-3 pb-2 pt-4 flex items-center gap-1.5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClick}
-          className="flex-1 text-[10px] font-bold rounded-lg bg-theme-primary/10 text-theme-primary hover:bg-theme-primary hover:text-white py-1.5 transition-all"
-        >
-          Open
-        </button>
-        <button
-          onClick={onShare}
-          className="flex items-center gap-1 text-[10px] font-bold rounded-lg border border-theme-border bg-theme-raised text-theme-fg hover:bg-theme-primary/10 hover:text-theme-primary px-2.5 py-1.5 transition-all"
-        >
-          <Share2 size={10} /> Share
-        </button>
-        <div className="relative">
-          <button
-            onClick={() => setMenu(!menu)}
-            className="w-7 h-[26px] rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-theme-fg flex items-center justify-center transition-all"
-          >
-            <MoreVertical size={12} />
-          </button>
-          {menu && (
-            <div className="absolute bottom-9 right-0 z-50 w-40 rounded-xl border border-theme-border bg-theme-surface shadow-xl p-1">
-              <button onClick={() => { onPin(); setMenu(false); }}
-                className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-theme-raised text-theme-fg flex items-center gap-2">
-                <Pin size={12} /> {doc.is_pinned ? "Unpin" : "Pin"}
-              </button>
-              <button onClick={() => { onArchive(); setMenu(false); }}
-                className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-theme-raised text-theme-fg flex items-center gap-2">
-                <Archive size={12} /> Archive
-              </button>
-              <button onClick={() => { onDelete(); setMenu(false); }}
-                className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-rose-500/10 text-rose-500 flex items-center gap-2">
-                <Trash2 size={12} /> Delete
-              </button>
-            </div>
-          )}
+      {/* Tags */}
+      {doc.tags?.length > 0 && (
+        <div className="flex flex-wrap gap-1 px-4 pb-3">
+          {doc.tags.slice(0, 2).map((t) => (
+            <span key={t} className="text-[9px] font-semibold bg-theme-raised border border-theme-border text-theme-muted px-2 py-0.5 rounded-full uppercase tracking-wide">
+              {t}
+            </span>
+          ))}
         </div>
+      )}
+
+      {/* Footer */}
+      <div className="flex items-center gap-1.5 px-4 py-2.5 border-t border-theme-border">
+        <Clock size={10} className="text-theme-muted opacity-50 flex-shrink-0" />
+        <span className="text-[10px] text-theme-muted">{dayjs(doc.last_edited_at).fromNow()}</span>
       </div>
     </div>
   );
 }
 
+// ── List Row ──────────────────────────────────────────────────────────────────
 function ListRow({ doc, onPin, onArchive, onDelete, onShare, onClick }: {
-  doc: Doc; onPin: () => void; onArchive: () => void; onDelete: () => void; onShare: () => void; onClick: () => void;
+  doc: Doc;
+  onPin: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+  onShare: () => void;
+  onClick: () => void;
 }) {
   const [menu, setMenu] = useState(false);
+  const gradIdx = doc.id.charCodeAt(0) % COVER_GRADIENTS.length;
+  const grad = doc.cover_color ?? COVER_GRADIENTS[gradIdx];
+
   return (
-    <div onClick={onClick} className="group flex items-center gap-4 px-4 py-3 rounded-xl border border-theme-border bg-theme-surface hover:bg-theme-raised cursor-pointer transition-colors">
-      <span className="text-xl flex-shrink-0">{doc.icon}</span>
+    <div
+      onClick={onClick}
+      className="group flex items-center gap-3 px-4 py-3 rounded-xl border border-theme-border bg-theme-card hover:bg-theme-raised hover:border-theme-strong cursor-pointer transition-all"
+    >
+      {/* Mini cover swatch */}
+      <div className={cn("h-9 w-9 rounded-lg bg-gradient-to-br flex-shrink-0 flex items-center justify-center text-base", grad)}>
+        <span className="leading-none">{doc.icon || "📄"}</span>
+      </div>
+
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-sm text-theme-fg truncate group-hover:text-theme-primary transition-colors">{doc.title}</p>
-        <p className="text-xs text-theme-muted">{doc.owner?.name ?? "You"} · {dayjs(doc.last_edited_at).fromNow()}</p>
+        <p className="text-[11px] text-theme-muted">{doc.owner?.name ?? "You"} · {dayjs(doc.last_edited_at).fromNow()}</p>
       </div>
-      {doc.is_pinned && <Pin size={12} className="text-amber-500 flex-shrink-0" />}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+
+      {doc.tags?.slice(0, 2).map((t) => (
+        <span key={t} className="hidden md:inline text-[9px] font-semibold bg-theme-raised border border-theme-border text-theme-muted px-2 py-0.5 rounded-full uppercase tracking-wide">
+          {t}
+        </span>
+      ))}
+
+      {doc.is_pinned && <Pin size={11} className="text-amber-500 flex-shrink-0" fill="currentColor" />}
+
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onShare}
-          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-theme-border hover:bg-theme-primary/10 hover:text-theme-primary text-theme-muted transition-all"
+          className="flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border border-theme-border hover:bg-theme-primary/10 hover:text-theme-primary text-theme-muted transition-all"
         >
-          <Share2 size={12} /> Share
+          <Share2 size={11} /> Share
         </button>
         <div className="relative">
-          <button onClick={() => setMenu(!menu)} className="p-1.5 rounded-lg hover:bg-theme-raised transition-all">
+          <button onClick={() => setMenu(!menu)} className="p-1.5 rounded-lg hover:bg-theme-overlay transition-all">
             <MoreVertical size={14} className="text-theme-muted" />
           </button>
           {menu && (
-            <div className="absolute right-0 top-8 z-50 w-36 rounded-xl border border-theme-border bg-theme-surface shadow-xl p-1">
+            <div className="absolute right-0 top-8 z-[9999] w-36 rounded-xl border border-theme-border bg-theme-surface shadow-xl p-1">
               <button onClick={() => { onPin(); setMenu(false); }} className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-theme-raised flex items-center gap-2 text-theme-fg"><Pin size={12} />{doc.is_pinned ? "Unpin" : "Pin"}</button>
               <button onClick={() => { onArchive(); setMenu(false); }} className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-theme-raised flex items-center gap-2 text-theme-fg"><Archive size={12} />Archive</button>
               <button onClick={() => { onDelete(); setMenu(false); }} className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-rose-500/10 flex items-center gap-2 text-rose-500"><Trash2 size={12} />Delete</button>
@@ -166,9 +190,9 @@ function ListRow({ doc, onPin, onArchive, onDelete, onShare, onClick }: {
   );
 }
 
+// ── Page ─────────────────────────────────────────────────────────────────────
 export default function DocumentsPage() {
   const { user } = useAuth();
-  const router = useRouter();
   const [docs, setDocs] = useState<Doc[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "pinned" | "mine">("all");
@@ -177,14 +201,12 @@ export default function DocumentsPage() {
   const [creating, setCreating] = useState(false);
   const [shareTarget, setShareTarget] = useState<Doc | null>(null);
 
-  useEffect(() => {
-    if (user?.id) fetchDocs();
-  }, [user?.id]);
+  useEffect(() => { if (user?.id) fetchDocs(); }, [user?.id]);
 
   async function fetchDocs() {
     setLoading(true);
     try {
-      const res = await axios.get(`/api/workspace/documents?userId=${user?.id}`);
+      const res = await axios.get(`/api/workspace/documents?userId=${user?.id}&userRole=${user?.role}`);
       setDocs(res.data.documents || []);
     } catch { } finally { setLoading(false); }
   }
@@ -193,27 +215,22 @@ export default function DocumentsPage() {
     setCreating(true);
     try {
       const res = await axios.post("/api/workspace/documents", { owner_id: user?.id });
-      window.open(`/admin/workspace/documents/${res.data.document.id}`, '_blank');
+      window.open(`/admin/workspace/documents/${res.data.document.id}`, "_blank");
       fetchDocs();
     } catch { } finally { setCreating(false); }
   }
 
   async function togglePin(doc: Doc) {
-    if (!user?.id) return;
-    await axios.patch(`/api/workspace/documents/${doc.id}?userId=${user.id}`, { is_pinned: !doc.is_pinned });
+    await axios.patch(`/api/workspace/documents/${doc.id}?userId=${user?.id}`, { is_pinned: !doc.is_pinned });
     fetchDocs();
   }
-
   async function archiveDoc(doc: Doc) {
-    if (!user?.id) return;
-    await axios.patch(`/api/workspace/documents/${doc.id}?userId=${user.id}`, { status: "archived" });
+    await axios.patch(`/api/workspace/documents/${doc.id}?userId=${user?.id}`, { status: "archived" });
     fetchDocs();
   }
-
   async function deleteDoc(doc: Doc) {
-    if (!user?.id) return;
-    if (!confirm(`Delete "${doc.title}"? This action cannot be undone.`)) return;
-    await axios.delete(`/api/workspace/documents/${doc.id}?userId=${user.id}`);
+    if (!confirm(`Delete "${doc.title}"?`)) return;
+    await axios.delete(`/api/workspace/documents/${doc.id}?userId=${user?.id}`);
     fetchDocs();
   }
 
@@ -227,43 +244,37 @@ export default function DocumentsPage() {
   const pinned = filtered.filter((d) => d.is_pinned);
   const rest = filtered.filter((d) => !d.is_pinned);
 
-  const FILTERS: { key: "all" | "pinned" | "mine"; label: string }[] = [
-    { key: "all",    label: "All" },
-    { key: "pinned", label: "Pinned" },
-    { key: "mine",   label: "Mine" },
+  const FILTERS = [
+    { key: "all" as const,    label: "All",    count: docs.length },
+    { key: "pinned" as const, label: "Pinned", count: docs.filter(d => d.is_pinned).length },
+    { key: "mine" as const,   label: "Mine",   count: docs.filter(d => d.owner?.id === user?.id).length },
   ];
 
+  const openDoc = (doc: Doc) => window.open(`/admin/workspace/documents/${doc.id}`, "_blank");
+
   return (
-    <DashboardShell>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-theme-primary/10 flex items-center justify-center">
-            <BookOpen size={18} className="text-theme-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-black text-theme-fg">Documents</h1>
-            <p className="text-xs text-theme-muted">{docs.length} document{docs.length !== 1 ? "s" : ""}</p>
-          </div>
-        </div>
+    <DashboardShell
+      title="Documents"
+      subtitle="Rich text docs, reports and wikis"
+      actions={
         <button
           onClick={createDoc}
           disabled={creating}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-theme-primary hover:opacity-90 text-white text-sm font-bold transition-all shadow-sm disabled:opacity-60"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
         >
-          <Plus size={16} /> New Document
+          <Plus size={14} /> New Document
         </button>
-      </div>
-
+      }
+    >
       {/* Toolbar */}
       <div className="flex items-center gap-2 mb-6 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search documents…"
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-theme-border bg-theme-surface text-sm text-theme-fg placeholder:text-theme-muted focus:outline-none focus:border-theme-primary transition-colors"
+            className="w-full pl-9 pr-4 py-2 rounded-lg border border-theme-border bg-theme-surface text-sm text-theme-fg placeholder:text-theme-muted focus:outline-none focus:border-theme-strong transition-colors"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -272,34 +283,43 @@ export default function DocumentsPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-1 rounded-xl border border-theme-border bg-theme-raised p-0.5">
+        {/* Filter pills */}
+        <div className="flex items-center gap-1 bg-theme-raised rounded-lg p-0.5">
           {FILTERS.map((f) => (
             <button
               key={f.key}
               onClick={() => setFilter(f.key)}
               className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                filter === f.key
-                  ? "bg-theme-surface text-theme-primary shadow-sm"
-                  : "text-theme-muted hover:text-theme-fg"
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                filter === f.key ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
               )}
             >
               {f.label}
-              {f.key === "all" && (
-                <span className="ml-1.5 text-[10px] bg-theme-primary/10 text-theme-primary px-1.5 py-0.5 rounded-full font-bold">
-                  {docs.length}
-                </span>
-              )}
+              <span className={cn(
+                "text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                filter === f.key ? "bg-theme-primary/10 text-theme-primary" : "bg-theme-overlay text-theme-muted"
+              )}>
+                {f.count}
+              </span>
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-1 rounded-xl border border-theme-border bg-theme-raised p-0.5">
-          <button onClick={() => setView("grid")} className={cn("p-1.5 rounded-lg transition-all", view === "grid" ? "bg-theme-surface text-theme-primary shadow-sm" : "text-theme-muted hover:text-theme-fg")}>
-            <Grid3X3 size={15} />
+        {/* View toggle */}
+        <div className="flex items-center gap-1 bg-theme-raised rounded-lg p-0.5">
+          <button
+            onClick={() => setView("grid")}
+            className={cn("p-2 rounded-md transition-all", view === "grid" ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}
+            title="Grid"
+          >
+            <Grid3X3 size={14} />
           </button>
-          <button onClick={() => setView("list")} className={cn("p-1.5 rounded-lg transition-all", view === "list" ? "bg-theme-surface text-theme-primary shadow-sm" : "text-theme-muted hover:text-theme-fg")}>
-            <List size={15} />
+          <button
+            onClick={() => setView("list")}
+            className={cn("p-2 rounded-md transition-all", view === "list" ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}
+            title="List"
+          >
+            <List size={14} />
           </button>
         </div>
       </div>
@@ -307,68 +327,65 @@ export default function DocumentsPage() {
       {/* Content */}
       {loading ? (
         <div className={cn("grid gap-4", view === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1")}>
-          {[...Array(8)].map((_, i) => <div key={i} className="h-48 rounded-2xl bg-theme-raised animate-pulse" />)}
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className={cn("rounded-xl bg-theme-card border border-theme-border animate-pulse", view === "grid" ? "h-48" : "h-14")} />
+          ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-20">
-          <BookOpen size={48} className="mx-auto mb-4 text-theme-muted opacity-30" />
-          <p className="font-bold text-theme-fg mb-1">No documents yet</p>
-          <p className="text-sm text-theme-muted mb-4">Create your first document to get started.</p>
-          <button
-            onClick={createDoc}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-theme-primary hover:opacity-90 text-white text-sm font-bold transition-all"
-          >
-            <Plus size={15} /> Create Document
-          </button>
+        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+          <div className="h-14 w-14 rounded-xl bg-theme-raised border border-dashed border-theme-border flex items-center justify-center">
+            <FileText size={22} className="text-theme-muted opacity-40" />
+          </div>
+          <div>
+            <p className="font-semibold text-theme-fg mb-1">No documents found</p>
+            <p className="text-sm text-theme-muted">{search ? "Try a different search term." : "Create your first document to get started."}</p>
+          </div>
+          {!search && (
+            <button onClick={createDoc} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold">
+              <Plus size={14} /> New Document
+            </button>
+          )}
         </div>
       ) : (
-        <>
+        <div className="space-y-6">
+          {/* Pinned */}
           {pinned.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <Pin size={12} className="text-theme-muted" />
-                <span className="text-xs font-black uppercase tracking-widest text-theme-muted">Pinned</span>
-              </div>
-              <div className={cn("grid gap-4", view === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1")}>
-                {view === "grid" ? pinned.map((doc) => (
-                  <DocCard key={doc.id} doc={doc}
-                    onPin={() => togglePin(doc)} onArchive={() => archiveDoc(doc)}
-                    onDelete={() => deleteDoc(doc)} onShare={() => setShareTarget(doc)}
-                    onClick={() => window.open(`/admin/workspace/documents/${doc.id}`, '_blank')} />
-                )) : pinned.map((doc) => (
-                  <ListRow key={doc.id} doc={doc}
-                    onPin={() => togglePin(doc)} onArchive={() => archiveDoc(doc)}
-                    onDelete={() => deleteDoc(doc)} onShare={() => setShareTarget(doc)}
-                    onClick={() => window.open(`/admin/workspace/documents/${doc.id}`, '_blank')} />
-                ))}
+            <div className="space-y-3">
+              <p className="section-label px-1 flex items-center gap-2">
+                <Pin size={10} fill="currentColor" /> Pinned · {pinned.length}
+              </p>
+              <div className={cn("grid gap-3", view === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1")}>
+                {pinned.map((doc) =>
+                  view === "grid" ? (
+                    <DocCard key={doc.id} doc={doc} onPin={() => togglePin(doc)} onArchive={() => archiveDoc(doc)} onDelete={() => deleteDoc(doc)} onShare={() => setShareTarget(doc)} onClick={() => openDoc(doc)} />
+                  ) : (
+                    <ListRow key={doc.id} doc={doc} onPin={() => togglePin(doc)} onArchive={() => archiveDoc(doc)} onDelete={() => deleteDoc(doc)} onShare={() => setShareTarget(doc)} onClick={() => openDoc(doc)} />
+                  )
+                )}
               </div>
             </div>
           )}
 
+          {/* Rest */}
           {rest.length > 0 && (
-            <div>
+            <div className="space-y-3">
               {pinned.length > 0 && (
-                <div className="flex items-center gap-2 mb-3">
-                  <Clock size={12} className="text-theme-muted" />
-                  <span className="text-xs font-black uppercase tracking-widest text-theme-muted">All Documents</span>
-                </div>
+                <p className="section-label px-1 flex items-center gap-2">
+                  <Clock size={10} /> All Documents · {rest.length}
+                </p>
               )}
-              <div className={cn("grid gap-4", view === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1")}>
-                {view === "grid" ? rest.map((doc) => (
-                  <DocCard key={doc.id} doc={doc}
-                    onPin={() => togglePin(doc)} onArchive={() => archiveDoc(doc)}
-                    onDelete={() => deleteDoc(doc)} onShare={() => setShareTarget(doc)}
-                    onClick={() => window.open(`/admin/workspace/documents/${doc.id}`, '_blank')} />
-                )) : rest.map((doc) => (
-                  <ListRow key={doc.id} doc={doc}
-                    onPin={() => togglePin(doc)} onArchive={() => archiveDoc(doc)}
-                    onDelete={() => deleteDoc(doc)} onShare={() => setShareTarget(doc)}
-                    onClick={() => window.open(`/admin/workspace/documents/${doc.id}`, '_blank')} />
-                ))}
+              <div className={cn("grid gap-3", view === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1")}>
+                {rest.map((doc) =>
+                  view === "grid" ? (
+                    <DocCard key={doc.id} doc={doc} onPin={() => togglePin(doc)} onArchive={() => archiveDoc(doc)} onDelete={() => deleteDoc(doc)} onShare={() => setShareTarget(doc)} onClick={() => openDoc(doc)} />
+                  ) : (
+                    <ListRow key={doc.id} doc={doc} onPin={() => togglePin(doc)} onArchive={() => archiveDoc(doc)} onDelete={() => deleteDoc(doc)} onShare={() => setShareTarget(doc)} onClick={() => openDoc(doc)} />
+                  )
+                )}
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Share Modal */}

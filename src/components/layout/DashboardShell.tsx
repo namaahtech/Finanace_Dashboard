@@ -40,15 +40,15 @@ export function DashboardShell({ children, title, subtitle, actions }: Dashboard
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
 
       <main className="flex-1 overflow-y-auto flex flex-col min-w-0 bg-theme-page">
-        <header className="sticky top-0 z-50 flex flex-col sm:flex-row sm:items-center justify-between gap-6 border-b border-theme-border bg-theme-surface/80 px-8 py-5 backdrop-blur-md">
+        <header className="sticky top-0 z-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-theme-border bg-theme-surface/90 px-8 py-4 backdrop-blur-md">
           <div className="flex-1 min-w-0">
-            {title && <h1 className="text-2xl font-black text-theme-fg tracking-tighter leading-none">{title}</h1>}
-            {subtitle && <p className="text-[11px] font-bold text-theme-muted uppercase tracking-[0.2em] mt-2 opacity-70">{subtitle}</p>}
+            {title && <h1 className="text-2xl font-black text-theme-fg tracking-tight leading-none">{title}</h1>}
+            {subtitle && <p className="text-sm text-theme-muted mt-1.5 leading-snug">{subtitle}</p>}
           </div>
           
           <div className="flex items-center gap-4 flex-shrink-0">
             {actions && (
-              <div className="flex items-center gap-2 border-r border-theme-border pr-4 mr-2">
+              <div className="flex items-center gap-2">
                 {actions}
               </div>
             )}

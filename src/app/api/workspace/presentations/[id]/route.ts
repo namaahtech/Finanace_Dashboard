@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
+const ADMIN_ROLES = ["super_admin", "accounts", "hr", "manager"];
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const { searchParams } = new URL(_req.url);
     const userId = searchParams.get("userId");
-    
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const userRole = searchParams.get("userRole") || "";
+    const isAdmin = ADMIN_ROLES.includes(userRole);
 
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -19,10 +19,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .single();
 
     if (error) throw error;
+    if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Ownership check
-    if (data.owner_id === userId) {
-      return NextResponse.json({ presentation: data, accessLevel: 'owner' });
+    // Admins can always read
+    if (isAdmin || data.owner_id === userId) {
+      return NextResponse.json({ presentation: data, accessLevel: isAdmin ? "admin" : "owner" });
     }
 
     // Share check
@@ -48,44 +49,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
-    
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const userRole = searchParams.get("userRole") || "";
+    const isAdmin = ADMIN_ROLES.includes(userRole);
 
     const supabase = getSupabaseAdmin();
     const body = await req.json();
     const { title, slides, theme, is_pinned, status, tags, last_edited_by } = body;
 
-    // 1. Fetch current presentation to check ownership
-    const { data: current, error: fetchError } = await supabase
-      .from("workspace_presentations")
-      .select("owner_id")
-      .eq("id", id)
-      .single();
-
-    if (fetchError || !current) {
-      return NextResponse.json({ error: "Presentation not found" }, { status: 404 });
-    }
-
-    // 2. Permission logic
-    let hasEditAccess = current.owner_id === userId;
-    
-    if (!hasEditAccess) {
-      const { data: share } = await supabase
-        .from("workspace_shares")
-        .select("access_level")
-        .eq("item_id", id)
-        .eq("user_id", userId)
+    // Admins bypass ownership check
+    if (!isAdmin) {
+      const { data: current, error: fetchError } = await supabase
+        .from("workspace_presentations")
+        .select("owner_id")
+        .eq("id", id)
         .single();
-      
-      if (share?.access_level === 'edit') {
-        hasEditAccess = true;
-      }
-    }
 
-    if (!hasEditAccess) {
-      return NextResponse.json({ error: "No edit permission" }, { status: 403 });
+      if (fetchError || !current) {
+        return NextResponse.json({ error: "Presentation not found" }, { status: 404 });
+      }
+
+      let hasEditAccess = current.owner_id === userId;
+      if (!hasEditAccess) {
+        const { data: share } = await supabase
+          .from("workspace_shares")
+          .select("access_level")
+          .eq("item_id", id)
+          .eq("user_id", userId)
+          .single();
+        if (share?.access_level === "edit") hasEditAccess = true;
+      }
+      if (!hasEditAccess) {
+        return NextResponse.json({ error: "No edit permission" }, { status: 403 });
+      }
     }
 
     const update: Record<string, any> = { last_edited_at: new Date().toISOString() };

@@ -1,289 +1,275 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { 
-  Calendar as CalendarIcon, 
-  Video, 
-  Mic, 
-  Settings, 
-  Users, 
-  Activity, 
-  Zap, 
-  Clock, 
-  CheckCircle2, 
-  XCircle,
-  MoreVertical,
-  ChevronRight,
-  ShieldCheck,
-  Heart,
-  BarChart3,
-  Sliders
+import { useState } from "react";
+import {
+  Video, Mic, Settings, Users, Activity, Zap, Clock, X,
+  BarChart3, Sliders, Plus, Calendar, CheckCircle2, ChevronRight,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/Button";
+import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 
-// ─── Neural Connection Module (Light Mode) ──────────────────────
-
-function NeuralConnectionPreview() {
+/* ─── Video preview placeholder ──────────────────────────────────────────── */
+function VideoPreview() {
   return (
-    <div className="relative h-full bg-slate-900 rounded-[32px] overflow-hidden border border-slate-800 group shadow-2xl">
-       {/* Simulated Camera Feed */}
-       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-500/10 via-transparent to-transparent opacity-50" />
-       
-       {/* Telemetry Overlays */}
-       <div className="absolute top-8 left-8 z-10 space-y-4">
-          <div className="flex items-center gap-3 px-4 py-2 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full">
-             <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-             <span className="text-[10px] font-black uppercase tracking-widest text-white/60">NEURAL_LINK: STABLE</span>
-          </div>
-          <div className="flex flex-col gap-2">
-             <div className="flex items-center gap-2 text-white/20">
-                <Heart size={14} className="text-rose-500/60" />
-                <span className="text-[10px] font-mono tracking-tighter">HRM: 72 BPM</span>
-             </div>
-             <div className="flex items-center gap-2 text-white/20">
-                <Activity size={14} className="text-cyan-500/60" />
-                <span className="text-[10px] font-mono tracking-tighter">SIG_STR: 98%</span>
-             </div>
-          </div>
-       </div>
-
-       {/* Waveform Animation (Bottom) */}
-       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-2/3 h-12 flex items-center justify-center gap-1">
-          {[...Array(20)].map((_, i) => (
-             <motion.div
-               key={i}
-               animate={{ 
-                  height: [8, 32, 8],
-                  opacity: [0.2, 0.6, 0.2]
-               }}
-               transition={{ 
-                  duration: 0.5 + Math.random(), 
-                  repeat: Infinity, 
-                  delay: i * 0.05 
-               }}
-               className="w-1 bg-cyan-400/40 rounded-full"
-             />
-          ))}
-       </div>
-
-       {/* Camera Avatar Placeholder */}
-       <div className="h-full flex items-center justify-center">
-          <div className="relative">
-             <div className="absolute -inset-10 bg-cyan-500/10 blur-[80px] rounded-full" />
-             <div className="relative h-40 w-40 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/10">
-                <Users size={80} strokeWidth={1} />
-             </div>
-          </div>
-       </div>
-
-       {/* HUD Bottom Bar */}
-       <div className="absolute bottom-0 inset-x-0 h-20 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-center gap-6">
-          <button className="h-12 w-12 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 transition-all border border-white/5">
-             <Mic size={20} />
-          </button>
-          <button className="h-14 w-14 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-[0_0_30px_rgba(244,63,94,0.3)] transition-all">
-             <XCircle size={24} />
-          </button>
-          <button className="h-12 w-12 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 transition-all border border-white/5">
-             <Settings size={20} />
-          </button>
-       </div>
-    </div>
-  );
-}
-
-// ─── Sync Timeline Card (Light Mode) ───────────────────────────
-
-function SyncTimelineCard({ session }: { session: any }) {
-  return (
-    <div className="group relative bg-white border border-slate-200 hover:border-blue-500/20 transition-all p-8 rounded-[32px] shadow-sm hover:shadow-xl hover:shadow-blue-500/5">
-       <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-             <div className={cn(
-                "h-3 w-3 rounded-full animate-pulse",
-                session.status === "active" ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-slate-200"
-             )} />
-             <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 italic">Target_ID: {session.id}</span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-100 rounded-full">
-             <Clock size={12} className="text-blue-500" />
-             <span className="text-[10px] font-black text-slate-500">{session.time}</span>
-          </div>
-       </div>
-
-       <div className="space-y-2">
-          <h4 className="text-3xl font-black tracking-tighter text-slate-900 uppercase">{session.candidate}</h4>
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">{session.role} • {session.duration}</p>
-       </div>
-
-       <div className="mt-8 flex items-center justify-between">
-          <div className="flex -space-x-3">
-             {[1, 2].map(i => (
-                <div key={i} className="h-10 w-10 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-black text-slate-400">
-                   JD
-                </div>
-             ))}
-             <div className="h-10 w-10 rounded-full bg-blue-600 text-white border-2 border-white flex items-center justify-center text-[10px] font-black shadow-lg shadow-blue-100">
-                +3
-             </div>
-          </div>
-          <Button className="h-12 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest px-8 shadow-xl shadow-slate-200">
-             Synchronize Now <Zap size={14} className="ml-2" />
-          </Button>
-       </div>
-    </div>
-  );
-}
-
-// ─── Main Interviews Portal (Light Mode) ───────────────────────
-
-export default function InterviewsPortal() {
-  const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState("upcoming");
-
-  const sessions = [
-    { id: "S-1422", candidate: "Aravind Swaminathan", role: "Principal Neural Architect", time: "14:00 GST", duration: "60 MIN", status: "active" },
-    { id: "S-1423", candidate: "Priya Kapoor", role: "Sr. Quantum Sync Engineer", time: "16:30 GST", duration: "45 MIN", status: "idle" },
-    { id: "S-1424", candidate: "Marcus Chen", role: "AI Ethics Overseer", time: "TOMORROW 09:00", duration: "30 MIN", status: "idle" },
-  ];
-
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 p-12 font-sans selection:bg-blue-500 selection:text-white flex flex-col gap-12">
-      {/* Header HUD (Light) */}
-      <header className="flex items-center justify-between">
-         <div className="space-y-2">
-            <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full bg-blue-50 border border-blue-100">
-               <Zap size={14} className="text-blue-600" />
-               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Synchronization Portal v4.2</span>
-            </div>
-            <h1 className="text-5xl font-black tracking-tighter uppercase leading-none mt-2 text-slate-900">Neural Interviews</h1>
-         </div>
-
-         <div className="flex items-center gap-4">
-            <div className="flex flex-col items-end mr-6">
-               <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Connection: OPTIMAL</span>
-               <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Lat: 12ms</span>
-            </div>
-            <Button className="h-14 rounded-[20px] bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest px-10 shadow-xl shadow-blue-100">
-               Schedule New Sync
-            </Button>
-         </div>
-      </header>
-
-      <div className="flex-1 grid grid-cols-12 gap-12 min-h-0">
-         {/* Left: Timeline & Calendar */}
-         <div className="col-span-12 lg:col-span-7 flex flex-col gap-10">
-            <div className="flex items-center gap-8 border-b border-slate-200 pb-6">
-               {["upcoming", "completed", "archives"].map(tab => (
-                  <button 
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={cn(
-                       "text-[11px] font-black uppercase tracking-[0.3em] transition-all relative pb-6",
-                       activeTab === tab ? "text-blue-600" : "text-slate-300 hover:text-slate-400"
-                    )}
-                  >
-                     {tab}
-                     {activeTab === tab && (
-                        <motion.div layoutId="tab-underline" className="absolute bottom-0 inset-x-0 h-1 bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.3)]" />
-                     )}
-                  </button>
-               ))}
-            </div>
-
-            <div className="flex-1 overflow-y-auto scrollbar-hide space-y-6">
-               {sessions.map((session, i) => (
-                  <motion.div
-                    key={session.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.1 }}
-                  >
-                     <SyncTimelineCard session={session} />
-                  </motion.div>
-               ))}
-            </div>
-         </div>
-
-         {/* Right: Active Sync HUD */}
-         <div className="col-span-12 lg:col-span-5 flex flex-col gap-10">
-            <div className="flex-1 flex flex-col gap-8">
-               <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                     <div className="h-10 w-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-300 shadow-sm">
-                        <Video size={20} />
-                     </div>
-                     <h3 className="text-xl font-bold tracking-tight uppercase text-slate-900">Active Connection</h3>
-                  </div>
-                  <Button variant="ghost" className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900">
-                     Full Console
-                  </Button>
-               </div>
-
-               <div className="h-[400px]">
-                  <NeuralConnectionPreview />
-               </div>
-
-               {/* Cognitive Scorecard (Light) */}
-               <div className="bg-white border border-slate-200 p-10 rounded-[32px] space-y-10 shadow-sm">
-                  <div className="flex items-center justify-between mb-2">
-                     <div className="flex items-center gap-3">
-                        <Sliders size={20} className="text-blue-600" />
-                        <h4 className="text-lg font-black tracking-tight uppercase text-slate-900">Cognitive Scorecard</h4>
-                     </div>
-                     <div className="px-3 py-1 bg-blue-50 border border-blue-100 rounded-full">
-                        <span className="text-[10px] font-black text-blue-600">AUTO_AUDIT: ON</span>
-                     </div>
-                  </div>
-
-                  <div className="space-y-12">
-                     {[
-                        { label: "Technical Sync", value: 88, color: "bg-blue-600" },
-                        { label: "Cultural Alignment", value: 94, color: "bg-emerald-500" },
-                        { label: "Neural Precision", value: 76, color: "bg-cyan-500" }
-                     ].map(metric => (
-                        <div key={metric.label} className="space-y-4">
-                           <div className="flex justify-between items-center">
-                              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">{metric.label}</span>
-                              <span className="text-sm font-black text-slate-900">{metric.value}%</span>
-                           </div>
-                           <div className="h-2 w-full bg-slate-50 rounded-full overflow-hidden border border-slate-100">
-                              <motion.div 
-                                initial={{ width: 0 }}
-                                animate={{ width: `${metric.value}%` }}
-                                className={cn("h-full shadow-lg", metric.color)}
-                              />
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-
-                  <Button className="w-full h-16 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-[0.3em] shadow-xl shadow-slate-200">
-                     Commit Evaluation
-                  </Button>
-               </div>
-            </div>
-         </div>
+    <div className="relative h-full bg-theme-overlay rounded-xl overflow-hidden border border-theme-border">
+      {/* Status chip */}
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 px-2.5 py-1 bg-theme-surface/80 backdrop-blur-sm border border-theme-border rounded-full">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="text-[10px] font-semibold text-theme-muted">Live · Connected</span>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-        
-        body {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-        }
+      {/* Centre avatar */}
+      <div className="h-full flex items-center justify-center">
+        <div className="h-24 w-24 rounded-full bg-theme-raised border border-theme-border flex items-center justify-center text-theme-muted">
+          <Users size={40} strokeWidth={1.2} />
+        </div>
+      </div>
 
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      ` }} />
+      {/* Waveform */}
+      <div className="absolute bottom-14 left-1/2 -translate-x-1/2 flex items-end gap-0.5 h-8">
+        {[3, 6, 10, 14, 10, 6, 14, 10, 6, 3, 6, 10, 14, 8, 4].map((h, i) => (
+          <div
+            key={i}
+            className="w-1 rounded-full bg-theme-primary/40"
+            style={{ height: h }}
+          />
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div className="absolute bottom-0 inset-x-0 h-12 bg-gradient-to-t from-black/20 to-transparent flex items-center justify-center gap-3">
+        <button className="h-9 w-9 rounded-full bg-theme-surface/50 border border-theme-border flex items-center justify-center text-theme-muted hover:text-theme-fg transition-all">
+          <Mic size={14} />
+        </button>
+        <button className="h-10 w-10 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-lg shadow-rose-500/20 hover:bg-rose-600 transition-all">
+          <X size={16} />
+        </button>
+        <button className="h-9 w-9 rounded-full bg-theme-surface/50 border border-theme-border flex items-center justify-center text-theme-muted hover:text-theme-fg transition-all">
+          <Settings size={14} />
+        </button>
+      </div>
     </div>
+  );
+}
+
+/* ─── Session Card ────────────────────────────────────────────────────────── */
+function SessionCard({ session }: { session: any }) {
+  return (
+    <div className="group bg-theme-card border border-theme-border hover:border-theme-strong rounded-xl p-4 transition-all hover:shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          {/* Status dot */}
+          <div className="mt-1.5 flex-shrink-0">
+            <span className={cn(
+              "h-2 w-2 rounded-full block",
+              session.status === "active"
+                ? "bg-emerald-500 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.5)]"
+                : "bg-theme-muted/40",
+            )} />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm text-theme-fg truncate">{session.candidate}</p>
+            <p className="text-[11px] text-theme-muted mt-0.5">{session.role}</p>
+            <div className="flex items-center gap-3 mt-2">
+              <div className="flex items-center gap-1.5 text-[11px] text-theme-muted">
+                <Clock size={11} />
+                <span>{session.time}</span>
+              </div>
+              <span className="text-[11px] text-theme-muted">·</span>
+              <span className="text-[11px] text-theme-muted">{session.duration}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Interviewers */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex -space-x-1.5">
+            {["JD", "KP", "+2"].map((init, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "h-7 w-7 rounded-full border-2 border-theme-surface flex items-center justify-center text-[9px] font-bold",
+                  i === 2 ? "bg-theme-primary text-white" : "bg-theme-raised text-theme-muted",
+                )}
+              >
+                {init}
+              </div>
+            ))}
+          </div>
+          <button className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-theme-raised border border-theme-border hover:border-theme-strong hover:text-theme-primary transition-all">
+            Join <ChevronRight size={11} />
+          </button>
+        </div>
+      </div>
+
+      {/* Status badge */}
+      {session.status === "active" && (
+        <div className="mt-3 pt-3 border-t border-theme-border flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Activity size={11} className="text-emerald-500" />
+            <span className="text-[10px] font-semibold text-emerald-500">Session in progress</span>
+          </div>
+          <button className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-theme-primary text-white hover:opacity-90 transition-opacity">
+            <Zap size={11} fill="currentColor" /> Join Live
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Scorecard ───────────────────────────────────────────────────────────── */
+function Scorecard({ metrics }: { metrics: { label: string; value: number; color: string }[] }) {
+  return (
+    <div className="bg-theme-card border border-theme-border rounded-xl p-4">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sliders size={14} className="text-theme-muted" />
+          <span className="text-sm font-semibold text-theme-fg">Evaluation Scorecard</span>
+        </div>
+        <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-theme-raised border border-theme-border text-theme-muted">
+          Auto-audit on
+        </span>
+      </div>
+
+      <div className="space-y-4">
+        {metrics.map((m) => (
+          <div key={m.label} className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-theme-muted">{m.label}</span>
+              <span className="text-xs font-semibold text-theme-fg tabular-nums">{m.value}%</span>
+            </div>
+            <div className="h-1.5 bg-theme-raised rounded-full overflow-hidden">
+              <div
+                className={cn("h-full rounded-full transition-all duration-700", m.color)}
+                style={{ width: `${m.value}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button className="w-full mt-5 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity">
+        <CheckCircle2 size={13} /> Submit Evaluation
+      </button>
+    </div>
+  );
+}
+
+/* ─── Main Page ───────────────────────────────────────────────────────────── */
+export default function InterviewsPage() {
+  const { showToast } = useToast();
+  const [activeTab, setActiveTab] = useState<"upcoming" | "completed" | "archived">("upcoming");
+
+  const sessions = [
+    {
+      id: "S-1422", candidate: "Aravind Swaminathan",
+      role: "Principal Engineer", time: "14:00 GST", duration: "60 min", status: "active",
+    },
+    {
+      id: "S-1423", candidate: "Priya Kapoor",
+      role: "Senior Backend Engineer", time: "16:30 GST", duration: "45 min", status: "idle",
+    },
+    {
+      id: "S-1424", candidate: "Marcus Chen",
+      role: "AI Product Manager", time: "Tomorrow · 09:00", duration: "30 min", status: "idle",
+    },
+  ];
+
+  const metrics = [
+    { label: "Technical Skills", value: 88, color: "bg-theme-primary" },
+    { label: "Cultural Fit",     value: 94, color: "bg-emerald-500" },
+    { label: "Communication",   value: 76, color: "bg-amber-500" },
+  ];
+
+  const TABS = ["upcoming", "completed", "archived"] as const;
+
+  return (
+    <DashboardShell
+      title="Interviews"
+      subtitle="Schedule and manage candidate interview sessions"
+      actions={
+        <button
+          onClick={() => showToast("Interview scheduling coming soon", "info")}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity"
+        >
+          <Plus size={13} /> Schedule Interview
+        </button>
+      }
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        {/* ── Left: Sessions ─────────────────────────────────────────── */}
+        <div className="lg:col-span-7 flex flex-col gap-4">
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Scheduled today", value: "3", icon: <Calendar size={14} />, color: "text-theme-primary" },
+              { label: "In progress",     value: "1", icon: <Activity size={14} />, color: "text-emerald-500" },
+              { label: "Completed",       value: "12", icon: <CheckCircle2 size={14} />, color: "text-theme-muted" },
+            ].map((s) => (
+              <div key={s.label} className="bg-theme-card border border-theme-border rounded-xl p-3.5">
+                <div className={cn("mb-2", s.color)}>{s.icon}</div>
+                <p className="text-xl font-black text-theme-fg tabular-nums">{s.value}</p>
+                <p className="text-[11px] text-theme-muted mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabs */}
+          <div className="flex items-center gap-1 bg-theme-raised rounded-lg p-0.5 w-fit">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "px-4 py-1.5 rounded-md text-xs font-semibold capitalize transition-all",
+                  activeTab === tab
+                    ? "bg-theme-surface text-theme-fg shadow-sm"
+                    : "text-theme-muted hover:text-theme-fg",
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {/* Session list */}
+          <div className="space-y-3">
+            {sessions.map((session) => (
+              <SessionCard key={session.id} session={session} />
+            ))}
+          </div>
+        </div>
+
+        {/* ── Right: Video + Scorecard ────────────────────────────────── */}
+        <div className="lg:col-span-5 flex flex-col gap-4">
+
+          {/* Video */}
+          <div className="bg-theme-card border border-theme-border rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-lg bg-theme-raised border border-theme-border flex items-center justify-center text-theme-muted">
+                  <Video size={13} />
+                </div>
+                <span className="text-sm font-semibold text-theme-fg">Active Session</span>
+              </div>
+              <button className="text-[11px] font-semibold text-theme-muted hover:text-theme-fg transition-colors">
+                Full screen
+              </button>
+            </div>
+            <div className="h-64">
+              <VideoPreview />
+            </div>
+          </div>
+
+          {/* Scorecard */}
+          <Scorecard metrics={metrics} />
+        </div>
+      </div>
+    </DashboardShell>
   );
 }
