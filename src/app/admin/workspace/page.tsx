@@ -35,8 +35,8 @@ const TYPE_CONFIG = {
     href: "/admin/workspace/documents",
     gradient: "from-blue-500 to-indigo-600",
     bg: "bg-blue-500/10",
-    text: "text-blue-600 dark:text-blue-400",
-    border: "border-blue-200 dark:border-blue-800",
+    text: "text-blue-400",
+    border: "border-theme-border",
     desc: "Rich text docs, reports & wikis",
     emoji: "📄",
   },
@@ -46,8 +46,8 @@ const TYPE_CONFIG = {
     href: "/admin/workspace/spreadsheets",
     gradient: "from-emerald-500 to-teal-600",
     bg: "bg-emerald-500/10",
-    text: "text-emerald-600 dark:text-emerald-400",
-    border: "border-emerald-200 dark:border-emerald-800",
+    text: "text-emerald-400",
+    border: "border-theme-border",
     desc: "Tables, trackers & data grids",
     emoji: "📊",
   },
@@ -57,8 +57,8 @@ const TYPE_CONFIG = {
     href: "/admin/workspace/presentations",
     gradient: "from-violet-500 to-purple-600",
     bg: "bg-violet-500/10",
-    text: "text-violet-600 dark:text-violet-400",
-    border: "border-violet-200 dark:border-violet-800",
+    text: "text-violet-400",
+    border: "border-theme-border",
     desc: "Slide decks & visual stories",
     emoji: "📑",
   },
@@ -68,8 +68,8 @@ const TYPE_CONFIG = {
     href: "/admin/workspace/notes",
     gradient: "from-amber-500 to-orange-500",
     bg: "bg-amber-500/10",
-    text: "text-amber-600 dark:text-amber-400",
-    border: "border-amber-200 dark:border-amber-800",
+    text: "text-amber-400",
+    border: "border-theme-border",
     desc: "Quick notes, ideas & checklists",
     emoji: "📝",
   },
@@ -114,11 +114,12 @@ export default function WorkspaceHubPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
+      const role = user.role || "";
       const [docsRes, sheetsRes, pptsRes, notesRes] = await Promise.all([
-        axios.get(`/api/workspace/documents?userId=${user.id}`),
-        axios.get(`/api/workspace/spreadsheets?userId=${user.id}`),
-        axios.get(`/api/workspace/presentations?userId=${user.id}`),
-        axios.get(`/api/workspace/notes?userId=${user.id}`),
+        axios.get(`/api/workspace/documents?userId=${user.id}&userRole=${role}`),
+        axios.get(`/api/workspace/spreadsheets?userId=${user.id}&userRole=${role}`),
+        axios.get(`/api/workspace/presentations?userId=${user.id}&userRole=${role}`),
+        axios.get(`/api/workspace/notes?userId=${user.id}&userRole=${role}`),
       ]);
 
       const docs = (docsRes.data.documents || []).map((d: any) => ({ ...d, type: "document" }));
@@ -175,56 +176,34 @@ export default function WorkspaceHubPage() {
     `/admin/workspace/${item.type}s/${item.id}`;
 
   return (
-    <DashboardShell>
-      <div className="flex flex-col min-h-full">
-        {/* Hero header */}
-        <div className="relative overflow-hidden rounded-2xl mb-8 bg-gradient-to-br from-theme-primary/10 via-violet-500/5 to-transparent border border-theme-border p-8">
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles size={18} className="text-theme-primary" />
-              <span className="text-xs font-bold uppercase tracking-widest text-theme-muted">Workspace</span>
-            </div>
-            <h1 className="text-3xl font-black text-theme-fg tracking-tight mb-1">
-              {getGreeting(user?.name ?? "")}
-            </h1>
-            <p className="text-theme-muted text-sm">Create, collaborate, and organise your team's knowledge.</p>
-          </div>
-          <div className="absolute -right-8 -bottom-8 w-48 h-48 rounded-full bg-theme-primary/5 blur-2xl" />
-          <div className="absolute right-24 -top-8 w-32 h-32 rounded-full bg-violet-500/5 blur-xl" />
-        </div>
+    <DashboardShell title="Workspace Hub" subtitle={getGreeting(user?.name ?? "")}>
+      <div className="space-y-8">
 
         {/* 4 type cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {(Object.keys(TYPE_CONFIG) as (keyof typeof TYPE_CONFIG)[]).map((type) => {
             const cfg = TYPE_CONFIG[type];
-            const Icon = cfg.icon;
             return (
-              <div key={type} className={cn(
-                "group relative rounded-2xl border bg-theme-surface p-5 flex flex-col gap-3 hover:shadow-lg transition-all cursor-pointer",
-                cfg.border
-              )}>
-                <Link href={cfg.href} className="absolute inset-0 z-10" />
-                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-lg", cfg.bg)}>
-                  {cfg.emoji}
+              <div key={type} className="group relative bg-theme-card border border-theme-border rounded-xl p-4 flex flex-col gap-3 hover:border-theme-strong hover:shadow-sm transition-all cursor-pointer">
+                <Link href={cfg.href} className="absolute inset-0 z-10 rounded-xl" />
+                <div className="flex items-start justify-between">
+                  <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0", cfg.bg)}>
+                    {cfg.emoji}
+                  </div>
+                  <span className={cn("text-sm font-black tabular-nums", cfg.text)}>
+                    {loading ? "—" : counts[type]}
+                  </span>
                 </div>
                 <div>
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-theme-fg text-sm">{cfg.label}</p>
-                    <span className={cn("text-xs font-black", cfg.text)}>
-                      {loading ? "—" : counts[type]}
-                    </span>
-                  </div>
-                  <p className="text-xs text-theme-muted mt-0.5">{cfg.desc}</p>
+                  <p className="font-semibold text-sm text-theme-fg">{cfg.label}</p>
+                  <p className="text-[11px] text-theme-muted mt-0.5 leading-snug">{cfg.desc}</p>
                 </div>
                 <button
                   onClick={(e) => { e.preventDefault(); createNew(type); }}
                   disabled={creating}
-                  className={cn(
-                    "relative z-20 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all",
-                    cfg.bg, cfg.text, "hover:opacity-80"
-                  )}
+                  className={cn("relative z-20 flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg w-fit transition-all hover:opacity-80", cfg.bg, cfg.text)}
                 >
-                  <Plus size={12} /> New
+                  <Plus size={11} /> New
                 </button>
               </div>
             );
@@ -233,32 +212,21 @@ export default function WorkspaceHubPage() {
 
         {/* Pinned */}
         {pinned.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-3">
-              <Pin size={14} className="text-theme-muted" />
-              <h2 className="text-xs font-black uppercase tracking-widest text-theme-muted">Pinned</h2>
-            </div>
+          <div className="space-y-3">
+            <p className="section-label flex items-center gap-2"><Pin size={10} fill="currentColor" /> Pinned · {pinned.length}</p>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {pinned.map((item) => {
                 const cfg = TYPE_CONFIG[item.type];
                 return (
-                  <Link
-                    key={item.id}
-                    href={itemHref(item)}
-                    className={cn(
-                      "group rounded-xl border bg-theme-surface p-4 flex flex-col gap-2 hover:shadow-md transition-all",
-                      cfg.border
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{item.icon || cfg.emoji}</span>
-                      <span className="text-xs font-semibold text-theme-fg truncate flex-1">{item.title}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", cfg.bg, cfg.text)}>
-                        {cfg.label.replace(/s$/, "")}
-                      </span>
-                      <span className="text-[10px] text-theme-muted">{dayjs(item.last_edited_at).fromNow()}</span>
+                  <Link key={item.id} href={itemHref(item)} target="_blank"
+                    className="group flex items-start gap-3 bg-theme-card border border-theme-border rounded-xl p-3.5 hover:border-theme-strong hover:shadow-sm transition-all">
+                    <span className="text-lg flex-shrink-0 mt-0.5">{item.icon || cfg.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-theme-fg truncate group-hover:text-theme-primary transition-colors">{item.title}</p>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full", cfg.bg, cfg.text)}>{cfg.label.replace(/s$/, "")}</span>
+                        <span className="text-[10px] text-theme-muted">{dayjs(item.last_edited_at).fromNow()}</span>
+                      </div>
                     </div>
                   </Link>
                 );
@@ -268,34 +236,26 @@ export default function WorkspaceHubPage() {
         )}
 
         {/* Recent */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Clock size={14} className="text-theme-muted" />
-              <h2 className="text-xs font-black uppercase tracking-widest text-theme-muted">Recent</h2>
-            </div>
-          </div>
+        <div className="space-y-3">
+          <p className="section-label flex items-center gap-2"><Clock size={10} /> Recent</p>
 
           {loading ? (
             <div className="space-y-2">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-14 rounded-xl bg-theme-raised animate-pulse" />
-              ))}
+              {[...Array(5)].map((_, i) => <div key={i} className="h-12 rounded-xl bg-theme-card border border-theme-border animate-pulse" />)}
             </div>
           ) : recent.length === 0 ? (
-            <div className="text-center py-16 text-theme-muted">
-              <LayoutTemplate size={40} className="mx-auto mb-3 opacity-30" />
-              <p className="font-semibold text-sm">Your workspace is empty</p>
-              <p className="text-xs mt-1">Create your first document, spreadsheet, presentation, or note.</p>
-              <div className="flex items-center gap-2 justify-center mt-4">
+            <div className="flex flex-col items-center justify-center py-16 gap-4 text-center bg-theme-card border border-dashed border-theme-border rounded-xl">
+              <LayoutTemplate size={32} className="text-theme-muted opacity-30" />
+              <div>
+                <p className="font-semibold text-sm text-theme-fg">Workspace is empty</p>
+                <p className="text-xs text-theme-muted mt-1">Create your first doc, sheet, presentation or note.</p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap justify-center">
                 {(Object.keys(TYPE_CONFIG) as (keyof typeof TYPE_CONFIG)[]).map((type) => {
                   const cfg = TYPE_CONFIG[type];
                   return (
-                    <button
-                      key={type}
-                      onClick={() => createNew(type)}
-                      className={cn("text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5", cfg.bg, cfg.text)}
-                    >
+                    <button key={type} onClick={() => createNew(type)}
+                      className={cn("text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5", cfg.bg, cfg.text)}>
                       {cfg.emoji} {cfg.label.replace(/s$/, "")}
                     </button>
                   );
@@ -303,56 +263,39 @@ export default function WorkspaceHubPage() {
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-theme-border overflow-hidden bg-theme-surface">
+            <div className="bg-theme-card border border-theme-border rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-theme-border bg-theme-raised">
-                    <th className="text-left px-4 py-3 text-xs font-black uppercase tracking-widest text-theme-muted w-1/2">Title</th>
-                    <th className="text-left px-4 py-3 text-xs font-black uppercase tracking-widest text-theme-muted hidden md:table-cell">Type</th>
-                    <th className="text-left px-4 py-3 text-xs font-black uppercase tracking-widest text-theme-muted hidden lg:table-cell">Owner</th>
-                    <th className="text-right px-4 py-3 text-xs font-black uppercase tracking-widest text-theme-muted">Edited</th>
+                  <tr className="border-b border-theme-border bg-theme-raised/60">
+                    <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-theme-muted w-1/2">Name</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-theme-muted hidden md:table-cell">Type</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-theme-muted hidden lg:table-cell">Owner</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-theme-muted">Edited</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-theme-border">
                   {recent.map((item) => {
                     const cfg = TYPE_CONFIG[item.type];
                     return (
-                      <tr key={item.id} className="hover:bg-theme-raised transition-colors group cursor-pointer">
+                      <tr key={item.id} className="hover:bg-theme-raised/50 transition-colors group cursor-pointer">
                         <td className="px-4 py-3">
-                          <Link 
-                            href={itemHref(item)} 
-                            target="_blank"
-                            onClick={() => {
-                              setNavigatingId(item.id);
-                              // Reset after 2 seconds since it opens in a new tab
-                              setTimeout(() => setNavigatingId(null), 2000);
-                            }}
-                            className="flex items-center gap-3"
-                          >
-                            <span className="flex items-center justify-center w-6">
-                              {navigatingId === item.id ? (
-                                <Loader2 size={16} className="animate-spin text-theme-primary" />
-                              ) : (
-                                <span className="text-base">{item.icon || cfg.emoji}</span>
-                              )}
+                          <Link href={itemHref(item)} target="_blank"
+                            onClick={() => { setNavigatingId(item.id); setTimeout(() => setNavigatingId(null), 2000); }}
+                            className="flex items-center gap-3">
+                            <span className="flex items-center justify-center w-5 flex-shrink-0">
+                              {navigatingId === item.id
+                                ? <Loader2 size={14} className="animate-spin text-theme-primary" />
+                                : <span className="text-base leading-none">{item.icon || cfg.emoji}</span>}
                             </span>
-                            <span className="font-semibold text-theme-fg truncate group-hover:text-theme-primary transition-colors">
-                              {item.title}
-                            </span>
-                            {item.is_pinned && <Pin size={10} className="text-amber-500 flex-shrink-0" />}
+                            <span className="font-medium text-sm text-theme-fg truncate group-hover:text-theme-primary transition-colors">{item.title}</span>
+                            {item.is_pinned && <Pin size={10} className="text-amber-500 flex-shrink-0" fill="currentColor" />}
                           </Link>
                         </td>
                         <td className="px-4 py-3 hidden md:table-cell">
-                          <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", cfg.bg, cfg.text)}>
-                            {cfg.label.replace(/s$/, "")}
-                          </span>
+                          <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full", cfg.bg, cfg.text)}>{cfg.label.replace(/s$/, "")}</span>
                         </td>
-                        <td className="px-4 py-3 hidden lg:table-cell text-theme-muted text-xs">
-                          {item.owner?.name ?? "—"}
-                        </td>
-                        <td className="px-4 py-3 text-right text-xs text-theme-muted">
-                          {dayjs(item.last_edited_at).fromNow()}
-                        </td>
+                        <td className="px-4 py-3 hidden lg:table-cell text-xs text-theme-muted">{item.owner?.name ?? "—"}</td>
+                        <td className="px-4 py-3 text-right text-xs text-theme-muted">{dayjs(item.last_edited_at).fromNow()}</td>
                       </tr>
                     );
                   })}

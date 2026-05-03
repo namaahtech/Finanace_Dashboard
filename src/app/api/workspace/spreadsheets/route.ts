@@ -10,24 +10,31 @@ export async function GET(req: Request) {
     const pinned = searchParams.get("pinned");
 
     const userId = searchParams.get("userId");
-    if (!userId) {
+    const userRole = searchParams.get("userRole");
+    const projectId = searchParams.get("projectId");
+    const isAdmin = ["super_admin", "accounts", "hr", "manager"].includes(userRole || "");
+
+    if (!userId && !projectId) {
       return NextResponse.json({ spreadsheets: [] });
     }
 
-    const { data: sharedIds, error: shareError } = await supabase
-      .from("workspace_shares")
-      .select("item_id")
-      .eq("user_id", userId)
-      .eq("item_type", "spreadsheet");
-
-    const sharedItemIds = (sharedIds || []).map(s => s.item_id);
-
     let query = supabase
       .from("workspace_spreadsheets")
-      .select("id, title, icon, is_pinned, status, tags, last_edited_at, created_at, owner_id, owner:employees!workspace_spreadsheets_owner_id_fkey(id,name,employee_id)")
+      .select("id, title, icon, is_pinned, status, tags, last_edited_at, created_at, owner_id, project_id, owner:employees!workspace_spreadsheets_owner_id_fkey(id,name,employee_id)")
       .eq("status", status)
-      .or(`owner_id.eq.${userId}${sharedItemIds.length > 0 ? `,id.in.(${sharedItemIds.join(',')})` : ''}`)
       .order("last_edited_at", { ascending: false });
+
+    if (projectId) {
+      query = query.eq("project_id", projectId);
+    } else if (!isAdmin) {
+      const { data: sharedIds } = await supabase
+        .from("workspace_shares")
+        .select("item_id")
+        .eq("user_id", userId!)
+        .eq("item_type", "spreadsheet");
+      const sharedItemIds = (sharedIds || []).map(s => s.item_id);
+      query = query.or(`owner_id.eq.${userId}${sharedItemIds.length > 0 ? `,id.in.(${sharedItemIds.join(',')})` : ''}`);
+    }
 
     if (search) query = query.ilike("title", `%${search}%`);
     if (pinned === "true") query = query.eq("is_pinned", true);

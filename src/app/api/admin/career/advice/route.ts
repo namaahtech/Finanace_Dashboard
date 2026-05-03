@@ -1,59 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
+import { callAI, parseAIJSON } from "@/lib/ai";
 
 export async function POST(req: NextRequest) {
   try {
     const { currentRole, targetRole, skills } = await req.json();
 
-    const endpoint = process.env.LOCAL_AI_ENDPOINT;
-    const model = process.env.LOCAL_AI_MODEL || "gemma4:e4b";
-    const bridgeKey = process.env.AI_BRIDGE_KEY;
-
-    if (!endpoint || !bridgeKey) {
-      return NextResponse.json({ error: "AI Engine not configured" }, { status: 500 });
+    if (!currentRole || !targetRole) {
+      return NextResponse.json({ error: "Missing currentRole or targetRole" }, { status: 400 });
     }
 
     const prompt = `
-      You are a Neural Career Advisor. 
-      Analyze the path from ${currentRole} to ${targetRole}.
-      Current Skills: ${skills}
-      
-      Generate a strategic roadmap in JSON format:
-      {
-        "roadmap": [
-          { "step": "Phase 1: title", "action": "detailed action", "skills": "required skill" },
-          { "step": "Phase 2: title", "action": "detailed action", "skills": "required skill" },
-          { "step": "Phase 3: title", "action": "detailed action", "skills": "required skill" }
-        ],
-        "mentorTip": "a high-level strategic tip"
-      }
-    `;
+You are an expert career advisor.
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${bridgeKey}`,
-      },
-      body: JSON.stringify({
-        model: model,
-        prompt: prompt,
-        stream: false,
-        format: "json",
-      }),
-    });
+A professional wants to transition from "${currentRole}" to "${targetRole}".
+Their current skills: ${skills || "not specified"}.
 
-    const data = await response.json();
-    const result = JSON.parse(data.response);
+Return ONLY a JSON object:
+{
+  "roadmap": [
+    { "step": "Phase 1: <title>", "action": "<detailed action>", "skills": "<skill or resource>" },
+    { "step": "Phase 2: <title>", "action": "<detailed action>", "skills": "<skill or resource>" },
+    { "step": "Phase 3: <title>", "action": "<detailed action>", "skills": "<skill or resource>" }
+  ],
+  "mentorTip": "<one high-level strategic tip>"
+}
+`;
 
+    const raw = await callAI(prompt, true);
+    const result = parseAIJSON<{ roadmap: any[]; mentorTip: string }>(raw);
     return NextResponse.json(result);
-
   } catch (error: any) {
-    console.error("Career Advice API Error:", error);
-    return NextResponse.json({ 
-      roadmap: [
-        { step: "Calibration Needed", action: "Unable to reach Gemma 4 engine.", skills: "System Link" }
-      ],
-      mentorTip: "Verify your Mac Mini connection."
-    });
+    console.error("Career advice error:", error.message);
+    return NextResponse.json({
+      roadmap: [{ step: "Error", action: "Could not generate roadmap. Please try again.", skills: "" }],
+      mentorTip: error.message || "AI unavailable",
+    }, { status: 500 });
   }
 }
