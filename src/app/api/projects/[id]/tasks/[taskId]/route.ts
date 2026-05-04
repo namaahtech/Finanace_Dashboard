@@ -7,17 +7,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { taskId } = await params;
     const body = await req.json();
 
-    const { title, description, status, priority, assigned_to, due_date } = body;
+    const { title, description, status, priority, assignee_ids, assigned_to, due_date } = body;
+    const primaryAssignee = assignee_ids !== undefined
+      ? (assignee_ids[0] || null)
+      : assigned_to;
 
     const { data, error } = await supabase
       .from("project_tasks")
       .update({
-        title,
-        description,
-        status,
-        priority,
-        assigned_to,
-        due_date,
+        ...(title !== undefined && { title }),
+        ...(description !== undefined && { description }),
+        ...(status !== undefined && { status }),
+        ...(priority !== undefined && { priority }),
+        ...(assignee_ids !== undefined && { assignee_ids, assigned_to: primaryAssignee }),
+        ...(assigned_to !== undefined && assignee_ids === undefined && { assigned_to }),
+        ...(due_date !== undefined && { due_date }),
         updated_at: new Date().toISOString()
       })
       .eq("id", taskId)

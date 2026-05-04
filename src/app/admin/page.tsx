@@ -184,33 +184,47 @@ export default function AdminOverview() {
 
   const loadDashboardData = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
+    let hadError = false;
+
+    const [configRes, analyticsRes, usersRes] = await Promise.allSettled([
+      request<{ config: ConfigShape }>({ url: "/api/config" }),
+      request<AnalyticsData>({ url: "/api/analytics/company" }),
+      request<{ users: UserShape[] }>({ url: "/api/users?role=employee&limit=6" }),
+    ]);
+
+    if (configRes.status === "fulfilled" && configRes.value?.config) {
+      setConfig(configRes.value.config);
+    } else if (configRes.status === "rejected") {
+      hadError = true;
+    }
+
+    if (analyticsRes.status === "fulfilled" && analyticsRes.value) {
+      setAnalytics(analyticsRes.value);
+    } else if (analyticsRes.status === "rejected") {
+      hadError = true;
+    }
+
+    const cfg = configRes.status === "fulfilled" ? (configRes.value?.config ?? MOCK_CONFIG) : MOCK_CONFIG;
+    const companyScore = calculateCompanyScore(
+      cfg.revenue_achievement_percentage,
+      cfg.collections_percentage,
+      cfg.delivery_health_percentage
+    );
+    const companyMultiplier = getCompanyMultiplier(companyScore);
+
+    const users = usersRes.status === "fulfilled" ? (usersRes.value?.users ?? []) : [];
+    if (usersRes.status === "rejected") hadError = true;
+
     try {
-      const [configRes, analyticsRes, usersRes] = await Promise.all([
-        request<{ config: ConfigShape }>({ url: "/api/config" }),
-        request<AnalyticsData>({ url: "/api/analytics/company" }),
-        request<{ users: UserShape[] }>({ url: "/api/users?role=employee&limit=6" }),
-      ]);
-
-      if (configRes.config) setConfig(configRes.config);
-      if (analyticsRes) setAnalytics(analyticsRes);
-
-      const cfg = configRes.config ?? MOCK_CONFIG;
-      const companyScore = calculateCompanyScore(
-        cfg.revenue_achievement_percentage,
-        cfg.collections_percentage,
-        cfg.delivery_health_percentage
-      );
-      const companyMultiplier = getCompanyMultiplier(companyScore);
-
       const rows = await Promise.all(
-        (usersRes.users ?? []).map(async (emp) => {
-          const [kpiRes, incRes] = await Promise.all([
+        users.map(async (emp) => {
+          const [kpiRes, incRes] = await Promise.allSettled([
             request<{ scores: any[] }>({ url: `/api/kpi?employeeId=${emp.id}` }),
             request<{ incentives: any[] }>({ url: `/api/incentives?employeeId=${emp.id}` }),
           ]);
-          const score = kpiRes.scores?.[0]?.final_score ?? 80;
+          const score = kpiRes.status === "fulfilled" ? (kpiRes.value?.scores?.[0]?.final_score ?? 80) : 80;
           const employeeMultiplier = getEmployeeMultiplier(score);
-          const latestIncentive = incRes.incentives?.[0];
+          const latestIncentive = incRes.status === "fulfilled" ? incRes.value?.incentives?.[0] : undefined;
           const baseIncentive = latestIncentive?.base_amount ?? 10000;
           return {
             id: emp.id,
@@ -224,11 +238,15 @@ export default function AdminOverview() {
         })
       );
       setEmployeeRows(rows);
-    } catch (err: any) {
-      showToast("Synchronization failure. Displaying offline metrics.", "warning");
-    } finally {
-      setLoading(false);
+    } catch {
+      hadError = true;
     }
+
+    if (hadError && !isRefresh) {
+      showToast("Some data could not be loaded. Showing available metrics.", "warning");
+    }
+
+    setLoading(false);
   }, [request, showToast]);
 
   useEffect(() => {

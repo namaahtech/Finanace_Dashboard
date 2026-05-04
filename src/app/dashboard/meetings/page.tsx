@@ -19,17 +19,17 @@ import {
 import { format, isToday, isTomorrow } from "date-fns";
 
 const STATUS_STYLES: Record<Meeting["status"], string> = {
-  scheduled: "bg-sky-500/10 text-sky-600",
-  active:    "bg-emerald-500/10 text-emerald-600",
-  ended:     "bg-theme-raised text-theme-muted",
-  cancelled: "bg-red-500/10 text-red-500",
+  scheduled: "bg-sky-500/10 text-sky-400 border border-sky-500/20",
+  active:    "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+  ended:     "bg-theme-raised text-theme-muted border border-theme-border",
+  cancelled: "bg-red-500/10 text-red-400 border border-red-500/20",
 };
 
 function StatusBadge({ status }: { status: Meeting["status"] }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
         STATUS_STYLES[status]
       )}
     >
@@ -92,7 +92,7 @@ export default function EmployeeMeetingsPage() {
             </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="page-card py-16 text-center text-theme-subtle">
+          <div className="bg-theme-card border border-theme-border rounded-xl p-5 py-16 text-center text-theme-subtle">
             <Calendar size={32} className="mx-auto mb-3 opacity-20" strokeWidth={1.5} />
             <p className="text-sm font-medium">No {tab} meetings</p>
             <p className="mt-1 text-xs">
@@ -114,7 +114,7 @@ export default function EmployeeMeetingsPage() {
               return (
                 <div
                   key={m.id}
-                  className="page-card flex items-center gap-4"
+                  className="bg-theme-card border border-theme-border rounded-xl p-5 flex items-center gap-4"
                 >
                   <div
                     className={cn(
@@ -159,7 +159,7 @@ export default function EmployeeMeetingsPage() {
                           type: m.type,
                         })
                       }
-                      className="flex items-center gap-1.5 rounded-lg bg-theme-primary px-3 py-1.5 text-xs font-semibold text-theme-surface transition-opacity hover:opacity-80"
+                      className="flex items-center gap-1.5 rounded-lg bg-theme-primary px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-80"
                     >
                       <Play size={11} /> Join
                     </button>

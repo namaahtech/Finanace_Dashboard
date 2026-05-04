@@ -153,22 +153,22 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       {/* ── Incoming Call Modal ────────────────────────────────────────────── */}
       {incomingCall && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-md">
-          <div className="bg-[#1a1a2e] border border-white/10 rounded-3xl p-8 w-80 flex flex-col items-center gap-6 shadow-2xl animate-in fade-in zoom-in duration-300">
+          <div className="bg-theme-surface border border-theme-border rounded-xl p-8 w-80 flex flex-col items-center gap-6 shadow-2xl animate-in fade-in zoom-in duration-300">
             {/* Animated ring */}
             <div className="relative flex items-center justify-center">
               <div className="absolute w-28 h-28 rounded-full bg-theme-primary/20 animate-ping" />
               <div className="absolute w-24 h-24 rounded-full bg-theme-primary/10 animate-ping" style={{ animationDelay: "0.3s" }} />
               <div className="w-20 h-20 rounded-full bg-theme-primary/20 border-2 border-theme-primary/50 flex items-center justify-center">
-                <span className="text-3xl font-black text-white">{incomingCall.callerName.slice(0, 2).toUpperCase()}</span>
+                <span className="text-3xl font-black text-theme-fg">{incomingCall.callerName.slice(0, 2).toUpperCase()}</span>
               </div>
             </div>
 
             <div className="text-center">
-              <p className="text-xs text-white/50 uppercase tracking-widest mb-1">
+              <p className="text-xs text-theme-muted uppercase tracking-widest mb-1">
                 {incomingCall.type === "video" ? "Incoming Video Call" : "Incoming Audio Call"}
               </p>
-              <h3 className="text-xl font-black text-white">{incomingCall.callerName}</h3>
-              <p className="text-sm text-white/50 mt-1">{incomingCall.title}</p>
+              <h3 className="text-xl font-black text-theme-fg">{incomingCall.callerName}</h3>
+              <p className="text-sm text-theme-muted mt-1">{incomingCall.title}</p>
             </div>
 
             <div className="flex items-center gap-6">
@@ -177,14 +177,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 <div className="w-14 h-14 rounded-full bg-rose-500 hover:bg-rose-600 flex items-center justify-center transition-all group-hover:scale-110 shadow-lg shadow-rose-500/30">
                   <PhoneOff size={22} className="text-white" />
                 </div>
-                <span className="text-[10px] text-white/50">Decline</span>
+                <span className="text-[10px] text-theme-muted">Decline</span>
               </button>
               <button onClick={acceptCall}
                 className="flex flex-col items-center gap-2 group">
                 <div className="w-14 h-14 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center transition-all group-hover:scale-110 shadow-lg shadow-emerald-500/30">
                   <Phone size={22} className="text-white" />
                 </div>
-                <span className="text-[10px] text-white/50">Accept</span>
+                <span className="text-[10px] text-theme-muted">Accept</span>
               </button>
             </div>
           </div>
@@ -193,15 +193,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
       {/* ── Global Active Call Overlay ─────────────────────────────────────── */}
       {activeCall && (
-        <div className="fixed inset-0 z-[150] bg-[#1a1a2e] flex flex-col">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-[#0d0d1a]">
+        <div className="fixed inset-0 z-[150] bg-theme-surface flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-theme-border bg-theme-bg">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-theme-primary/20 flex items-center justify-center text-theme-primary">
                 {activeCall.type === "video" ? <Video size={16} /> : <Mic size={16} />}
               </div>
               <div>
-                <p className="text-sm font-black text-white">{activeCall.title}</p>
-                <p className="text-[10px] text-white/40 font-mono">{activeCall.roomName}</p>
+                <p className="text-sm font-black text-theme-fg">{activeCall.title}</p>
+                <p className="text-[10px] text-theme-muted font-mono">{activeCall.roomName}</p>
               </div>
             </div>
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-black border border-emerald-500/20">
@@ -223,7 +223,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.map(t => (
           <div key={t.id}
-            className="pointer-events-auto flex items-start gap-3 bg-theme-surface border border-theme-border rounded-2xl px-4 py-3 shadow-2xl w-80 animate-in slide-in-from-right-4 fade-in duration-300">
+            className="pointer-events-auto flex items-start gap-3 bg-theme-surface border border-theme-border rounded-xl px-4 py-3 shadow-2xl w-80 animate-in slide-in-from-right-4 fade-in duration-300">
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${t.type === "message" ? "bg-theme-primary/10 text-theme-primary" : t.type === "meeting" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
               {t.type === "message" ? <MessageSquare size={15} /> : t.type === "meeting" ? <Video size={15} /> : <Bell size={15} />}
             </div>
