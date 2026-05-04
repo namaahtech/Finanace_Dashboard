@@ -303,17 +303,17 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
     <aside
       className={cn(
         "relative flex h-screen flex-col flex-shrink-0 transition-all duration-300 ease-in-out",
-        "bg-theme-sidebar-bg border-r border-theme-sidebar-border",
+        "bg-sidebar border-r border-sidebar",
         collapsed ? "w-[68px]" : "w-64"
       )}
     >
       {/* Header */}
       <div className={cn(
-        "flex h-[65px] items-center border-b border-theme-sidebar-border transition-all duration-300",
+        "flex h-[60px] items-center border-b border-sidebar transition-all duration-300",
         collapsed ? "justify-center px-0" : "justify-between px-5"
       )}>
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-theme-primary text-theme-surface font-black text-sm shadow-sm">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-theme-primary text-white font-black text-sm">
             N
           </div>
           {!collapsed && (
@@ -346,7 +346,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       <nav 
         ref={navRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-2.5 py-4 space-y-6 scrollbar-hide"
+        className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5 scrollbar-hide"
       >
         {sections.map((section) => (
           <div key={section.title}>
@@ -366,17 +366,17 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
                         "flex items-center rounded-lg transition-all duration-150",
                         collapsed ? "h-10 w-10 mx-auto justify-center" : "gap-2.5 px-3 py-2",
                         active
-                          ? "bg-theme-sidebar-active text-theme-sidebar-active-fg shadow-sm"
-                          : "text-theme-muted hover:bg-theme-sidebar-hover hover:text-theme-fg"
+                          ? "bg-theme-primary/10 text-theme-primary"
+                          : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg"
                       )}
                     >
                       <Icon
-                        size={16}
+                        size={15}
                         strokeWidth={active ? 2.5 : 2}
                         className="flex-shrink-0"
                       />
                       {!collapsed && (
-                        <span className="truncate text-sm font-semibold">{label}</span>
+                        <span className="truncate text-sm font-medium">{label}</span>
                       )}
                     </Link>
                   </li>
@@ -388,23 +388,23 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-theme-sidebar-border p-3 space-y-2">
+      <div className="border-t border-sidebar p-3 space-y-2">
         {!collapsed && (
-          <div className="rounded-lg bg-theme-raised px-3 py-2">
+          <div className="rounded-lg bg-theme-raised/60 px-3 py-2.5">
             <div className="flex items-center justify-between gap-2 mb-1">
               <p className="text-xs font-semibold text-theme-fg truncate">{user?.name ?? "—"}</p>
               <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0", roleInfo.cls)}>
                 {roleInfo.label}
               </span>
             </div>
-            <p className="text-xs text-theme-muted truncate">{user?.email ?? "—"}</p>
+            <p className="text-[11px] text-theme-muted truncate">{user?.email ?? "—"}</p>
           </div>
         )}
         <div className={cn("flex gap-2", collapsed && "flex-col items-center")}>
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className={cn(
-              "flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs text-theme-muted hover:text-theme-fg hover:bg-theme-raised transition-colors",
+              "flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs text-theme-muted hover:text-theme-fg hover:bg-theme-raised transition-colors",
               collapsed ? "w-10 h-10" : "flex-1"
             )}
             title={theme === "dark" ? "Light mode" : "Dark mode"}
@@ -415,7 +415,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
           <button
             onClick={() => logout()}
             className={cn(
-              "flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs text-red-500 hover:bg-red-500/10 transition-colors",
+              "flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs text-red-500 hover:bg-red-500/10 transition-colors",
               collapsed ? "w-10 h-10" : "flex-1"
             )}
             title="Logout"

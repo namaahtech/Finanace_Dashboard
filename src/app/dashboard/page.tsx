@@ -117,7 +117,7 @@ interface ConfigData {
 }
 interface KpiData { scores: Array<{ month: number; year: number; final_score: number }> }
 interface IncentiveData { incentives: Array<{ _id: string; amount: number; base_amount: number; status: string; month: number; year: number; created_at: string }> }
-interface Project { id: string; name: string; description?: string; progress: number; phase: string; dueDate?: string; tasks: { total: number; completed: number; inProgress: number; todo: number } }
+interface Project { id: string; name: string; description?: string; progress: number; phase: string; dueDate?: string; tasks: { total: number; completed: number; inProgress: number; todo: number; submitted: number } }
 interface AssignedProjectsResponse { success: boolean; data: Project[]; count: number }
 
 export default function EmployeeDashboard() {

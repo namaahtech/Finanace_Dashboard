@@ -8,15 +8,29 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { data, error } = await supabase
       .from("project_tasks")
-      .select(`
-        *,
-        assigned_to_employee:employees!assigned_to (id, name, employee_id)
-      `)
+      .select(`*, assigned_to_employee:employees!assigned_to (id, name, employee_id)`)
       .eq("project_id", id)
       .order("created_at", { ascending: true });
 
     if (error) throw error;
-    return NextResponse.json({ tasks: data }, { status: 200 });
+
+    // Enrich assignee_ids with employee details
+    const allIds = [...new Set((data || []).flatMap((t: any) => t.assignee_ids || []))];
+    let employeeMap: Record<string, { id: string; name: string; employee_id: string }> = {};
+    if (allIds.length > 0) {
+      const { data: emps } = await supabase
+        .from("employees")
+        .select("id, name, employee_id")
+        .in("id", allIds);
+      (emps || []).forEach((e: any) => { employeeMap[e.id] = e; });
+    }
+
+    const tasks = (data || []).map((t: any) => ({
+      ...t,
+      assignees: (t.assignee_ids || []).map((uid: string) => employeeMap[uid]).filter(Boolean),
+    }));
+
+    return NextResponse.json({ tasks }, { status: 200 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -28,7 +42,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params;
     const body = await req.json();
 
-    const { title, description, status, priority, assigned_to, due_date } = body;
+    const { title, description, status, priority, assignee_ids, due_date } = body;
+    const primaryAssignee = assignee_ids?.[0] || null;
 
     const { data, error } = await supabase
       .from("project_tasks")
@@ -38,7 +53,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         description,
         status: status || 'TODO',
         priority: priority || 'Medium',
-        assigned_to: assigned_to || null,
+        assigned_to: primaryAssignee,
+        assignee_ids: assignee_ids || [],
         due_date: due_date || null
       }])
       .select()

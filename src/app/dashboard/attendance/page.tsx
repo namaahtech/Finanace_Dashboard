@@ -85,6 +85,7 @@ export default function AttendancePage() {
     try {
       const startOfMonth = currentMonth.startOf("month").format("YYYY-MM-DD");
       const endOfMonth   = currentMonth.endOf("month").format("YYYY-MM-DD");
+      if (!user) return;
       const { data, error } = await supabase.from("attendance_logs").select("*").eq("employee_id", user.id).gte("date", startOfMonth).lte("date", endOfMonth);
       if (error) throw error;
       const logsMap: Record<string, DayRecord> = {};

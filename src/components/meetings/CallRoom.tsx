@@ -50,8 +50,8 @@ function ParticipantTile({
   const color = colors[participant.name.charCodeAt(0) % colors.length];
 
   return (
-    <div className={`relative rounded-2xl overflow-hidden bg-[#1e1e2e] border transition-all duration-200 flex items-center justify-center group
-      ${isPinned ? "border-blue-500/60 shadow-lg shadow-blue-500/20" : "border-white/5 hover:border-white/20"}
+    <div className={`relative rounded-2xl overflow-hidden bg-theme-card border transition-all duration-200 flex items-center justify-center group
+      ${isPinned ? "border-blue-500/60 shadow-lg shadow-blue-500/20" : "border-theme-border hover:border-theme-border"}
       ${participant.isSpeaking ? "ring-2 ring-emerald-400/70" : ""}
     `}>
       {/* Video or Avatar */}
@@ -63,7 +63,7 @@ function ParticipantTile({
             {initials}
           </div>
           {isLarge && (
-            <p className="text-white/60 text-xs font-medium">{participant.isVideoOff ? "Camera off" : "Connecting..."}</p>
+            <p className="text-theme-muted text-xs font-medium">{participant.isVideoOff ? "Camera off" : "Connecting..."}</p>
           )}
         </div>
       )}
@@ -129,13 +129,13 @@ function CtrlBtn({
         disabled={disabled}
         className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-150 disabled:opacity-40
           ${danger ? "bg-rose-500 hover:bg-rose-400 shadow-lg shadow-rose-500/30 hover:scale-105 active:scale-95"
-          : active ? "bg-white/20 hover:bg-white/30 ring-2 ring-white/30"
+          : active ? "bg-theme-raised hover:bg-theme-subtle ring-2 ring-white/30"
           : "bg-white/10 hover:bg-white/20 hover:scale-105 active:scale-95"}
         `}
       >
         {children}
       </button>
-      {label && <span className="text-[9px] text-white/40 font-medium">{label}</span>}
+      {label && <span className="text-[9px] text-theme-muted font-medium">{label}</span>}
     </div>
   );
 }
@@ -242,23 +242,23 @@ export function CallRoom({ roomName, displayName, onLeave, type = "video" }: Cal
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="flex flex-col items-center justify-center h-full gap-4 bg-[#0d0d1a]">
+    <div className="flex flex-col items-center justify-center h-full gap-4 bg-theme-bg">
       <div className="relative">
         <div className="w-16 h-16 rounded-full border-4 border-theme-primary/20 border-t-theme-primary animate-spin" />
       </div>
-      <p className="text-white/60 text-sm font-medium">Connecting to room...</p>
-      <p className="text-white/30 text-xs font-mono">{roomName}</p>
+      <p className="text-theme-muted text-sm font-medium">Connecting to room...</p>
+      <p className="text-theme-muted text-xs font-mono">{roomName}</p>
     </div>
   );
 
   // ── VM pending state ───────────────────────────────────────────────────────
   if (error) return (
-    <div className="flex flex-col items-center justify-center h-full gap-8 bg-[#0d0d1a] text-white p-8">
+    <div className="flex flex-col items-center justify-center h-full gap-8 bg-theme-bg text-white p-8">
       {/* Preview area — shows what it will look like */}
-      <div className="w-full max-w-2xl bg-[#1a1a2e] rounded-3xl p-8 border border-white/5">
+      <div className="w-full max-w-2xl bg-theme-surface rounded-3xl p-8 border border-theme-border">
         <div className="grid grid-cols-2 gap-3 mb-6">
           {["You", "Participant"].map((name, i) => (
-            <div key={i} className="aspect-video rounded-xl bg-[#0d0d1a] border border-white/5 flex items-center justify-center">
+            <div key={i} className="aspect-video rounded-xl bg-theme-bg border border-theme-border flex items-center justify-center">
               <div className={`w-12 h-12 rounded-full ${i === 0 ? "bg-theme-primary" : "bg-violet-600"} flex items-center justify-center font-black text-sm`}>
                 {name.slice(0, 2).toUpperCase()}
               </div>
@@ -282,11 +282,11 @@ export function CallRoom({ roomName, displayName, onLeave, type = "video" }: Cal
           <AlertCircle size={22} className="text-amber-400" />
         </div>
         <h3 className="text-lg font-black">VM Setup Pending</h3>
-        <p className="text-white/50 text-sm leading-relaxed">
+        <p className="text-theme-muted text-sm leading-relaxed">
           The Livekit server on your Oracle VM isn't configured yet. The UI above is exactly what you'll see once connected.
         </p>
         <div className="p-4 rounded-xl bg-white/3 border border-white/8 text-left space-y-1.5">
-          <p className="text-white/30 text-[10px] font-black uppercase tracking-wider mb-2">Add to .env.local after VM setup</p>
+          <p className="text-theme-muted text-[10px] font-black uppercase tracking-wider mb-2">Add to .env.local after VM setup</p>
           {[
             "NEXT_PUBLIC_LIVEKIT_URL=wss://meet.yourdomain.com",
             "LIVEKIT_API_KEY=namaah_api_key",
@@ -305,29 +305,29 @@ export function CallRoom({ roomName, displayName, onLeave, type = "video" }: Cal
 
   // ── Connected full UI ──────────────────────────────────────────────────────
   return (
-    <div className="flex h-full bg-[#0d0d1a] text-white overflow-hidden">
+    <div className="flex h-full bg-theme-bg text-white overflow-hidden">
 
       {/* ── Main area ────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
 
         {/* Top bar */}
-        <div className="flex items-center justify-between px-5 py-3 bg-[#0d0d1a]/80 backdrop-blur-sm border-b border-white/5 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-3 bg-theme-surface/80 backdrop-blur-sm border-b border-theme-border flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-[11px] font-black text-emerald-400">{formatTime(elapsed)}</span>
             </div>
-            <span className="text-white/40 text-xs font-mono truncate max-w-[200px]">{roomName}</span>
+            <span className="text-theme-muted text-xs font-mono truncate max-w-[200px]">{roomName}</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={copyRoomLink}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-[11px] font-bold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-theme-muted hover:text-white text-[11px] font-bold transition-all"
             >
               {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
               {copied ? "Copied!" : "Copy link"}
             </button>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 text-white/50 text-[11px] font-bold">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 text-theme-muted text-[11px] font-bold">
               <Users size={12} />
               {allParticipants.length}
             </div>
@@ -385,10 +385,10 @@ export function CallRoom({ roomName, displayName, onLeave, type = "video" }: Cal
 
           {/* Participants sidebar */}
           {showParticipants && (
-            <div className="w-64 flex-shrink-0 bg-[#1a1a2e] rounded-2xl border border-white/5 flex flex-col">
-              <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+            <div className="w-64 flex-shrink-0 bg-theme-surface rounded-2xl border border-theme-border flex flex-col">
+              <div className="px-4 py-3 border-b border-theme-border flex items-center justify-between">
                 <span className="text-sm font-black">People ({allParticipants.length})</span>
-                <button onClick={() => setShowParticipants(false)} className="text-white/40 hover:text-white">✕</button>
+                <button onClick={() => setShowParticipants(false)} className="text-theme-muted hover:text-white">✕</button>
               </div>
               <div className="flex-1 overflow-y-auto p-3 space-y-1">
                 {allParticipants.map(p => (
@@ -416,26 +416,26 @@ export function CallRoom({ roomName, displayName, onLeave, type = "video" }: Cal
 
           {/* Chat sidebar */}
           {showChat && (
-            <div className="w-72 flex-shrink-0 bg-[#1a1a2e] rounded-2xl border border-white/5 flex flex-col">
-              <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+            <div className="w-72 flex-shrink-0 bg-theme-surface rounded-2xl border border-theme-border flex flex-col">
+              <div className="px-4 py-3 border-b border-theme-border flex items-center justify-between">
                 <span className="text-sm font-black">In-call chat</span>
-                <button onClick={() => setShowChat(false)} className="text-white/40 hover:text-white">✕</button>
+                <button onClick={() => setShowChat(false)} className="text-theme-muted hover:text-white">✕</button>
               </div>
-              <div className="flex-1 flex items-center justify-center text-white/30">
+              <div className="flex-1 flex items-center justify-center text-theme-muted">
                 <div className="text-center">
                   <MessageSquare size={32} className="mx-auto mb-2 opacity-30" />
                   <p className="text-xs">Chat messages appear here</p>
                 </div>
               </div>
-              <div className="p-3 border-t border-white/5">
-                <input placeholder="Send a message..." className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20" />
+              <div className="p-3 border-t border-theme-border">
+                <input placeholder="Send a message..." className="w-full bg-white/5 border border-theme-border rounded-xl px-3 py-2 text-sm text-white placeholder:text-theme-muted outline-none focus:border-theme-border" />
               </div>
             </div>
           )}
         </div>
 
         {/* ── Controls bar ─────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-8 py-4 bg-[#0d0d1a]/90 backdrop-blur-sm border-t border-white/5 flex-shrink-0">
+        <div className="flex items-center justify-between px-8 py-4 bg-theme-surface/80 backdrop-blur-sm border-t border-theme-border flex-shrink-0">
           {/* Left — info */}
           <div className="flex items-center gap-2 w-48">
             <div className="w-9 h-9 rounded-full bg-theme-primary flex items-center justify-center text-xs font-black">
@@ -443,7 +443,7 @@ export function CallRoom({ roomName, displayName, onLeave, type = "video" }: Cal
             </div>
             <div className="min-w-0">
               <p className="text-xs font-bold text-white truncate">{displayName}</p>
-              <p className="text-[9px] text-white/40">Host</p>
+              <p className="text-[9px] text-theme-muted">Host</p>
             </div>
           </div>
 
@@ -464,7 +464,7 @@ export function CallRoom({ roomName, displayName, onLeave, type = "video" }: Cal
             </CtrlBtn>
 
             <CtrlBtn onClick={() => setHandRaised(h => !h)} active={handRaised} label={handRaised ? "Lower hand" : "Raise hand"}>
-              <span className={`text-lg leading-none ${handRaised ? "text-yellow-400" : "text-white/80"}`}>✋</span>
+              <span className={`text-lg leading-none ${handRaised ? "text-yellow-400" : "text-theme-fg"}`}>✋</span>
             </CtrlBtn>
 
             <CtrlBtn onClick={() => { setShowChat(c => !c); setShowParticipants(false); }} active={showChat} label="Chat">
@@ -483,16 +483,16 @@ export function CallRoom({ roomName, displayName, onLeave, type = "video" }: Cal
               >
                 <PhoneOff size={22} />
               </button>
-              <span className="text-[9px] text-white/40 font-medium">Leave</span>
+              <span className="text-[9px] text-theme-muted font-medium">Leave</span>
             </div>
           </div>
 
           {/* Right — settings */}
           <div className="flex items-center justify-end gap-2 w-48">
-            <button className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 hover:text-white transition-all">
+            <button className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-theme-muted hover:text-white transition-all">
               <Settings size={16} />
             </button>
-            <button className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 hover:text-white transition-all">
+            <button className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-theme-muted hover:text-white transition-all">
               <MoreVertical size={16} />
             </button>
           </div>

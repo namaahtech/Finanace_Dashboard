@@ -195,7 +195,7 @@ export default function AdminMessagingPage() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-[60] flex bg-theme-page text-theme-fg overflow-hidden">
+    <div className="fixed inset-0 z-50 flex bg-theme-page text-theme-fg overflow-hidden">
       <input type="file" className="hidden" ref={fileRef} onChange={handleFile} />
 
 
@@ -476,11 +476,11 @@ function ChannelGroup({
           className={cn(
             "w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-all group",
             activeId === ch.id
-              ? "bg-theme-primary text-white"
+              ? "bg-theme-primary/10 text-theme-primary"
               : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg"
           )}
         >
-          <span className={cn("flex-shrink-0", activeId === ch.id ? "text-white/70" : "text-theme-muted/60")}>
+          <span className={cn("flex-shrink-0", activeId === ch.id ? "text-theme-primary/70" : "text-theme-muted/60")}>
             {channelIcon(ch.type, 13)}
           </span>
           <span className="text-xs font-semibold flex-1 truncate">{ch.name}</span>
