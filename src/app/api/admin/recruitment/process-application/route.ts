@@ -1,27 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { callAI, parseAIJSON } from "@/lib/ai";
+import { inflateSync } from "zlib";
 
 function extractPdfText(buffer: Buffer): string {
   try {
-    const raw = buffer.toString("binary");
     const chunks: string[] = [];
-    const btEt = /BT([\s\S]*?)ET/g;
-    let b;
-    while ((b = btEt.exec(raw)) !== null) {
-      const block = b[1];
-      const tj = /\(((?:[^()\\]|\\[\s\S])*)\)\s*(?:Tj|'|")/g;
-      const tjArr = /\[((?:[^[\]]*(?:\([^)]*\))?[^[\]]*)*)\]\s*TJ/g;
-      let m;
-      while ((m = tj.exec(block)) !== null) {
-        chunks.push(m[1].replace(/\\([0-7]{3})/g, (_: string, o: string) => String.fromCharCode(parseInt(o, 8))).replace(/\\(.)/g, "$1").replace(/\\[nrt]/g, " "));
-      }
-      while ((m = tjArr.exec(block)) !== null) {
-        for (const p of (m[1].match(/\((?:[^()\\]|\\[\s\S])*\)/g) || [])) {
-          chunks.push(p.slice(1, -1).replace(/\\([0-7]{3})/g, (_: string, o: string) => String.fromCharCode(parseInt(o, 8))).replace(/\\(.)/g, "$1"));
+
+    function decode(s: string): string {
+      return s
+        .replace(/\\([0-7]{3})/g, (_: string, o: string) => String.fromCharCode(parseInt(o, 8)))
+        .replace(/\\n|\\r|\\t/g, " ")
+        .replace(/\\(.)/g, "$1");
+    }
+
+    function parseTextFromRaw(raw: string) {
+      const btEt = /BT([\s\S]*?)ET/g;
+      let b;
+      while ((b = btEt.exec(raw)) !== null) {
+        const block = b[1];
+        // TJ arrays: [(text)-kern(text)] TJ — extract all (...) parts, skip numbers
+        const tjArr = /\[([\s\S]*?)\]\s*TJ/g;
+        const tj = /\(((?:[^()\\]|\\[\s\S])*)\)\s*(?:Tj|')/g;
+        let m;
+        while ((m = tjArr.exec(block)) !== null) {
+          const parts = m[1].match(/\(([^)]*)\)/g) || [];
+          for (const p of parts) {
+            const t = decode(p.slice(1, -1));
+            if (t.trim()) chunks.push(t);
+          }
+        }
+        while ((m = tj.exec(block)) !== null) {
+          const t = decode(m[1]);
+          if (t.trim()) chunks.push(t);
         }
       }
     }
+
+    const raw = buffer.toString("binary");
+    parseTextFromRaw(raw);
+
+    // Decompress FlateDecode streams and parse those too
+    const streamRe = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    let streamMatch;
+    while ((streamMatch = streamRe.exec(raw)) !== null) {
+      const before = raw.slice(Math.max(0, streamMatch.index - 500), streamMatch.index);
+      if (!/FlateDecode/i.test(before)) continue;
+      try {
+        const decompressed = inflateSync(Buffer.from(streamMatch[1], "binary")).toString("latin1");
+        parseTextFromRaw(decompressed);
+      } catch { /* skip */ }
+    }
+
     return chunks.join(" ").replace(/\s+/g, " ").trim();
   } catch { return ""; }
 }
