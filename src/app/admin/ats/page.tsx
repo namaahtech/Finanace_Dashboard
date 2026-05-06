@@ -571,7 +571,12 @@ export default function ATSScannerPage() {
   const [selectedCluster, setSelectedCluster] = useState<string>("");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const { showToast } = useToast();
+
+  const cancelScan = () => {
+    abortRef.current?.abort();
+  };
 
   useRecruitmentRealtime(
     fetchApplications,
@@ -650,6 +655,9 @@ export default function ATSScannerPage() {
 
     const generatedAppId = `MAN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
+    const abort = new AbortController();
+    abortRef.current = abort;
+
     try {
       setLogs(prev => [...prev,
         "INIT: Initializing ATS engine…",
@@ -666,7 +674,6 @@ export default function ATSScannerPage() {
       setLogs(prev => [...prev, "UPLOAD: Transferring to secure storage…"]);
       setProgress(40);
 
-      // Refresh candidate list so the pending card appears
       await fetchApplications();
 
       setLogs(prev => [...prev, "NLP: Gemma 4 running cognitive audit…"]);
@@ -675,6 +682,7 @@ export default function ATSScannerPage() {
       const res = await fetch("/api/admin/ats/upload", {
         method: "POST",
         body: formData,
+        signal: abort.signal,
       });
 
       setProgress(85);
@@ -694,11 +702,18 @@ export default function ATSScannerPage() {
       setSelectedId(generatedAppId);
       showToast("Intelligence report generated", "success");
     } catch (err: any) {
-      setLogs(prev => [...prev, "ERROR: " + err.message]);
-      showToast(err.message, "error");
-      // Cleanup failed application record
-      await supabase.from("applications").delete().eq("application_id", generatedAppId).then(() => {});
+      if (err.name === "AbortError") {
+        setLogs(prev => [...prev, "CANCELLED: Scan aborted by user."]);
+        showToast("Scan cancelled", "info");
+        await supabase.from("applications").delete().eq("application_id", generatedAppId);
+        await fetchApplications();
+      } else {
+        setLogs(prev => [...prev, "ERROR: " + err.message]);
+        showToast(err.message, "error");
+        await supabase.from("applications").delete().eq("application_id", generatedAppId);
+      }
     } finally {
+      abortRef.current = null;
       setScanning(false);
       setTimeout(() => setProgress(0), 1500);
     }
@@ -723,11 +738,13 @@ export default function ATSScannerPage() {
     setProgress(0);
     setLogs([]);
 
+    const abort = new AbortController();
+    abortRef.current = abort;
+
     try {
       setLogs(prev => [...prev, "INIT: Initializing ATS engine…", "INGEST: Scanning for pending candidates…"]);
       setProgress(10);
 
-      // Find all pending/failed candidates that have resume text
       const { data: pending } = await supabase
         .from("applications")
         .select("application_id, applicant_name, raw_resume_text")
@@ -744,6 +761,8 @@ export default function ATSScannerPage() {
       setLogs(prev => [...prev, `QUEUE: ${pending.length} candidate(s) queued for AI processing…`]);
 
       for (let i = 0; i < pending.length; i++) {
+        if (abort.signal.aborted) break;
+
         const app = pending[i];
         const pct = Math.round(((i + 1) / pending.length) * 90) + 10;
         setProgress(pct);
@@ -753,6 +772,7 @@ export default function ATSScannerPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ applicationId: app.application_id }),
+          signal: abort.signal,
         });
         const data = await res.json();
 
@@ -764,14 +784,27 @@ export default function ATSScannerPage() {
         }
       }
 
-      setProgress(100);
-      setLogs(prev => [...prev, "DATA: Synchronizing intelligence reports…"]);
+      if (abort.signal.aborted) {
+        setLogs(prev => [...prev, "CANCELLED: Batch scan aborted by user."]);
+        showToast("Scan cancelled", "info");
+      } else {
+        setProgress(100);
+        setLogs(prev => [...prev, "DATA: Synchronizing intelligence reports…"]);
+        showToast(`Batch scan complete — ${pending.length} candidate(s) processed`, "success");
+      }
+
       await fetchApplications();
-      showToast(`Batch scan complete — ${pending.length} candidate(s) processed`, "success");
     } catch (err: any) {
-      setLogs(prev => [...prev, "ERROR: " + err.message]);
-      showToast(err.message, "error");
+      if (err.name === "AbortError") {
+        setLogs(prev => [...prev, "CANCELLED: Scan aborted by user."]);
+        showToast("Scan cancelled", "info");
+        await fetchApplications();
+      } else {
+        setLogs(prev => [...prev, "ERROR: " + err.message]);
+        showToast(err.message, "error");
+      }
     } finally {
+      abortRef.current = null;
       setScanning(false);
       setTimeout(() => setProgress(0), 1500);
     }
@@ -830,17 +863,27 @@ export default function ATSScannerPage() {
       title="ATS Scanner"
       subtitle="Resume ingestion and candidate scoring"
       actions={
-        <button
-          onClick={startScan}
-          disabled={scanning}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          {scanning
-            ? <Loader2 size={13} className="animate-spin" />
-            : <Zap size={13} fill="currentColor" />
-          }
-          {scanning ? "Scanning…" : "Start Batch Scan"}
-        </button>
+        <div className="flex items-center gap-2">
+          {scanning && (
+            <button
+              onClick={cancelScan}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20 text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all"
+            >
+              <X size={13} /> Cancel
+            </button>
+          )}
+          <button
+            onClick={startScan}
+            disabled={scanning}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {scanning
+              ? <Loader2 size={13} className="animate-spin" />
+              : <Zap size={13} fill="currentColor" />
+            }
+            {scanning ? "Scanning…" : "Start Batch Scan"}
+          </button>
+        </div>
       }
     >
       <div className="space-y-6">
@@ -919,7 +962,15 @@ export default function ATSScannerPage() {
               <div className="p-4 bg-theme-card border border-theme-border rounded-xl space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-[11px] font-semibold text-theme-fg">Scan progress</span>
-                  <span className="text-[11px] font-medium text-theme-muted tabular-nums">{Math.round(progress)}%</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-medium text-theme-muted tabular-nums">{Math.round(progress)}%</span>
+                    <button
+                      onClick={cancelScan}
+                      className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-500 border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all"
+                    >
+                      <X size={10} /> Stop
+                    </button>
+                  </div>
                 </div>
                 <div className="h-1.5 bg-theme-raised rounded-full overflow-hidden">
                   <div
