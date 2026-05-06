@@ -212,7 +212,7 @@ export default function AdminAttendancePage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
-        const { data: profile } = await supabase.from("employees").select("role").eq("id", user.id).single();
+        const { data: profile } = await supabase.from("employees").select("role").eq("id", user.id).maybeSingle();
         if (profile) setUserRole(profile.role);
       }
 

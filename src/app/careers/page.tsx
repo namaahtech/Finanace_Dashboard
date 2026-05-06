@@ -237,8 +237,14 @@ export default function CareersPortal() {
     setSubmitting(true);
     
     try {
-       // 1. Create Application
-       const generatedAppId = `APP-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+       const generatedAppId = `CAR-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+       let filePath = null;
+
+       if (form.resume) {
+          filePath = `candidates/${generatedAppId}_${form.resume.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+          const { error: uploadError } = await supabase.storage.from("resumes").upload(filePath, form.resume);
+          if (uploadError) throw uploadError;
+       }
        
        const { data: app, error } = await supabase
           .from("applications")
@@ -247,7 +253,8 @@ export default function CareersPortal() {
              applied_cluster_id: selectedJob.cluster_id,
              applicant_name: form.name,
              applicant_email: form.email,
-             raw_resume_text: form.resumeText || "SIMULATED_RESUME_CONTENT",
+             resume_file_path: filePath,
+             raw_resume_text: "",
              processing_status: "pending"
           })
           .select()

@@ -5,7 +5,11 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "./AuthProvider";
 import { startRingtone, stopRingtone, playMessagePing, playCallAccepted, playCallEnded } from "@/lib/sounds";
 import { Video, Mic, PhoneOff, Phone, MessageSquare, X, Bell } from "lucide-react";
-import { CallRoom } from "@/components/meetings/CallRoom";
+import dynamic from "next/dynamic";
+const CallRoom = dynamic(() => import("@/components/meetings/CallRoom").then(mod => mod.CallRoom), {
+  ssr: false,
+  loading: () => <div className="flex-1 flex items-center justify-center bg-zinc-900 text-white">Loading Meeting...</div>
+});
 
 interface IncomingCall {
   meetingId: string;

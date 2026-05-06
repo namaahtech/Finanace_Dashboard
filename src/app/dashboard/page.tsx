@@ -155,6 +155,18 @@ export default function EmployeeDashboard() {
     if (!user) return;
     if (!silent) setLoading(true);
     try {
+      // Check onboarding status first
+      const { data: onboarding } = await supabase
+        .from("user_onboarding")
+        .select("status")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!onboarding || onboarding.status !== "completed") {
+        router.push("/onboarding");
+        return;
+      }
+
       const [walletRes, configRes, kpiRes, incentiveRes] = await Promise.all([
         request<WalletData>({ url: "/api/wallet" }),
         request<ConfigData>({ url: "/api/config" }),
@@ -169,7 +181,7 @@ export default function EmployeeDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [user, request]);
+  }, [user, request, router]);
 
   useEffect(() => {
     load();

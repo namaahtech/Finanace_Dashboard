@@ -1,0 +1,222 @@
+# ATS RESUME ANALYZER - IMPLEMENTATION CONFIG
+# Mac Mini M4 Optimized Configuration
+
+system:
+  os: macOS
+  min_version: 12.0
+  architecture: ARM64 (Apple Silicon M4)
+  recommended_ram: 24GB
+  minimum_ram: 16GB
+  required_storage: 50GB
+  gpu: Integrated M4 (8-core recommended)
+
+environment:
+  python_version: 3.11+
+  virtual_env: ~/ats_env
+  activation: source ~/ats_env/bin/activate
+  pip_packages:
+    - torch (cpu optimized)
+    - transformers==4.36.0
+    - ollama (for Gemma model)
+    - pytesseract==0.3.13
+    - PIL==10.0.0
+    - pdf2image==1.16.3
+    - opencv-python==4.8.0
+    - pandas==2.1.0
+    - scikit-learn==1.3.1
+    - fastapi==0.103.0
+    - uvicorn==0.23.2
+
+ocr:
+  engine: Tesseract
+  version: 5.0+
+  languages: en_core
+  preprocessing:
+    dpi: 300
+    grayscale: true
+    binary_threshold: 150
+    denoising: true
+    denoising_strength: 10
+  
+  confidence_thresholds:
+    excellent: 85+
+    good: 70+
+    acceptable: 50+
+    poor: <50
+
+gemma_model:
+  type: Gemma 4
+  variants:
+    - gemma:7b (RECOMMENDED for M4 - 7B parameters)
+    - gemma:13b (if 24GB+ RAM available)
+  
+  model_config:
+    context_length: 8000  # tokens
+    temperature: 0.7
+    top_p: 0.9
+    memory_allocation_mb: 8000
+    timeout_seconds: 300
+  
+  ollama_service:
+    url: http://localhost:11434
+    endpoint: /api/generate
+    model_pull: ollama pull gemma:7b
+    service_start: ollama serve
+
+matching_weights:
+  skills: 0.40              # 40% - Most important
+  experience: 0.25          # 25%
+  education: 0.15           # 15%
+  projects: 0.10            # 10%
+  certifications: 0.10      # 10%
+
+matching_thresholds:
+  excellent_fit: 85-100%
+  good_fit: 70-84%
+  moderate_fit: 55-69%
+  fair_fit: 40-54%
+  poor_fit: 0-39%
+
+resume_components_to_extract:
+  - contact_info: [name, email, phone, location, linkedin]
+  - summary: [objective, professional_summary]
+  - education: [degree, field, institution, year, gpa]
+  - experience:
+      - job_title
+      - company
+      - duration_start_year
+      - duration_end_year
+      - responsibilities: [5_items]
+      - technologies_used
+      - achievement_metrics
+  - projects:
+      - name
+      - description
+      - technologies
+      - duration
+      - outcome_impact
+  - skills:
+      - technical: [language, framework, tool, database, cloud]
+      - soft: [communication, leadership, teamwork]
+      - proficiency_level: [expert, advanced, intermediate, beginner]
+  - certifications: [name, organization, year]
+  - languages: [name, proficiency_level]
+  - achievements: [award_name, organization, year]
+
+job_cluster_structure:
+  cluster_id: "string"
+  company: "string"
+  job_titles: ["array", "of", "variant", "titles"]
+  ai_keywords: ["keyword1", "keyword2", "..."]
+  required_experience_years: number
+  technical_skills_weight: percentage
+  skills:
+    required: ["must_have_1", "must_have_2"]
+    preferred: ["nice_to_have_1", "nice_to_have_2"]
+    nice_to_have: ["bonus_1", "bonus_2"]
+  education:
+    required: "Bachelor's in CS or related"
+    preferred: "AWS Certifications"
+
+interview_questions:
+  total_questions: 10
+  categories:
+    technical_deep_dive: 2
+    project_experience: 2
+    problem_solving: 2
+    role_specific_challenges: 2
+    skill_verification: 1
+    career_growth: 1
+  estimated_duration_minutes: 50  # 5 minutes per question
+
+api_server:
+  framework: FastAPI
+  host: 0.0.0.0
+  port: 8000
+  reload: true
+  workers: 4
+  timeout: 300
+  swagger_enabled: true
+  swagger_url: /docs
+  endpoints:
+    - POST /api/analyze (single resume)
+    - POST /api/batch_analyze (multiple resumes)
+    - GET /api/report/{report_id}
+    - GET /api/health
+
+file_management:
+  upload_directory: ./uploads/
+  output_directory: ./output/
+  max_file_size_mb: 50
+  supported_formats: [pdf, jpg, png, jpeg]
+  retention_days: 30
+
+export_formats:
+  - json
+  - html
+  - pdf
+  - csv
+
+logging:
+  level: INFO
+  format: "[%(asctime)s] %(name)s - %(levelname)s - %(message)s"
+  file: ats_analyzer.log
+  max_size_mb: 100
+  backup_count: 5
+
+performance_optimization:
+  batch_processing: true
+  caching: true
+  async_processing: true
+  threading: true
+  memory_management:
+    gemma_cache: true
+    ocr_cache: true
+    clear_temp_files: true
+  
+  benchmarks:
+    single_resume_analysis_seconds: 30-60
+    batch_processing_per_resume_seconds: 30-60
+    ocr_extraction_seconds: 10-30
+    gemma_processing_seconds: 15-30
+    report_generation_seconds: 5-10
+
+quality_assurance:
+  ocr_confidence_scoring: true
+  manual_validation_flags: true
+  skill_matching_verification: true
+  experience_gap_detection: true
+  education_mismatch_alerts: true
+  red_flag_detection: true
+  false_positive_prevention: true
+
+database:
+  type: optional  # MongoDB, PostgreSQL, or file-based
+  store_resumes: true
+  store_reports: true
+  archive_old_reports: true
+
+security:
+  encrypt_personal_data: true
+  gdpr_compliant: true
+  data_retention_policy: 30_days
+  secure_file_upload: true
+  auth_required: false  # Set to true in production
+
+deployment:
+  environment: local  # local, docker, cloud
+  docker_support: true
+  cloud_support: true  # AWS, GCP, Azure
+  monitoring: true
+  logging_aggregation: false
+
+maintenance:
+  model_update_frequency: monthly
+  performance_monitoring: true
+  accuracy_tracking: true
+  bug_fix_cycle: weekly
+  feature_updates: monthly
+
+version: 1.0.0
+last_updated: 2024-01-10
+maintainer: Your Team

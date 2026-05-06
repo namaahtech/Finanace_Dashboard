@@ -45,35 +45,62 @@ class RecruitmentProcessor:
         Sends the resume and JD to Gemma 4:e4b on Mac Mini for a cognitive audit.
         """
         prompt = f"""
-        Role: Recruitment Intelligence Auditor
-        Mission: Perform a 360-degree cognitive audit of the candidate's profile against the Job Description.
+        Role: Senior Executive Technical Recruitment Intelligence Auditor (powered by Gemma 4:e4b)
+        Mission: Perform an exhaustive 360-degree cognitive and technical audit of the candidate's resume against the Target Job Cluster.
         
-        [JOB DESCRIPTION CONTEXT]
+        [JOB CLUSTER CONTEXT]
         {jd_context}
         
-        [CANDIDATE RESUME DATA]
+        [CANDIDATE RESUME TEXT (OCR EXTRACTED)]
         {resume_text}
         
-        [INSTRUCTIONS]
-        1. ANALYZE projects: Identify specific projects the candidate has done.
-        2. MATCH Education: Check if candidate's degree matches the required education in the JD.
-        3. GENERATE Pros: Why is this candidate a top choice?
-        4. GENERATE Cons: What are the critical gaps or concerns?
-        5. GENERATE Tricky Interview Questions: Create 3 HARD, technical, and tricky questions that specifically test the claims made in their projects.
-        6. SCORE: Provide a match score (0-100).
+        [AUDIT REQUIREMENTS]
+        1.  OVERVIEW: Provide a high-level technical summary of the candidate's fit.
+        2.  EDUCATION: Analyze degree relevance, institution prestige, and academic achievements.
+        3.  PROJECTS: Deep-dive into technical complexity, role, and impact of listed projects.
+        4.  EXPERIENCE & WORKS: Evaluate professional tenure, role progression, and industry alignment.
+        5.  ACHIEVEMENTS: Identify quantified impacts, awards, or unique milestones.
+        6.  SKILLS ANALYSIS:
+            - SKILLS USED: List mandatory job skills found in the resume.
+            - SKILLS NOT USED: List mandatory job skills missing from the resume.
+        7.  MATCH PERCENTAGE BREAKDOWN (IMPORTANT: Return each as a 0-100 percentage):
+            - Technical Skills (40% Weight): How well do they match the skill matrix (0-100).
+            - Experience (30% Weight): How well does their tenure match (0-100).
+            - Projects (20% Weight): How well do their projects align (0-100).
+            - Education (10% Weight): How well does their education align (0-100).
+        8.  INTERVIEW STRATEGY: Generate 5 to 10 EXTREMELY TRICKY, technical, and scenario-based interview questions.
+        9.  DECISION: Proceed, Hold, or Rejected.
 
-        Return ONLY a JSON object with this structure:
-        {{
-            "score": number,
-            "decision": "Proceed" | "Hold" | "Rejected",
-            "education_match": "string explaining degree alignment",
-            "pros": ["string", "string"],
-            "cons": ["string", "string"],
-            "tricky_questions": [
-                {{ "question": "string", "reason": "why this is tricky based on their project" }}
-            ],
-            "summary": "High-level cognitive profile summary"
-        }}
+        Return ONLY a perfectly formatted JSON object (no markdown, no backticks):
+        {
+            "match_score": number, (Weighted total score from 0-100)
+            "decision": "Accepted" | "Hold" | "Rejected",
+            "breakdown": {
+                "skills": number, (0-100 percentage)
+                "experience": number, (0-100 percentage)
+                "projects": number, (0-100 percentage)
+                "education": number (0-100 percentage)
+            },
+            "resume_profile": {
+                "summary": "Executive summary string",
+                "overview": "Detailed professional profile string",
+                "education": "Academic audit string",
+                "projects": "Project analysis string",
+                "experience": "Tenure audit string",
+                "achievements": "Key results string"
+            },
+            "recommendations": {
+                "pros": ["string"],
+                "matched_skills": ["string"]
+            },
+            "gap_analysis": {
+                "cons": ["string"],
+                "missing_skills": ["string"]
+            },
+            "interview_questions": [
+                { "question": "string", "reason": "rationale for this question" }
+            ]
+        }
         """
         
         try:
@@ -89,18 +116,28 @@ class RecruitmentProcessor:
                     "stream": False,
                     "format": "json"
                 },
-                timeout=60
+                timeout=180
             )
             response.raise_for_status()
-            ai_output = response.json().get("response", "{}")
-            return json.loads(ai_output)
+            res_json = response.json()
+            ai_output = res_json.get("response", "{}")
+            
+            # Extract metrics
+            metrics = {
+                "prompt_tokens": res_json.get("prompt_eval_count", 0),
+                "completion_tokens": res_json.get("eval_count", 0),
+                "total_duration_ms": res_json.get("total_duration", 0) // 1_000_000, # convert ns to ms
+                "model": self.model
+            }
+            
+            return json.loads(ai_output), metrics
         except Exception as e:
             print(f"AI Engine Error: {e}")
             return {
                 "score": 50,
                 "decision": "Hold",
                 "summary": f"Audit failed: {str(e)}"
-            }
+            }, {}
 
     def cluster_jobs(self, job_titles: List[str]) -> List[Dict]:
         """

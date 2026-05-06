@@ -10,7 +10,7 @@ import {
   MessageSquare, CalendarClock, IndianRupee,
   Shield, RefreshCw, Mail, ChevronDown, Check,
   Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder, User,
-  BookOpen, Table2, Presentation, StickyNote, LayoutTemplate,
+  BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
@@ -42,6 +42,11 @@ const superAdminNav: NavSection[] = [
     { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
     { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
     { href: "/admin/interviews", label: "Interviews", icon: MessageSquare },
+  ]},
+  { title: "LMS Academy", items: [
+    { href: "/admin/lms", label: "Academy Manager", icon: BookOpen },
+    { href: "/admin/lms/courses", label: "Manage Courses", icon: ClipboardList },
+    { href: "/admin/lms/certifications", label: "Certifications", icon: Award },
   ]},
   { title: "Operations", items: [
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
@@ -120,6 +125,10 @@ const hrNav: NavSection[] = [
     { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
     { href: "/admin/interviews", label: "Interviews", icon: MessageSquare },
   ]},
+  { title: "LMS Academy", items: [
+    { href: "/admin/lms", label: "Academy Manager", icon: BookOpen },
+    { href: "/admin/lms/certifications", label: "Certifications", icon: Award },
+  ]},
   { title: "People", items: [
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
     { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
@@ -187,6 +196,9 @@ const managerNav: NavSection[] = [
     { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
     { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
   ]},
+  { title: "LMS Academy", items: [
+    { href: "/admin/lms", label: "Academy Manager", icon: BookOpen },
+  ]},
   { title: "My Workspace", items: [
     { href: "/dashboard/profile", label: "My Profile", icon: User },
     { href: "/dashboard/attendance", label: "Attendance", icon: CalendarDays },
@@ -216,6 +228,9 @@ const employeeNav: NavSection[] = [
     { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
     { href: "/dashboard/reimbursements", label: "Reimbursements", icon: Receipt },
     { href: "/dashboard/priority", label: "Priority Payout", icon: Zap },
+  ]},
+  { title: "LMS Academy", items: [
+    { href: "/dashboard/academy", label: "Training Academy", icon: BookOpen },
   ]},
   { title: "Workspace", items: [
     { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },

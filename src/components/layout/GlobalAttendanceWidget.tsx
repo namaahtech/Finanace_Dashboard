@@ -37,7 +37,7 @@ export function GlobalAttendanceWidget({ floating = false }: { floating?: boolea
         .select("*")
         .eq("employee_id", user.id)
         .eq("date", today)
-        .single();
+        .maybeSingle();
 
       if (data) {
         setActiveSession(data);

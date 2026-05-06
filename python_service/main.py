@@ -70,31 +70,38 @@ def poll_applications():
                 Job Title: {cluster_data['job_title_variants'][0]}
                 Required Skills: {json.dumps(cluster_data['mandatory_skills'])}
                 Required Education: {json.dumps(cluster_data.get('education', 'Not Specified'))}
-                Seniority: {json.dumps(cluster_data.get('experience_requirements', {{}}).get('seniority_levels', []))}
+                Seniority: {json.dumps(cluster_data.get('experience_requirements', {}).get('seniority_levels', []))}
                 Key Focus Areas: {', '.join(cluster_data.get('gemma_keywords', []))}
                 """
-                analysis = processor.process_candidate(resume_text, jd_summary)
+                
+                # Capture start time for OCR + Gemma
+                start_time = time.time()
+                analysis, metrics = processor.process_candidate(resume_text, jd_summary)
+                total_process_time = round(time.time() - start_time, 2)
 
+                # Determine Source
+                source = "Career Portal" if app_id.startswith("CAR-") else "Manual Upload"
+                role_name = cluster_data['job_title_variants'][0]
+                applicant_name = app["applicant_name"]
+                
                 # 5. Save Analysis Result (Enriched)
                 talent_data = {
                     "application_id": app_id,
                     "cluster_id": cluster_id,
                     "resume_profile": {
-                        "summary": analysis.get("summary", "No summary provided"),
-                        "education_match": analysis.get("education_match", "Not Audited")
+                        **analysis.get("resume_profile", {}),
+                        "metrics": metrics
                     },
                     "scoring": {
-                        "match_score": analysis.get("score", 0),
+                        "match_score": analysis.get("match_score", 0),
+                        "breakdown": analysis.get("breakdown", {}),
                         "decision": analysis.get("decision", "Hold")
                     },
-                    "gap_analysis": {
-                        "cons": analysis.get("cons", [])
-                    },
-                    "recommendations": {
-                        "pros": analysis.get("pros", [])
-                    },
-                    "interview_questions": analysis.get("tricky_questions", []),
-                    "gemma_raw_response": analysis
+                    "gap_analysis": analysis.get("gap_analysis", {}),
+                    "recommendations": analysis.get("recommendations", {}),
+                    "interview_questions": analysis.get("interview_questions", []),
+                    "gemma_raw_response": analysis,
+                    "gemma_processing_time_ms": metrics.get("total_duration_ms", 0)
                 }
 
                 supabase.table("talent_analysis").upsert(talent_data, on_conflict="application_id").execute()
@@ -105,7 +112,18 @@ def poll_applications():
                     "talent_analysis_ready_at": "now()"
                 }).eq("application_id", app_id).execute()
 
-                print(f"Successfully processed application: {app_id}")
+                # 7. High-Visibility Console Log
+                prompt_tokens = metrics.get("prompt_tokens", 0)
+                eval_tokens = metrics.get("completion_tokens", 0)
+                model_used = metrics.get("model", "gemma4:e4b")
+                
+                print(f"\n[AUDIT_SUCCESS] ------------------------------------------------")
+                print(f"CANDIDATE : {applicant_name}")
+                print(f"ROLE      : {role_name}")
+                print(f"SOURCE    : {source} ({app_id})")
+                print(f"AI MODEL  : {model_used}")
+                print(f"METRICS   : Tokens: {prompt_tokens + eval_tokens} | CPU Time: {total_process_time}s")
+                print(f"-------------------------------------------------------------\n")
 
         except Exception as e:
             print(f"Connection/Polling Error (will retry): {e}")

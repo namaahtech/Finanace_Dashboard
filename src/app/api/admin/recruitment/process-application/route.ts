@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
 import { callAI, parseAIJSON } from "@/lib/ai";
 
 export async function POST(req: NextRequest) {
-  let applicationId: string | undefined;
   try {
-    ({ applicationId } = await req.json());
+    const supabase = getSupabaseAdmin();
+    const body = await req.json();
+    const { applicationId, mode, candidate_context, job_role } = body;
+
+    if (mode === 'suggest_question') {
+      const prompt = `
+        You are a senior technical interviewer. 
+        Job Role: ${job_role}
+        Candidate Context (Previous Analysis): ${JSON.stringify(candidate_context)}
+        
+        Task: Suggest ONE extremely strategic, tricky follow-up question to ask the candidate right now to reveal their true technical depth.
+        Return ONLY the question string.
+      `;
+      const suggestion = await callAI(prompt, false);
+      return NextResponse.json({ suggestion: suggestion.trim() });
+    }
 
     if (!applicationId) {
       return NextResponse.json({ error: "Missing applicationId" }, { status: 400 });
@@ -44,26 +58,31 @@ ${resume}
 
 Return ONLY a JSON object:
 {
-  "scoring": { "match_score": <0-100>, "technical_fit": <0-100>, "experience_score": <0-100> },
-  "matching_skills": <string[]>,
-  "missing_skills": <string[]>,
-  "interview_questions": [
-    { "question": "<question>", "difficulty": "<Easy|Medium|Hard>", "topic": "<topic>" }
-  ],
-  "resume_profile": {
-    "summary": "<2-3 sentence candidate summary>",
-    "key_strengths": <string[]>,
-    "education_match": "<brief education assessment>"
+  "scoring": { 
+    "match_score": <0-100>, 
+    "decision": "<Accepted|Rejected|Hold>",
+    "breakdown": { "skills": <0-100>, "experience": <0-100>, "projects": <0-100>, "education": <0-100> } 
   },
-  "recommendations": { "pros": <string[]>, "cons": <string[]> },
-  "gap_analysis": { "cons": <string[]> }
+  "recommendations": { "pros": <string[]>, "matched_skills": <string[]> },
+  "gap_analysis": { "cons": <string[]>, "missing_skills": <string[]> },
+  "resume_profile": {
+    "summary": "<2-3 sentence executive summary>",
+    "overview": "<detailed professional profile>",
+    "education": "<deep audit of academic background>",
+    "projects": "<analysis of key projects and tech stack used>",
+    "experience": "<tenure audit and role progression analysis>",
+    "achievements": "<quantification of key results and impact>"
+  },
+  "interview_questions": [
+    { "question": "<question>", "reason": "<rationale for asking this specifically>" }
+  ]
 }
 `;
 
     const raw = await callAI(prompt, true);
     const result = parseAIJSON<any>(raw);
 
-    const { error: analysisErr } = await supabase.from("talent_analysis").insert({
+    const { error: analysisErr } = await supabase.from("talent_analysis").upsert({
       application_id: applicationId,
       cluster_id: app.applied_cluster_id,
       resume_profile: result.resume_profile,
@@ -72,7 +91,7 @@ Return ONLY a JSON object:
       recommendations: result.recommendations,
       interview_questions: result.interview_questions,
       gemma_raw_response: result,
-    });
+    }, { onConflict: "application_id" });
     if (analysisErr) throw analysisErr;
 
     await supabase.from("applications").update({
@@ -83,11 +102,16 @@ Return ONLY a JSON object:
     return NextResponse.json({ success: true, analysis: result });
   } catch (error: any) {
     console.error("Process application error:", error.message);
-    if (applicationId) {
+    // Since supabase is declared inside try, we need a local one if it fails early
+    const supabase = getSupabaseAdmin();
+    const body = await req.json().catch(() => ({}));
+    const appId = body.applicationId;
+    
+    if (appId) {
       await supabase.from("applications").update({
         processing_status: "failed",
         processing_error: error.message,
-      }).eq("application_id", applicationId).catch(() => {});
+      }).eq("application_id", appId);
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
