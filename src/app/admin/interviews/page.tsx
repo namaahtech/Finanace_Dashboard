@@ -512,8 +512,8 @@ function SessionCard({ session, onSelect, onScheduleClick }: { session: any; onS
                 </div>
                 
                 {interview?.meeting_link ? (
-                  <a 
-                    href={`${interview.meeting_link}?role=admin`}
+                  <a
+                    href={`/meet/${interview.interview_id}?role=admin`}
                     className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/10"
                   >
                     <Video size={12} /> Join Neural Room
