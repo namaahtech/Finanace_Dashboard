@@ -2,6 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { callAI, parseAIJSON } from "@/lib/ai";
 
+function extractPdfText(buffer: Buffer): string {
+  try {
+    const raw = buffer.toString("binary");
+    const chunks: string[] = [];
+    const btEt = /BT([\s\S]*?)ET/g;
+    let b;
+    while ((b = btEt.exec(raw)) !== null) {
+      const block = b[1];
+      const tj = /\(((?:[^()\\]|\\[\s\S])*)\)\s*(?:Tj|'|")/g;
+      const tjArr = /\[((?:[^[\]]*(?:\([^)]*\))?[^[\]]*)*)\]\s*TJ/g;
+      let m;
+      while ((m = tj.exec(block)) !== null) {
+        chunks.push(m[1].replace(/\\([0-7]{3})/g, (_: string, o: string) => String.fromCharCode(parseInt(o, 8))).replace(/\\(.)/g, "$1").replace(/\\[nrt]/g, " "));
+      }
+      while ((m = tjArr.exec(block)) !== null) {
+        for (const p of (m[1].match(/\((?:[^()\\]|\\[\s\S])*\)/g) || [])) {
+          chunks.push(p.slice(1, -1).replace(/\\([0-7]{3})/g, (_: string, o: string) => String.fromCharCode(parseInt(o, 8))).replace(/\\(.)/g, "$1"));
+        }
+      }
+    }
+    return chunks.join(" ").replace(/\s+/g, " ").trim();
+  } catch { return ""; }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
@@ -35,12 +59,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Application not found" }, { status: 404 });
     }
 
-    const resume = app.raw_resume_text || "";
+    let resume = app.raw_resume_text || "";
+
+    // For existing candidates with empty resume text, try to re-extract from stored file
+    if (!resume && app.resume_file_path) {
+      const { data: fileData, error: dlErr } = await supabase.storage
+        .from("resumes")
+        .download(app.resume_file_path);
+      if (!dlErr && fileData) {
+        const buf = Buffer.from(await fileData.arrayBuffer());
+        resume = extractPdfText(buf);
+        if (resume) {
+          await supabase.from("applications").update({ raw_resume_text: resume }).eq("application_id", applicationId);
+        }
+      }
+    }
+
     if (!resume) {
       await supabase.from("applications")
-        .update({ processing_status: "failed", processing_error: "No resume text found" })
+        .update({ processing_status: "failed", processing_error: "No resume text — PDF may be image-only" })
         .eq("application_id", applicationId);
-      return NextResponse.json({ error: "No resume text to analyse — ensure PDF text is extractable (not a scanned image)" }, { status: 400 });
+      return NextResponse.json({ error: "No resume text to analyse — PDF may be image-only or file missing" }, { status: 400 });
     }
 
     if (!app.job_clusters) {
