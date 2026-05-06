@@ -415,14 +415,14 @@ function ResumePreview({ path, onClose }: { path: string | null; onClose: () => 
 }
 
 /* ─── Video preview placeholder ──────────────────────────────────────────── */
-function VideoPreview({ meetingLink, candidateName }: { meetingLink?: string | null; candidateName?: string }) {
+function VideoPreview({ meetingLink, candidateName, interviewId }: { meetingLink?: string | null; candidateName?: string; interviewId?: string | null }) {
   return (
     <div className="relative h-full bg-theme-overlay rounded-xl overflow-hidden border border-theme-border group">
-      {meetingLink && (
+      {meetingLink && interviewId && (
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center z-20">
           <p className="text-[10px] font-bold text-white uppercase tracking-widest mb-4">Host Room: {candidateName}</p>
-          <a 
-            href={`${meetingLink}?role=admin`} 
+          <a
+            href={`/meet/${interviewId}?role=admin`}
             className="px-6 py-3 bg-emerald-500 text-black text-[11px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-400 transition-all shadow-xl shadow-emerald-500/20 flex items-center gap-2"
           >
             <Video size={16} /> Join Video Call
@@ -771,10 +771,19 @@ export default function InterviewsPage() {
               </div>
             </div>
             <div className="h-64">
-              <VideoPreview 
-                meetingLink={selectedId ? sessions.find(s => s.application_id === selectedId)?.interviews?.[0]?.meeting_link : sessions.find(s => s.interviews?.[0]?.meeting_link)?.interviews?.[0]?.meeting_link}
-                candidateName={selectedId ? sessions.find(s => s.application_id === selectedId)?.applicant_name : sessions.find(s => s.interviews?.[0]?.meeting_link)?.applicant_name}
-              />
+              {(() => {
+                const focused = selectedId
+                  ? sessions.find(s => s.application_id === selectedId)
+                  : sessions.find(s => s.interviews?.[0]?.meeting_link);
+                const iv = focused?.interviews?.[0];
+                return (
+                  <VideoPreview
+                    meetingLink={iv?.meeting_link}
+                    interviewId={iv?.interview_id}
+                    candidateName={focused?.applicant_name}
+                  />
+                );
+              })()}
             </div>
           </div>
           <Scorecard metrics={metrics} />

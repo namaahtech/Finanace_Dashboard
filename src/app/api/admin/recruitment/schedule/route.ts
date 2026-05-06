@@ -113,10 +113,10 @@ export async function POST(req: Request) {
             
             <p>Dear <b>${application.applicant_name}</b>,</p>
             
-            <p>You have been selected for the next stage of our hiring process at ${companyName}. We would like to invite you to our <b>Secure Neural Assessment Room</b> for a live technical evaluation.</p>
-            
+            <p>You have been selected for the next stage of our hiring process at ${companyName}. We would like to invite you to a <b>live video interview</b> for your technical evaluation.</p>
+
             <div style="background:#020617; color: white; padding:25px; border-radius:16px; margin: 25px 0; border: 1px solid #10b981;">
-              <p style="margin:0 0 10px; font-size:11px; color:#10b981; text-transform:uppercase; font-weight:900; letter-spacing:0.1em;">Neural Interview Details</p>
+              <p style="margin:0 0 10px; font-size:11px; color:#10b981; text-transform:uppercase; font-weight:900; letter-spacing:0.1em;">Interview Details</p>
               <p style="margin:0; font-size:18px; color:#ffffff; font-weight:700;">${dateStr}</p>
               
               <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #1e293b;">
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
                 <p style="margin:0; font-size:15px; color:#f8fafc; font-weight:600;">${application.applied_cluster_id}</p>
               </div>
 
-              <a href="${meetingLink}" style="display:inline-block; margin-top: 25px; padding:14px 32px; background:#10b981; color:#020617; text-decoration:none; border-radius:12px; font-weight:900; font-size:14px; text-transform: uppercase; letter-spacing: 0.02em; transition: all 0.2s;">Enter Neural Room</a>
+              <a href="${meetingLink}" style="display:inline-block; margin-top: 25px; padding:14px 32px; background:#10b981; color:#020617; text-decoration:none; border-radius:12px; font-weight:900; font-size:14px; text-transform: uppercase; letter-spacing: 0.02em; transition: all 0.2s;">Join Interview Room</a>
             </div>
 
             <h3 style="color:#0f172a; font-size:16px; margin-top:30px;">✅ Pre-Interview Checklist</h3>
