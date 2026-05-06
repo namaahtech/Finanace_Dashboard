@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { inflateSync } from "zlib";
+import { inflateSync, inflateRawSync } from "zlib";
+
+function decodeAscii85(str: string): Buffer {
+  const cleaned = str.trim().replace(/~>$/, "");
+  const bytes: number[] = [];
+  let i = 0;
+  while (i < cleaned.length) {
+    if (/\s/.test(cleaned[i])) { i++; continue; }
+    if (cleaned[i] === "z") { bytes.push(0, 0, 0, 0); i++; continue; }
+    let group = "";
+    let j = i;
+    while (group.length < 5 && j < cleaned.length) {
+      if (!/\s/.test(cleaned[j])) group += cleaned[j];
+      j++;
+    }
+    i = j;
+    if (group.length === 0) break;
+    const pad = 5 - group.length;
+    while (group.length < 5) group += "u";
+    let val = 0;
+    for (let k = 0; k < 5; k++) val = val * 85 + (group.charCodeAt(k) - 33);
+    const out = [(val >>> 24) & 0xff, (val >>> 16) & 0xff, (val >>> 8) & 0xff, val & 0xff];
+    bytes.push(...out.slice(0, 4 - pad));
+  }
+  return Buffer.from(bytes);
+}
 
 function extractPdfText(buffer: Buffer): string {
   try {
@@ -38,14 +63,26 @@ function extractPdfText(buffer: Buffer): string {
     const raw = buffer.toString("binary");
     parseTextFromRaw(raw);
 
-    const streamRe = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-    let streamMatch;
-    while ((streamMatch = streamRe.exec(raw)) !== null) {
-      const before = raw.slice(Math.max(0, streamMatch.index - 500), streamMatch.index);
-      if (!/FlateDecode/i.test(before)) continue;
+    const streamRe = /stream\n([\s\S]*?)~?>?\s*endstream/g;
+    let sm;
+    while ((sm = streamRe.exec(raw)) !== null) {
+      const before = raw.slice(Math.max(0, sm.index - 600), sm.index);
+      const hasFlate = /FlateDecode/i.test(before);
+      const hasA85 = /ASCII85Decode/i.test(before);
+      if (!hasFlate && !hasA85) continue;
       try {
-        const decompressed = inflateSync(Buffer.from(streamMatch[1], "binary")).toString("latin1");
-        parseTextFromRaw(decompressed);
+        let data: Buffer;
+        if (hasA85) {
+          const endIdx = sm[1].indexOf("~>");
+          const a85str = endIdx !== -1 ? sm[1].slice(0, endIdx + 2) : sm[1];
+          data = decodeAscii85(a85str);
+        } else {
+          data = Buffer.from(sm[1], "binary");
+        }
+        if (hasFlate) {
+          try { data = inflateSync(data); } catch { data = inflateRawSync(data); }
+        }
+        parseTextFromRaw(data.toString("latin1"));
       } catch { /* skip */ }
     }
 
