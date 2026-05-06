@@ -40,12 +40,19 @@ export async function POST(req: NextRequest) {
       await supabase.from("applications")
         .update({ processing_status: "failed", processing_error: "No resume text found" })
         .eq("application_id", applicationId);
-      return NextResponse.json({ error: "No resume text to analyse" }, { status: 400 });
+      return NextResponse.json({ error: "No resume text to analyse — ensure PDF text is extractable (not a scanned image)" }, { status: 400 });
     }
 
-    const jd = `Role: ${app.job_clusters.job_title_variants[0]}
-Required Skills: ${JSON.stringify(app.job_clusters.mandatory_skills)}
-Key Focus: ${app.job_clusters.gemma_keywords.join(", ")}`;
+    if (!app.job_clusters) {
+      await supabase.from("applications")
+        .update({ processing_status: "failed", processing_error: "Job cluster not found" })
+        .eq("application_id", applicationId);
+      return NextResponse.json({ error: "Job cluster not found for this application" }, { status: 400 });
+    }
+
+    const jd = `Role: ${app.job_clusters.job_title_variants?.[0] || app.applied_cluster_id}
+Required Skills: ${JSON.stringify(app.job_clusters.mandatory_skills || [])}
+Key Focus: ${(app.job_clusters.gemma_keywords || []).join(", ")}`;
 
     const prompt = `
 You are a talent analyst. Perform a deep analysis for this candidate.
@@ -79,6 +86,9 @@ Return ONLY a JSON object:
 }
 `;
 
+    // Mark as processing so the card shows 75% progress
+    await supabase.from("applications").update({ processing_status: "processing" }).eq("application_id", applicationId);
+
     const raw = await callAI(prompt, true);
     const result = parseAIJSON<any>(raw);
 
@@ -102,17 +112,6 @@ Return ONLY a JSON object:
     return NextResponse.json({ success: true, analysis: result });
   } catch (error: any) {
     console.error("Process application error:", error.message);
-    // Since supabase is declared inside try, we need a local one if it fails early
-    const supabase = getSupabaseAdmin();
-    const body = await req.json().catch(() => ({}));
-    const appId = body.applicationId;
-    
-    if (appId) {
-      await supabase.from("applications").update({
-        processing_status: "failed",
-        processing_error: error.message,
-      }).eq("application_id", appId);
-    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -641,105 +641,66 @@ export default function ATSScannerPage() {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedCluster) return;
+    // Reset input so same file can be re-uploaded
+    e.target.value = "";
 
     setScanning(true);
     setProgress(0);
     setLogs([]);
 
-    const steps = [
-      "INIT: Initializing ATS engine…",
-      `INGEST: Reading uploaded file: ${file.name}…`,
-    ];
-    setLogs(prev => [...prev, ...steps]);
-    setProgress(20);
-
-    const nameMatch = file.name.replace(/\.[^/.]+$/, "");
     const generatedAppId = `MAN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
     try {
-      const filePath = `candidates/${generatedAppId}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-      setLogs(prev => [...prev, "UPLOAD: Transferring resume to secure bucket…"]);
-      const { error: uploadError } = await supabase.storage.from("resumes").upload(filePath, file);
-      if (uploadError) throw uploadError;
+      setLogs(prev => [...prev,
+        "INIT: Initializing ATS engine…",
+        `INGEST: Reading file: ${file.name}…`,
+        "OCR: Extracting resume text…",
+      ]);
+      setProgress(20);
 
-      const { data: app, error } = await supabase
-        .from("applications")
-        .insert({
-           application_id: generatedAppId,
-           applied_cluster_id: selectedCluster,
-           applicant_name: nameMatch,
-           applicant_email: `${nameMatch.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}@example.com`,
-           resume_file_path: filePath,
-           raw_resume_text: "",
-           processing_status: "pending"
-        })
-        .select()
-        .single();
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("clusterId", selectedCluster);
+      formData.append("appId", generatedAppId);
 
-      if (error) throw error;
-
-      setLogs(prev => [...prev, "AUTH: Queued for Python PM2 AI Service…"]);
+      setLogs(prev => [...prev, "UPLOAD: Transferring to secure storage…"]);
       setProgress(40);
-      
-      let processing = true;
-      while (processing) {
-        await new Promise(r => setTimeout(r, 2000));
-        const { data: check } = await supabase.from("applications").select("processing_status").eq("application_id", generatedAppId).single();
-        if (check?.processing_status === "processing") {
-          setLogs(prev => {
-             if (!prev.includes("OCR: Extracting text via Tesseract Neural Engine...")) {
-                setProgress(60);
-                return [...prev, "OCR: Extracting text via Tesseract Neural Engine..."];
-             }
-             if (prev.includes("OCR: Extracting text via Tesseract Neural Engine...") && !prev.includes("NLP: Gemma 4 running cognitive audit & tricky question generation...")) {
-                setProgress(85);
-                return [...prev, "NLP: Gemma 4 running cognitive audit & tricky question generation..."];
-             }
-             return prev;
-          });
-        }
-        if (check?.processing_status === "completed") {
-           processing = false; // Always stop polling once status is completed
-           
-           // Auto-open analysis drawer
-           const { data: fullCandidate } = await supabase
-             .from("applications")
-             .select(`*, talent_analysis(scoring, resume_profile, recommendations, gap_analysis, interview_questions)`)
-             .eq("application_id", generatedAppId)
-             .single();
-           
-           if (fullCandidate) {
-             const analysis = fullCandidate.talent_analysis?.[0];
-             const metrics = analysis?.resume_profile?.metrics || {};
-             const source = fullCandidate.application_id.startsWith("CAR-") ? "Career Portal" : "Manual Upload";
-             
-             setLogs(prev => [
-               ...prev, 
-               "SUCCESS: Full 360° resume analysis complete.",
-               `METRICS: [${metrics.model || 'gemma4:e4b'}] | Tokens: ${metrics.prompt_tokens + metrics.completion_tokens || 0} | Time: ${analysis?.gemma_processing_time_ms / 1000 || 0}s`,
-               `SOURCE: ${source} | Candidate: ${fullCandidate.applicant_name}`,
-               "DATA: Synchronizing intelligence reports..."
-             ]);
-             setProgress(100);
-             
-             await fetchApplications();
-             setSelectedId(fullCandidate.application_id);
-           }
-        }
-        if (check?.processing_status === "failed") {
-           processing = false;
-           throw new Error("AI Processing Failed: Check PM2 logs for OCR/NLP errors.");
-        }
-      }
 
+      // Refresh candidate list so the pending card appears
+      await fetchApplications();
+
+      setLogs(prev => [...prev, "NLP: Gemma 4 running cognitive audit…"]);
+      setProgress(60);
+
+      const res = await fetch("/api/admin/ats/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      setProgress(85);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload and AI processing failed");
+
+      setLogs(prev => [
+        ...prev,
+        "SCORE: Match reliability computed.",
+        `TEXT: ${data.rawTextLength || 0} chars extracted from resume.`,
+        "SUCCESS: Full 360° resume analysis complete.",
+        "DATA: Synchronizing intelligence reports…",
+      ]);
+      setProgress(100);
+
+      await fetchApplications();
+      setSelectedId(generatedAppId);
       showToast("Intelligence report generated", "success");
-      fetchApplications();
     } catch (err: any) {
       setLogs(prev => [...prev, "ERROR: " + err.message]);
       showToast(err.message, "error");
+      // Cleanup failed application record
+      await supabase.from("applications").delete().eq("application_id", generatedAppId).then(() => {});
     } finally {
       setScanning(false);
-      setTimeout(() => setProgress(0), 1000);
+      setTimeout(() => setProgress(0), 1500);
     }
   };
 
@@ -762,27 +723,58 @@ export default function ATSScannerPage() {
     setProgress(0);
     setLogs([]);
 
-    const steps = [
-      "INIT: Initializing ATS engine…",
-      "AUTH: Establishing secure tunnel…",
-      "INGEST: Scanning resume storage bucket…",
-      "SCAN: Processing candidate batch…",
-      "PARSE: Extracting skills and experience…",
-      "MATCH: Running cluster alignment check…",
-      "SCORE: Computing match reliability scores…",
-      "AUDIT: Cross-referencing cluster IDs…",
-      "SUCCESS: Batch processing complete.",
-    ];
+    try {
+      setLogs(prev => [...prev, "INIT: Initializing ATS engine…", "INGEST: Scanning for pending candidates…"]);
+      setProgress(10);
 
-    for (let i = 0; i < steps.length; i++) {
-      await new Promise(r => setTimeout(r, 500 + Math.random() * 700));
-      setLogs(prev => [...prev, steps[i]]);
-      setProgress(((i + 1) / steps.length) * 100);
+      // Find all pending/failed candidates that have resume text
+      const { data: pending } = await supabase
+        .from("applications")
+        .select("application_id, applicant_name, raw_resume_text")
+        .in("processing_status", ["pending", "failed"])
+        .not("raw_resume_text", "eq", "");
+
+      if (!pending || pending.length === 0) {
+        setLogs(prev => [...prev, "INFO: No pending candidates with resume text found.", "SUCCESS: Queue is clear."]);
+        setProgress(100);
+        showToast("No pending candidates to process", "info");
+        return;
+      }
+
+      setLogs(prev => [...prev, `QUEUE: ${pending.length} candidate(s) queued for AI processing…`]);
+
+      for (let i = 0; i < pending.length; i++) {
+        const app = pending[i];
+        const pct = Math.round(((i + 1) / pending.length) * 90) + 10;
+        setProgress(pct);
+        setLogs(prev => [...prev, `NLP [${i + 1}/${pending.length}]: Processing ${app.applicant_name}…`]);
+
+        const res = await fetch("/api/admin/recruitment/process-application", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ applicationId: app.application_id }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setLogs(prev => [...prev, `ERROR [${app.applicant_name}]: ${data.error || "AI failed"}`]);
+        } else {
+          const score = data.analysis?.scoring?.match_score || 0;
+          setLogs(prev => [...prev, `SUCCESS [${app.applicant_name}]: Score ${score}% — analysis stored.`]);
+        }
+      }
+
+      setProgress(100);
+      setLogs(prev => [...prev, "DATA: Synchronizing intelligence reports…"]);
+      await fetchApplications();
+      showToast(`Batch scan complete — ${pending.length} candidate(s) processed`, "success");
+    } catch (err: any) {
+      setLogs(prev => [...prev, "ERROR: " + err.message]);
+      showToast(err.message, "error");
+    } finally {
+      setScanning(false);
+      setTimeout(() => setProgress(0), 1500);
     }
-
-    setScanning(false);
-    showToast("Batch scan complete", "success");
-    fetchApplications();
   }
 
   const handleDelete = async (appId: string) => {
@@ -799,40 +791,31 @@ export default function ATSScannerPage() {
 
   const handleRescan = async (appId: string) => {
     try {
-      const { error: delErr } = await supabase.from("talent_analysis").delete().eq("application_id", appId);
-      if (delErr) throw delErr;
-      const { error } = await supabase.from("applications").update({ processing_status: "pending" }).eq("application_id", appId);
-      if (error) throw error;
-      
-      // Trigger UI overlay immediately
+      showToast("Neural re-audit initiated…", "info");
+
+      // Clear old analysis and mark as pending so the card shows the scanning overlay
+      await supabase.from("talent_analysis").delete().eq("application_id", appId);
+      await supabase.from("applications").update({ processing_status: "pending" }).eq("application_id", appId);
       await fetchApplications();
-      
-      showToast("Neural audit re-triggered", "success");
-      
-      // Wait for completion
-      let processing = true;
-      while (processing) {
-        await new Promise(r => setTimeout(r, 2000));
-        const { data: check } = await supabase.from("applications").select("processing_status").eq("application_id", appId).single();
-        if (check?.processing_status === "completed") {
-           processing = false;
-           await fetchApplications();
-           
-           // Auto-open
-           const { data: fullCandidate } = await supabase
-             .from("applications")
-             .select(`*, talent_analysis(scoring, resume_profile, recommendations, gap_analysis, interview_questions)`)
-             .eq("application_id", appId)
-             .single();
-           
-           if (fullCandidate) {
-             setSelectedId(fullCandidate.application_id);
-           }
-        }
-        if (check?.processing_status === "failed") throw new Error("Rescan failed");
-      }
+
+      // Call AI directly — no PM2 polling
+      const res = await fetch("/api/admin/recruitment/process-application", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId: appId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI rescan failed");
+
+      await fetchApplications();
+      setSelectedId(appId);
+      showToast("Neural re-audit complete", "success");
     } catch (err: any) {
       showToast(err.message, "error");
+      // Reset status back so user can retry
+      await supabase.from("applications").update({ processing_status: "failed" }).eq("application_id", appId);
+      await fetchApplications();
     }
   };
 
