@@ -1,60 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { inflateSync } from "zlib";
 
-/**
- * Extracts readable text from a PDF buffer using raw stream parsing.
- * Handles text-based PDFs without external libraries.
- * Falls back to empty string for image-only PDFs (scanned).
- */
 function extractPdfText(buffer: Buffer): string {
   try {
-    const raw = buffer.toString("binary");
-    const textChunks: string[] = [];
+    const chunks: string[] = [];
 
-    // Extract all BT...ET blocks (PDF text objects)
-    const btEtRegex = /BT([\s\S]*?)ET/g;
-    let btMatch;
-    while ((btMatch = btEtRegex.exec(raw)) !== null) {
-      const block = btMatch[1];
-      // Match Tj and TJ operators
-      const tjRegex = /\(((?:[^()\\]|\\[\s\S])*)\)\s*(?:Tj|'|")/g;
-      const tjArrayRegex = /\[((?:[^[\]]*(?:\([^)]*\))?[^[\]]*)*)\]\s*TJ/g;
+    function decode(s: string): string {
+      return s
+        .replace(/\\([0-7]{3})/g, (_: string, o: string) => String.fromCharCode(parseInt(o, 8)))
+        .replace(/\\n|\\r|\\t/g, " ")
+        .replace(/\\(.)/g, "$1");
+    }
 
-      let m;
-      while ((m = tjRegex.exec(block)) !== null) {
-        const decoded = m[1]
-          .replace(/\\n/g, " ")
-          .replace(/\\r/g, " ")
-          .replace(/\\t/g, " ")
-          .replace(/\\([0-7]{3})/g, (_: string, oct: string) =>
-            String.fromCharCode(parseInt(oct, 8))
-          )
-          .replace(/\\(.)/g, "$1");
-        textChunks.push(decoded);
-      }
-
-      while ((m = tjArrayRegex.exec(block)) !== null) {
-        const inner = m[1];
-        const parts = inner.match(/\((?:[^()\\]|\\[\s\S])*\)/g) || [];
-        for (const part of parts) {
-          const decoded = part
-            .slice(1, -1)
-            .replace(/\\n/g, " ")
-            .replace(/\\r/g, " ")
-            .replace(/\\([0-7]{3})/g, (_: string, oct: string) =>
-              String.fromCharCode(parseInt(oct, 8))
-            )
-            .replace(/\\(.)/g, "$1");
-          textChunks.push(decoded);
+    function parseTextFromRaw(raw: string) {
+      const btEt = /BT([\s\S]*?)ET/g;
+      let b;
+      while ((b = btEt.exec(raw)) !== null) {
+        const block = b[1];
+        const tjArr = /\[([\s\S]*?)\]\s*TJ/g;
+        const tj = /\(((?:[^()\\]|\\[\s\S])*)\)\s*(?:Tj|')/g;
+        let m;
+        while ((m = tjArr.exec(block)) !== null) {
+          const parts = m[1].match(/\(([^)]*)\)/g) || [];
+          for (const p of parts) {
+            const t = decode(p.slice(1, -1));
+            if (t.trim()) chunks.push(t);
+          }
+        }
+        while ((m = tj.exec(block)) !== null) {
+          const t = decode(m[1]);
+          if (t.trim()) chunks.push(t);
         }
       }
     }
 
-    const text = textChunks.join(" ").replace(/\s+/g, " ").trim();
-    return text;
-  } catch {
-    return "";
-  }
+    const raw = buffer.toString("binary");
+    parseTextFromRaw(raw);
+
+    const streamRe = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    let streamMatch;
+    while ((streamMatch = streamRe.exec(raw)) !== null) {
+      const before = raw.slice(Math.max(0, streamMatch.index - 500), streamMatch.index);
+      if (!/FlateDecode/i.test(before)) continue;
+      try {
+        const decompressed = inflateSync(Buffer.from(streamMatch[1], "binary")).toString("latin1");
+        parseTextFromRaw(decompressed);
+      } catch { /* skip */ }
+    }
+
+    return chunks.join(" ").replace(/\s+/g, " ").trim();
+  } catch { return ""; }
 }
 
 /**
