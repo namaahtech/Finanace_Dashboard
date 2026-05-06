@@ -103,7 +103,7 @@ export default function InterviewRecapPage() {
             <div className="bg-zinc-900/50 border border-white/5 rounded-3xl p-8 space-y-6">
               <div className="flex items-center gap-3">
                 <Brain className="text-emerald-500" size={24} />
-                <h2 className="text-xl font-bold">Gemma Neural Analysis</h2>
+                <h2 className="text-xl font-bold">AI Analysis</h2>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
