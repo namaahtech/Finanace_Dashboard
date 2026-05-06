@@ -312,7 +312,7 @@ function AnalysisDrawer({
                    <div className="flex flex-wrap gap-2">
                      {matchedSkills.length > 0 ? matchedSkills.map(s => (
                        <span key={s} className="px-3 py-1 bg-theme-primary/10 text-theme-primary border border-theme-primary/20 rounded-lg text-[10px] font-bold uppercase tracking-tight">{s}</span>
-                     )) : <p className="text-xs text-theme-muted italic">No specific skills detected in neural scan.</p>}
+                     )) : <p className="text-xs text-theme-muted italic">No specific skills detected.</p>}
                    </div>
                 </div>
 
@@ -425,7 +425,7 @@ function VideoPreview({ meetingLink, candidateName }: { meetingLink?: string | n
             href={`${meetingLink}?role=admin`} 
             className="px-6 py-3 bg-emerald-500 text-black text-[11px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-400 transition-all shadow-xl shadow-emerald-500/20 flex items-center gap-2"
           >
-            <Video size={16} /> Enter Neural Room
+            <Video size={16} /> Join Video Call
           </a>
         </div>
       )}
@@ -516,7 +516,7 @@ function SessionCard({ session, onSelect, onScheduleClick }: { session: any; onS
                     href={`/meet/${interview.interview_id}?role=admin`}
                     className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/10"
                   >
-                    <Video size={12} /> Join Neural Room
+                    <Video size={12} /> Join Interview
                   </a>
                 ) : (
                   <button 
@@ -677,7 +677,7 @@ export default function InterviewsPage() {
 
   const metrics = [
     { label: "Technical Proficiency", value: 0, color: "bg-theme-primary" },
-    { label: "Neural Alignment",      value: 0, color: "bg-emerald-500" },
+    { label: "Role Alignment",         value: 0, color: "bg-emerald-500" },
     { label: "Communication Flow",    value: 0, color: "bg-amber-500" },
   ];
 
@@ -767,7 +767,7 @@ export default function InterviewsPage() {
                 <div className="h-7 w-7 rounded-lg bg-theme-raised border border-theme-border flex items-center justify-center text-theme-muted">
                   <Video size={13} />
                 </div>
-                <span className="text-sm font-semibold text-theme-fg">Neural Assessment Terminal</span>
+                <span className="text-sm font-semibold text-theme-fg">Interview Room</span>
               </div>
             </div>
             <div className="h-64">

@@ -177,7 +177,7 @@ function CandidateCard({
             
             <div className="w-full max-w-[100px] space-y-1.5 flex-shrink-0">
               <div className="flex items-center justify-between text-[9px] font-bold text-theme-primary tracking-tighter">
-                <span>NEURAL SYNC</span>
+                <span>AI SCAN</span>
                 <span>{progressValue}%</span>
               </div>
               <div className="h-1 w-full bg-theme-primary/10 rounded-full overflow-hidden">
@@ -189,8 +189,8 @@ function CandidateCard({
               </div>
             </div>
 
-            <p className="text-[9px] font-black uppercase tracking-widest text-theme-primary mt-3 animate-pulse">Audit Active</p>
-            <p className="text-[8px] text-theme-muted mt-1 leading-none">Syncing cognitive signals...</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-theme-primary mt-3 animate-pulse">Processing</p>
+            <p className="text-[8px] text-theme-muted mt-1 leading-none">Analysing resume...</p>
             <button
               onClick={(e) => { e.stopPropagation(); onCancelStuck(candidate.application_id); }}
               className="mt-3 flex items-center gap-1 text-[9px] font-bold px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all"
@@ -842,7 +842,7 @@ export default function ATSScannerPage() {
 
   const handleRescan = async (appId: string) => {
     try {
-      showToast("Neural re-audit initiated…", "info");
+      showToast("Re-analysis initiated…", "info");
 
       // Clear old analysis and mark as pending so the card shows the scanning overlay
       await supabase.from("talent_analysis").delete().eq("application_id", appId);
@@ -861,7 +861,7 @@ export default function ATSScannerPage() {
 
       await fetchApplications();
       setSelectedId(appId);
-      showToast("Neural re-audit complete", "success");
+      showToast("Re-analysis complete", "success");
     } catch (err: any) {
       showToast(err.message, "error");
       // Reset status back so user can retry
