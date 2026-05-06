@@ -135,17 +135,19 @@ function ScoreBadge({ score }: { score: number }) {
 }
 
 /* ─── Candidate Card ──────────────────────────────────────────────────────── */
-function CandidateCard({ 
-  candidate, 
-  onSelect, 
-  onDelete, 
+function CandidateCard({
+  candidate,
+  onSelect,
+  onDelete,
   onRescan,
+  onCancelStuck,
   onDecision
-}: { 
-  candidate: any; 
-  onSelect: (c: any) => void; 
-  onDelete: (id: string) => void; 
+}: {
+  candidate: any;
+  onSelect: (c: any) => void;
+  onDelete: (id: string) => void;
   onRescan: (id: string) => void;
+  onCancelStuck: (id: string) => void;
   onDecision: (id: string, decision: 'accepted' | 'rejected') => void;
 }) {
   // Extract analysis from array or single object
@@ -189,6 +191,12 @@ function CandidateCard({
 
             <p className="text-[9px] font-black uppercase tracking-widest text-theme-primary mt-3 animate-pulse">Audit Active</p>
             <p className="text-[8px] text-theme-muted mt-1 leading-none">Syncing cognitive signals...</p>
+            <button
+              onClick={(e) => { e.stopPropagation(); onCancelStuck(candidate.application_id); }}
+              className="mt-3 flex items-center gap-1 text-[9px] font-bold px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all"
+            >
+              <X size={9} /> Cancel
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -810,6 +818,16 @@ export default function ATSScannerPage() {
     }
   }
 
+  const handleCancelStuck = async (appId: string) => {
+    try {
+      await supabase.from("applications").update({ processing_status: "failed" }).eq("application_id", appId);
+      await fetchApplications();
+      showToast("Scan cancelled — hit Rescan to retry", "info");
+    } catch (err: any) {
+      showToast(err.message, "error");
+    }
+  };
+
   const handleDelete = async (appId: string) => {
     if (!confirm("Are you sure you want to delete this candidate?")) return;
     try {
@@ -1015,12 +1033,13 @@ export default function ATSScannerPage() {
                 </div>
               ) : (
                 filtered.map((c) => (
-                  <CandidateCard 
-                    key={c.application_id} 
-                    candidate={c} 
-                    onSelect={(cand) => setSelectedId(cand.application_id)} 
-                    onDelete={handleDelete} 
-                    onRescan={handleRescan} 
+                  <CandidateCard
+                    key={c.application_id}
+                    candidate={c}
+                    onSelect={(cand) => setSelectedId(cand.application_id)}
+                    onDelete={handleDelete}
+                    onRescan={handleRescan}
+                    onCancelStuck={handleCancelStuck}
                     onDecision={handleDecision}
                   />
                 ))
