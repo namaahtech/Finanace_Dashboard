@@ -1,4 +1,4 @@
-# Namaah Pulse — Setup Guide
+# Namaah Nexus — Setup Guide
 
 ## Prerequisites
 

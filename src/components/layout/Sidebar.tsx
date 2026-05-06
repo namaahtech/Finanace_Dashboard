@@ -9,7 +9,8 @@ import {
   GitBranch, Receipt, CreditCard, Tag, PiggyBank, Handshake,
   MessageSquare, CalendarClock, IndianRupee,
   Shield, RefreshCw, Mail, ChevronDown, Check,
-  Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder,
+  Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder, User,
+  BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
@@ -28,6 +29,24 @@ const superAdminNav: NavSection[] = [
     { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
     { href: "/admin/teams", label: "Teams", icon: Building2 },
     { href: "/admin/org-chart", label: "Org Chart", icon: Network },
+  ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
+    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
+  ]},
+  { title: "HR", items: [
+    { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
+    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
+    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
+    { href: "/admin/interviews", label: "Interviews", icon: MessageSquare },
+  ]},
+  { title: "LMS Academy", items: [
+    { href: "/admin/lms", label: "Academy Manager", icon: BookOpen },
+    { href: "/admin/lms/courses", label: "Manage Courses", icon: ClipboardList },
+    { href: "/admin/lms/certifications", label: "Certifications", icon: Award },
   ]},
   { title: "Operations", items: [
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
@@ -93,6 +112,23 @@ const hrNav: NavSection[] = [
     { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
     { href: "/admin/teams", label: "Teams", icon: Building2 },
   ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
+    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
+  ]},
+  { title: "HR", items: [
+    { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
+    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
+    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
+    { href: "/admin/interviews", label: "Interviews", icon: MessageSquare },
+  ]},
+  { title: "LMS Academy", items: [
+    { href: "/admin/lms", label: "Academy Manager", icon: BookOpen },
+    { href: "/admin/lms/certifications", label: "Certifications", icon: Award },
+  ]},
   { title: "People", items: [
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
     { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
@@ -112,10 +148,20 @@ const hrNav: NavSection[] = [
 
 const leadNav: NavSection[] = [
   { title: "Team", items: [
+    { href: "/admin/projects", label: "Projects", icon: Folder },
     { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
+    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
+    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
     { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
     { href: "/admin/budgets", label: "Team Budget", icon: PiggyBank },
     { href: "/admin/subscriptions", label: "Subscriptions", icon: Tag },
+  ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
+    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
   ]},
   { title: "Comms", items: [
     { href: "/admin/messaging", label: "Messages", icon: MessageSquare },
@@ -130,6 +176,7 @@ const salesNav: NavSection[] = [
   ]},
   { title: "My Info", items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard/profile", label: "My Profile", icon: User },
     { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
   ]},
   { title: "Comms", items: [
@@ -138,15 +185,59 @@ const salesNav: NavSection[] = [
   ]},
 ];
 
+const managerNav: NavSection[] = [
+  { title: "Department", items: [
+    { href: "/manager/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/admin/projects", label: "Projects", icon: Folder },
+    { href: "/manager/teams", label: "Teams", icon: Building2 },
+    { href: "/manager/org-chart", label: "Org Chart", icon: Network },
+    { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
+    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
+    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
+    { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
+  ]},
+  { title: "LMS Academy", items: [
+    { href: "/admin/lms", label: "Academy Manager", icon: BookOpen },
+  ]},
+  { title: "My Workspace", items: [
+    { href: "/dashboard/profile", label: "My Profile", icon: User },
+    { href: "/dashboard/attendance", label: "Attendance", icon: CalendarDays },
+    { href: "/dashboard/incentives", label: "Incentives", icon: Wallet },
+    { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
+  ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
+    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
+  ]},
+  { title: "Comms", items: [
+    { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
+    { href: "/dashboard/meetings", label: "Meetings", icon: CalendarClock },
+  ]},
+];
+
 const employeeNav: NavSection[] = [
   { title: "My Workspace", items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard/profile", label: "My Profile", icon: User },
     { href: "/dashboard/attendance", label: "Attendance", icon: CalendarDays },
     { href: "/dashboard/performance", label: "Performance", icon: TrendingUp },
     { href: "/dashboard/incentives", label: "Incentives", icon: Wallet },
     { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
     { href: "/dashboard/reimbursements", label: "Reimbursements", icon: Receipt },
     { href: "/dashboard/priority", label: "Priority Payout", icon: Zap },
+  ]},
+  { title: "LMS Academy", items: [
+    { href: "/dashboard/academy", label: "Training Academy", icon: BookOpen },
+  ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
+    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
   ]},
   { title: "Comms", items: [
     { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
@@ -160,6 +251,7 @@ function getNav(role?: string): NavSection[] {
     case "accounts": return accountsNav;
     case "hr": return hrNav;
     case "lead": return leadNav;
+    case "manager": return managerNav;
     case "sales": return salesNav;
     default: return employeeNav;
   }
@@ -170,6 +262,7 @@ const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
   accounts: { label: "Accounts", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
   hr: { label: "HR", cls: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
   lead: { label: "Team Lead", cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  manager: { label: "Department Manager", cls: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
   employee: { label: "Employee", cls: "bg-theme-raised text-theme-muted" },
   sales: { label: "Sales", cls: "bg-rose-500/10 text-rose-500" },
 };
@@ -225,22 +318,22 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
     <aside
       className={cn(
         "relative flex h-screen flex-col flex-shrink-0 transition-all duration-300 ease-in-out",
-        "bg-theme-sidebar-bg border-r border-theme-sidebar-border",
+        "bg-sidebar border-r border-sidebar",
         collapsed ? "w-[68px]" : "w-64"
       )}
     >
       {/* Header */}
       <div className={cn(
-        "flex h-[65px] items-center border-b border-theme-sidebar-border transition-all duration-300",
+        "flex h-[60px] items-center border-b border-sidebar transition-all duration-300",
         collapsed ? "justify-center px-0" : "justify-between px-5"
       )}>
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-theme-primary text-theme-surface font-black text-sm shadow-sm">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-theme-primary text-white font-black text-sm">
             N
           </div>
           {!collapsed && (
             <span className="text-sm font-bold text-theme-fg tracking-tight truncate">
-              Namaah Pulse
+              Namaah Nexus
             </span>
           )}
         </div>
@@ -268,7 +361,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       <nav 
         ref={navRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-2.5 py-4 space-y-6 scrollbar-hide"
+        className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5 scrollbar-hide"
       >
         {sections.map((section) => (
           <div key={section.title}>
@@ -288,17 +381,17 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
                         "flex items-center rounded-lg transition-all duration-150",
                         collapsed ? "h-10 w-10 mx-auto justify-center" : "gap-2.5 px-3 py-2",
                         active
-                          ? "bg-theme-sidebar-active text-theme-sidebar-active-fg shadow-sm"
-                          : "text-theme-muted hover:bg-theme-sidebar-hover hover:text-theme-fg"
+                          ? "bg-theme-primary/10 text-theme-primary"
+                          : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg"
                       )}
                     >
                       <Icon
-                        size={16}
+                        size={15}
                         strokeWidth={active ? 2.5 : 2}
                         className="flex-shrink-0"
                       />
                       {!collapsed && (
-                        <span className="truncate text-sm font-semibold">{label}</span>
+                        <span className="truncate text-sm font-medium">{label}</span>
                       )}
                     </Link>
                   </li>
@@ -310,23 +403,23 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-theme-sidebar-border p-3 space-y-2">
+      <div className="border-t border-sidebar p-3 space-y-2">
         {!collapsed && (
-          <div className="rounded-lg bg-theme-raised px-3 py-2">
+          <div className="rounded-lg bg-theme-raised/60 px-3 py-2.5">
             <div className="flex items-center justify-between gap-2 mb-1">
               <p className="text-xs font-semibold text-theme-fg truncate">{user?.name ?? "—"}</p>
               <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0", roleInfo.cls)}>
                 {roleInfo.label}
               </span>
             </div>
-            <p className="text-xs text-theme-muted truncate">{user?.email ?? "—"}</p>
+            <p className="text-[11px] text-theme-muted truncate">{user?.email ?? "—"}</p>
           </div>
         )}
         <div className={cn("flex gap-2", collapsed && "flex-col items-center")}>
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className={cn(
-              "flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs text-theme-muted hover:text-theme-fg hover:bg-theme-raised transition-colors",
+              "flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs text-theme-muted hover:text-theme-fg hover:bg-theme-raised transition-colors",
               collapsed ? "w-10 h-10" : "flex-1"
             )}
             title={theme === "dark" ? "Light mode" : "Dark mode"}
@@ -337,7 +430,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
           <button
             onClick={() => logout()}
             className={cn(
-              "flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs text-red-500 hover:bg-red-500/10 transition-colors",
+              "flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs text-red-500 hover:bg-red-500/10 transition-colors",
               collapsed ? "w-10 h-10" : "flex-1"
             )}
             title="Logout"

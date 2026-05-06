@@ -26,7 +26,7 @@ async function sendMail(to: string, subject: string, html: string) {
     auth: { user: cfg.smtp_user, pass: cfg.smtp_pass },
   });
   await transporter.sendMail({
-    from: `"${cfg.company_name || "Namaah Pulse"}" <${cfg.smtp_user}>`,
+    from: `"${cfg.company_name || "Namaah Nexus"}" <${cfg.smtp_user}>`,
     to,
     subject,
     html,
@@ -52,6 +52,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (typeof body.isActive === "boolean") updates.is_active = body.isActive;
   if (body.name) updates.name = body.name;
   if (body.designation) updates.designation = body.designation;
+  if (body.matrix_role !== undefined) updates.matrix_role = body.matrix_role;
   if (body.role) updates.role = body.role;
   if (body.department) updates.department = body.department;
   if (body.shift_id !== undefined) updates.shift_id = body.shift_id;
@@ -60,6 +61,20 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (body.employment_type !== undefined) updates.employment_type = body.employment_type;
   if (body.salary_structure !== undefined) updates.salary_structure = body.salary_structure;
   if (body.base_salary !== undefined) updates.base_salary = Number(body.base_salary);
+
+  // New salary range and KPI fields
+  if (body.salary_min !== undefined) updates.salary_min = body.salary_min ? Number(body.salary_min) : null;
+  if (body.salary_max !== undefined) updates.salary_max = body.salary_max ? Number(body.salary_max) : null;
+  if (body.salary_step !== undefined) updates.salary_step = body.salary_step ? Number(body.salary_step) : null;
+  if (body.hourly_rate !== undefined) updates.hourly_rate = body.hourly_rate ? Number(body.hourly_rate) : null;
+  if (body.daily_rate !== undefined) updates.daily_rate = body.daily_rate ? Number(body.daily_rate) : null;
+  if (body.stipend_amount !== undefined) updates.stipend_amount = body.stipend_amount ? Number(body.stipend_amount) : null;
+  if (body.kpi_weight !== undefined) updates.kpi_weight = Number(body.kpi_weight) || 40;
+  if (body.kra_weight !== undefined) updates.kra_weight = Number(body.kra_weight) || 40;
+  if (body.behavioral_weight !== undefined) updates.behavioral_weight = Number(body.behavioral_weight) || 20;
+  if (body.kpi_enabled !== undefined) updates.kpi_enabled = Boolean(body.kpi_enabled);
+  if (body.enable_salary_linkage !== undefined) updates.enable_salary_linkage = Boolean(body.enable_salary_linkage);
+  if (body.joiningDate !== undefined) updates.joining_date = body.joiningDate;
 
   const { data, error } = await supabase
     .from("employees")
@@ -76,10 +91,30 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 export async function DELETE(req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   const supabase = getSupabaseAdmin();
-  const { error: dbErr } = await supabase.from("employees").delete().eq("id", id);
-  if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 });
-  const { error: authErr } = await supabase.auth.admin.deleteUser(id);
-  return NextResponse.json({ success: true });
+
+  console.log(`[DELETE] Deleting employee: ${id}`);
+
+  try {
+    // Delete employee record (triggers cascade deletion via RLS)
+    const { error: dbErr } = await supabase.from("employees").delete().eq("id", id);
+    if (dbErr) {
+      console.error("[DELETE] Database error:", dbErr);
+      return NextResponse.json({ error: dbErr.message }, { status: 500 });
+    }
+
+    // Delete auth user
+    const { error: authErr } = await supabase.auth.admin.deleteUser(id);
+    if (authErr) {
+      console.error("[DELETE] Auth error:", authErr);
+      // Auth deletion is non-critical if employee is already deleted
+    }
+
+    console.log(`[DELETE] Successfully deleted employee: ${id}`);
+    return NextResponse.json({ success: true, message: "Employee deleted successfully" });
+  } catch (err: any) {
+    console.error("[DELETE] Unexpected error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }
 
 // ── POST /api/users/[id] — action commands ────────────────
@@ -99,7 +134,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 });
 
     try {
-      await sendMail(emp.email, `Account Credentials Resent - ${config?.company_name || "Namaah Pulse"}`, `
+      await sendMail(emp.email, `Account Credentials Resent - ${config?.company_name || "Namaah Nexus"}`, `
         <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
           <div style="background-color: #0f172a; color: #ffffff; padding: 32px 20px; text-align: center;">
             <h1 style="margin:0; letter-spacing: 4px; font-size: 24px; font-weight: 800; text-transform: uppercase;">${config?.company_name || "NAMAAH PULSE"}</h1>
@@ -146,7 +181,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     try {
       await sendMail(emp.email, subject, `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
-          <div style="background:#0f172a; color:#fff; padding:20px; text-align:center"><h2>${config?.company_name || "Namaah Pulse"}</h2></div>
+          <div style="background:#0f172a; color:#fff; padding:20px; text-align:center"><h2>${config?.company_name || "Namaah Nexus"}</h2></div>
           <div style="padding:30px; background:#fbfbfa">
             <p>Hi <b>${emp.name}</b>,</p>
             ${message.split("\n").map((l: string) => `<p>${l}</p>`).join("")}

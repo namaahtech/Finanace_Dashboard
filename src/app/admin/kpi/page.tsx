@@ -36,6 +36,7 @@ import { useToast } from "@/components/ui/Toast";
 // ─── Types ───────────────────────────────────────────────
 interface User {
   _id: string;
+  id?: string;
   name: string;
   employeeId: string;
   department: string;
@@ -65,6 +66,23 @@ interface FormState {
   kraMetrics: KraMetricsInput;
   behavioralMetrics: BehavioralMetricsInput;
   remarks: string;
+}
+
+interface AutoCalculatedKpi {
+  kpi_entries: Array<{ label: string; weight: number; score: number; breakdown: any }>;
+  kra_metrics: { ownership: number; quality: number; initiative: number };
+  behavioral_metrics: { attendance: number; discipline: number; communication: number };
+  kpi_score: number;
+  kra_score: number;
+  behavioral_score: number;
+  final_score: number;
+  rating_label: string;
+  insights: {
+    attendance_status: string;
+    task_completion: string;
+    project_status: string;
+    recommendation: string;
+  };
 }
 
 type PageTab = "entry" | "overview";
@@ -204,6 +222,8 @@ export default function AdminKpiPage() {
   const [scores, setScores] = useState<KpiScore[]>([]);
   const [selectedUser, setSelectedUser] = useState("");
   const [loadingScores, setLoadingScores] = useState(false);
+  const [loadingAutoCalc, setLoadingAutoCalc] = useState(false);
+  const [autoCalc, setAutoCalc] = useState<AutoCalculatedKpi | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(
     createDefaultForm(today.getMonth() + 1, today.getFullYear())
@@ -211,20 +231,75 @@ export default function AdminKpiPage() {
 
   const canEdit = user?.role === "super_admin" || user?.role === "hr" || user?.role === "lead";
 
-  // Try to load real users
+  // Load real users with safe field mapping
   useEffect(() => {
     axios.get("/api/users?role=employee&limit=100")
-      .then((res) => { if (res.data.users?.length) setUsers(res.data.users); })
+      .then((res) => {
+        if (res.data.users?.length) {
+          const mappedUsers = res.data.users.map((u: any) => ({
+            _id: u.id || u._id,
+            id: u.id || u._id,
+            name: u.name,
+            employeeId: u.employeeId || u.employee_id,
+            department: u.department
+          }));
+          setUsers(mappedUsers);
+        }
+      })
       .catch(() => {/* use mock */});
   }, []);
 
+  // Fetch KPI scores in real-time
   useEffect(() => {
     if (!selectedUser) { setScores([]); return; }
     setLoadingScores(true);
     axios.get(`/api/kpi?employeeId=${selectedUser}`)
-      .then((res) => setScores(res.data.scores ?? []))
-      .catch(() => setScores([]))
+      .then((res) => {
+        const data = res.data.data || res.data.scores || [];
+        setScores(Array.isArray(data) ? data : [data]);
+      })
+      .catch((err) => {
+        console.error("KPI fetch error:", err);
+        setScores([]);
+      })
       .finally(() => setLoadingScores(false));
+  }, [selectedUser]);
+
+  // Fetch auto-calculated KPI scores
+  useEffect(() => {
+    if (!selectedUser) { setAutoCalc(null); return; }
+    setLoadingAutoCalc(true);
+    axios.get(`/api/kpi/calculate`, {
+      params: {
+        employeeId: selectedUser,
+        month: form.month,
+        year: form.year
+      }
+    })
+      .then((res) => {
+        if (res.data.success && res.data.auto_calculated) {
+          setAutoCalc(res.data.auto_calculated);
+        }
+      })
+      .catch((err) => {
+        console.error("Auto-calc fetch error:", err);
+        setAutoCalc(null);
+      })
+      .finally(() => setLoadingAutoCalc(false));
+  }, [selectedUser, form.month, form.year]);
+
+  // Subscribe to real-time KPI updates via polling
+  useEffect(() => {
+    if (!selectedUser) return;
+    const interval = setInterval(() => {
+      axios.get(`/api/kpi?employeeId=${selectedUser}`)
+        .then((res) => {
+          const data = res.data.data || res.data.scores || [];
+          setScores(Array.isArray(data) ? data : [data]);
+        })
+        .catch(() => {/* silent fail */});
+    }, 3000); // Real-time update every 3 seconds
+    return () => clearInterval(interval);
   }, [selectedUser]);
 
   useEffect(() => {
@@ -243,8 +318,55 @@ export default function AdminKpiPage() {
   const rating         = useMemo(() => getKpiRating(finalScore),                      [finalScore]);
   const totalWeight    = form.kpiEntries.reduce((s, e) => s + e.weight, 0);
 
-  const selectedEmployee = users.find((e) => e._id === selectedUser);
+  const selectedEmployee = users.find((e) => (e._id || e.id) === selectedUser);
   const isEditing = scores.some((s) => s.month === form.month && s.year === form.year);
+
+  function applyAutoCalculatedScores() {
+    if (!autoCalc) { showToast("No auto-calculated data available", "warning"); return; }
+
+    // Apply KPI entries
+    if (autoCalc.kpi_entries && autoCalc.kpi_entries.length > 0) {
+      setForm((f) => ({
+        ...f,
+        kpiEntries: autoCalc.kpi_entries.map((entry) => ({
+          label: entry.label,
+          weight: entry.weight,
+          score: entry.score || 0,
+        })),
+      }));
+    }
+
+    // Apply KRA metrics (convert from 0-100 to 1-5 star rating)
+    if (autoCalc.kra_metrics) {
+      setForm((f) => ({
+        ...f,
+        kraMetrics: {
+          ownership: autoCalc.kra_metrics.ownership ? Math.round((autoCalc.kra_metrics.ownership / 100) * 5) : 0,
+          quality: autoCalc.kra_metrics.quality ? Math.round((autoCalc.kra_metrics.quality / 100) * 5) : 0,
+          initiative: autoCalc.kra_metrics.initiative ? Math.round((autoCalc.kra_metrics.initiative / 100) * 5) : 0,
+        },
+      }));
+    }
+
+    // Apply Behavioral metrics
+    if (autoCalc.behavioral_metrics) {
+      setForm((f) => ({
+        ...f,
+        behavioralMetrics: {
+          attendance: autoCalc.behavioral_metrics.attendance || 0,
+          discipline: autoCalc.behavioral_metrics.discipline ? Math.round((autoCalc.behavioral_metrics.discipline / 100) * 5) : 0,
+          communication: autoCalc.behavioral_metrics.communication ? Math.round((autoCalc.behavioral_metrics.communication / 100) * 5) : 0,
+        },
+      }));
+    }
+
+    showToast("Auto-calculated scores applied to manual fields", "success");
+  }
+
+  function revertToDefaults() {
+    setForm(createDefaultForm(form.month, form.year));
+    showToast("Manual inputs reverted to defaults", "info");
+  }
 
   function resetForPeriod(month: number, year: number) {
     const existing = scores.find((s) => s.month === month && s.year === year);
@@ -265,16 +387,21 @@ export default function AdminKpiPage() {
     setSubmitting(true);
     try {
       await axios.post("/api/kpi", {
-        employee: selectedUser,
+        employee_id: selectedUser,
         month: form.month,
         year: form.year,
+        kpi_score: kpiScore,
         kpi_entries: form.kpiEntries,
+        kra_score: kraScore,
         kra_metrics: form.kraMetrics,
+        behavioral_score: behavioralScore,
         behavioral_metrics: form.behavioralMetrics,
+        final_score: finalScore,
+        rating_label: rating.label,
         remarks: form.remarks,
       });
       const res = await axios.get(`/api/kpi?employeeId=${selectedUser}`);
-      setScores(res.data.scores ?? []);
+      setScores(Array.isArray(res.data.data) ? res.data.data : []);
       showToast(`Performance scores for ${selectedEmployee?.name} recorded successfully.`, "success");
     } catch (err: unknown) {
       showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Protocol Sync Error", "error");
@@ -364,7 +491,7 @@ export default function AdminKpiPage() {
                     >
                       <option value="">Select employee…</option>
                       {users.map((emp) => (
-                        <option key={emp._id} value={emp._id}>
+                        <option key={emp._id || emp.id || emp.employeeId} value={emp._id || emp.id || emp.employeeId}>
                           {emp.name} — {emp.employeeId}
                         </option>
                       ))}
@@ -434,6 +561,133 @@ export default function AdminKpiPage() {
                 </div>
               </div>
 
+              {/* Auto-Calculated Scores Section */}
+              {selectedUser && (
+                <div className="page-card border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent">
+                  <div className="mb-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10">
+                        <TrendingUp size={16} className="text-emerald-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-theme-fg">Auto-Calculated Scores</h3>
+                        <p className="text-[11px] text-theme-muted">AI-powered analysis from employee data (attendance, projects, tasks)</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {loadingAutoCalc ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-12 animate-pulse rounded-lg bg-theme-raised/50" />
+                      ))}
+                    </div>
+                  ) : autoCalc ? (
+                    <div className="space-y-4">
+                      {/* Main Score Display */}
+                      <div className="rounded-xl bg-theme-page/50 p-4 border border-emerald-500/20">
+                        <div className="flex items-end justify-between gap-4">
+                          <div>
+                            <p className="text-[11px] text-theme-muted font-bold uppercase mb-1">AI Calculated Final Score</p>
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-4xl font-black text-emerald-600">{autoCalc.final_score ? autoCalc.final_score.toFixed(1) : "—"}</span>
+                              <span className="text-sm font-bold text-emerald-600 mb-1">{autoCalc.rating_label || "—"}</span>
+                            </div>
+                          </div>
+                          <div className="h-16 w-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center">
+                            <div className="text-center">
+                              <p className="text-xs font-bold text-emerald-700">Score</p>
+                              <p className="text-lg font-black text-emerald-600">{autoCalc.final_score ? Math.round(autoCalc.final_score) : "—"}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Score Components Grid */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="rounded-lg bg-sky-500/10 border border-sky-500/20 p-3">
+                          <p className="text-[9px] font-bold text-sky-700 uppercase mb-1.5">KPI Score</p>
+                          <p className="text-2xl font-black text-sky-600">{autoCalc.kpi_score ? autoCalc.kpi_score.toFixed(1) : "—"}</p>
+                          <div className="mt-2 h-1 w-full bg-sky-500/20 rounded-full overflow-hidden">
+                            <div className="h-full bg-sky-500" style={{ width: `${autoCalc.kpi_score ? Math.min(autoCalc.kpi_score, 100) : 0}%` }} />
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3">
+                          <p className="text-[9px] font-bold text-emerald-700 uppercase mb-1.5">KRA Score</p>
+                          <p className="text-2xl font-black text-emerald-600">{autoCalc.kra_score ? autoCalc.kra_score.toFixed(1) : "—"}</p>
+                          <div className="mt-2 h-1 w-full bg-emerald-500/20 rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-500" style={{ width: `${autoCalc.kra_score ? Math.min(autoCalc.kra_score, 100) : 0}%` }} />
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-purple-500/10 border border-purple-500/20 p-3">
+                          <p className="text-[9px] font-bold text-purple-700 uppercase mb-1.5">Behavioral</p>
+                          <p className="text-2xl font-black text-purple-600">{autoCalc.behavioral_score ? autoCalc.behavioral_score.toFixed(1) : "—"}</p>
+                          <div className="mt-2 h-1 w-full bg-purple-500/20 rounded-full overflow-hidden">
+                            <div className="h-full bg-purple-500" style={{ width: `${autoCalc.behavioral_score ? Math.min(autoCalc.behavioral_score, 100) : 0}%` }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Breakdown Details */}
+                      <div className="rounded-lg bg-theme-page/30 p-4 space-y-3">
+                        <div>
+                          <p className="text-[10px] font-bold text-theme-muted uppercase mb-2">KPI Breakdown</p>
+                          <div className="space-y-2 text-xs">
+                            {autoCalc.kpi_entries && autoCalc.kpi_entries.length > 0 ? (
+                              autoCalc.kpi_entries.map((entry, i) => (
+                                <div key={i} className="flex items-center justify-between text-theme-fg">
+                                  <span>{entry.label} ({entry.weight}%)</span>
+                                  <span className="font-bold text-sky-600">{entry.score ? entry.score.toFixed(0) : "—"}</span>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-theme-muted">No data available</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="border-t border-theme-border pt-3">
+                          <p className="text-[10px] font-bold text-theme-muted uppercase mb-2">Insights & Recommendation</p>
+                          <div className="space-y-1.5 text-xs text-theme-fg">
+                            <p><span className="text-theme-muted">Attendance:</span> {autoCalc.insights?.attendance_status || "—"}</p>
+                            <p><span className="text-theme-muted">Tasks:</span> {autoCalc.insights?.task_completion || "—"}</p>
+                            <p><span className="text-theme-muted">Projects:</span> {autoCalc.insights?.project_status || "—"}</p>
+                            <p className="font-semibold text-emerald-600 mt-2">HR Recommendation: {autoCalc.insights?.recommendation || "—"}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg bg-theme-page/50 border border-dashed border-theme-border px-3 py-2.5">
+                        <p className="text-[10px] text-theme-muted">
+                          💡 The scores above are auto-calculated from actual employee data. You can override them below with manual adjustments if needed.
+                        </p>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={applyAutoCalculatedScores}
+                          disabled={!canEdit || !autoCalc}
+                          className="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-theme-raised disabled:text-theme-muted px-4 py-2.5 text-sm font-bold text-white transition-all"
+                        >
+                          ✓ Update KPI/KRA
+                        </button>
+                        <button
+                          onClick={revertToDefaults}
+                          disabled={!canEdit}
+                          className="flex-1 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:bg-theme-raised disabled:text-theme-muted px-4 py-2.5 text-sm font-bold text-white transition-all"
+                        >
+                          ↶ Revert
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-theme-border py-6 text-center">
+                      <p className="text-xs text-theme-subtle">No auto-calculated data available for this period</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* KPI Section */}
               <div className="page-card">
                 <div className="mb-5 flex items-center justify-between">
@@ -442,8 +696,8 @@ export default function AdminKpiPage() {
                       <BarChart3 size={16} className="text-sky-600" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-theme-fg">Key Performance Indicators</h3>
-                      <p className="text-[11px] text-theme-muted">Weight: 40% of final score</p>
+                      <h3 className="text-sm font-bold text-theme-fg">Manual KPI Override</h3>
+                      <p className="text-[11px] text-theme-muted">Weight: 40% of final score · Adjust auto-calculated scores or enter custom values</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -540,8 +794,8 @@ export default function AdminKpiPage() {
                       <TrendingUp size={16} className="text-emerald-600" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-theme-fg">Key Result Areas</h3>
-                      <p className="text-[11px] text-theme-muted">Weight: 40% of final score · Rate 1–5 stars</p>
+                      <h3 className="text-sm font-bold text-theme-fg">Manual KRA Override</h3>
+                      <p className="text-[11px] text-theme-muted">Weight: 40% of final score · Rate 1–5 stars or adjust from auto-calculated</p>
                     </div>
                   </div>
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 border-2 border-emerald-500/20">
@@ -579,8 +833,8 @@ export default function AdminKpiPage() {
                       <Award size={16} className="text-purple-600" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-theme-fg">Behavioral Assessment</h3>
-                      <p className="text-[11px] text-theme-muted">Weight: 20% of final score</p>
+                      <h3 className="text-sm font-bold text-theme-fg">Manual Behavioral Override</h3>
+                      <p className="text-[11px] text-theme-muted">Weight: 20% of final score · Adjust from auto-calculated values</p>
                     </div>
                   </div>
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-500/10 border-2 border-purple-500/20">

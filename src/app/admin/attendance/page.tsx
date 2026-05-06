@@ -5,19 +5,20 @@ import {
   Users, Clock, CalendarDays, Search, Download, UserCheck, UserX,
   TrendingUp, ChevronLeft, ChevronRight, Edit2, X, CheckCircle2,
   AlarmClock, Palmtree, LayoutGrid, List, CalendarRange, Play, Square, Timer,
-  RotateCcw, Target, Coffee
+  RotateCcw, Target, Coffee, ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { TimePicker } from "@/components/ui/TimePicker";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/Toast";
 import dayjs from "dayjs";
 
 // ─── Types ───────────────────────────────────────────────
 type AttStatus = "present" | "late" | "absent" | "leave" | "holiday" | "half_day" | "on_duty";
-type ViewTab = "daily" | "logsheet" | "summary" | "leaves";
+type ViewTab = "daily" | "logsheet" | "summary" | "leaves" | "holidays" | "protocols";
 
 interface LeaveRequest {
   id: string;
@@ -50,9 +51,9 @@ interface DayRecord {
 
 const STATUS_CELL: Record<string, string> = {
   present: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  late:    "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  absent:  "bg-red-500/15 text-red-600 dark:text-red-400",
-  leave:   "bg-sky-500/15 text-sky-700 dark:text-sky-400",
+  late: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  absent: "bg-red-500/15 text-red-600 dark:text-red-400",
+  leave: "bg-sky-500/15 text-sky-700 dark:text-sky-400",
   holiday: "bg-theme-raised text-theme-subtle",
   on_duty: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400",
 };
@@ -69,20 +70,24 @@ function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
-function formatDurationDisplay(clock_in: string, clock_out: string | null) {
+function formatDurationDisplay(clock_in: string, clock_out: string | null, recordDate?: string) {
   if (!clock_in) return "—";
-  const start = dayjs(`2000-01-01 ${clock_in}`);
-  const end = clock_out ? dayjs(`2000-01-01 ${clock_out}`) : dayjs();
+  const dateRef = recordDate || dayjs().format("YYYY-MM-DD");
+  const start = dayjs(`${dateRef} ${clock_in}`);
+  const end = clock_out ? dayjs(`${dateRef} ${clock_out}`) : dayjs();
+
   const diffMin = end.diff(start, 'minute');
-  const hrs = Math.floor(Math.abs(diffMin) / 60);
-  const mins = Math.abs(diffMin) % 60;
+  if (diffMin < 0) return "0 hr 0 min";
+
+  const hrs = Math.floor(diffMin / 60);
+  const mins = diffMin % 60;
   return `${hrs} hr ${mins} min`;
 }
 
 // ─── Digital Clock & Session Timer ────────────────────────
 function DigitalClock({ clockIn, clockOut }: { clockIn?: string | null, clockOut?: string | null }) {
   const [now, setNow] = useState(dayjs());
-  
+
   useEffect(() => {
     const inv = setInterval(() => setNow(dayjs()), 1000);
     return () => clearInterval(inv);
@@ -117,15 +122,15 @@ function DigitalClock({ clockIn, clockOut }: { clockIn?: string | null, clockOut
     <div className="flex items-center gap-8 mr-8 border-r border-theme-border pr-8">
       <div className="flex flex-col items-end">
         <div className={cn("text-3xl font-bold tabular-nums leading-none tracking-tight", clockIn ? "text-theme-fg" : "text-theme-subtle/30")}>
-          {clockIn ? dayjs(`2000-01-01 ${clockIn}`).format("hh:mm:ss") : "00:00:00"} 
+          {clockIn ? dayjs(`2000-01-01 ${clockIn}`).format("hh:mm:ss") : "00:00:00"}
           <span className="text-xs ml-1 opacity-50 uppercase">{clockIn ? dayjs(`2000-01-01 ${clockIn}`).format("A") : "AM"}</span>
         </div>
         <p className="text-xs font-medium text-theme-muted mt-1">Start Time</p>
       </div>
-      
+
       <div className="flex flex-col items-end">
         <div className={cn(
-          "text-3xl font-bold tabular-nums leading-none tracking-tight transition-colors duration-500", 
+          "text-3xl font-bold tabular-nums leading-none tracking-tight transition-colors duration-500",
           clockIn && !clockOut ? "text-emerald-500" : "text-theme-fg",
           !clockIn && "text-theme-subtle/30"
         )}>
@@ -146,6 +151,8 @@ export default function AdminAttendancePage() {
   const [selectedDate, setSelectedDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("All");
+  const [showMonthSelect, setShowMonthSelect] = useState(false);
+  const [showYearSelect, setShowYearSelect] = useState(false);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [dailyLogs, setDailyLogs] = useState<Record<string, DayRecord & { modified_by_name?: string }>>({});
@@ -173,20 +180,45 @@ export default function AdminAttendancePage() {
     reason: ""
   });
 
+  // Protocols
+  const [protocols, setProtocols] = useState<any[]>([]);
+  const [showProtocolModal, setShowProtocolModal] = useState(false);
+  const [protocolForm, setProtocolForm] = useState({
+    title: "General Shift",
+    check_in_time: "09:00:00",
+    check_out_time: "18:00:00",
+    type: "All",
+    days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+  });
+
+  // Holidays
+  const [holidays, setHolidays] = useState<Record<string, any>>({});
+  const [showHolidayModal, setShowHolidayModal] = useState(false);
+  const [holidayDate, setHolidayDate] = useState("");
+  const [holidayForm, setHolidayForm] = useState({
+    title: "",
+    description: "",
+    type: "public",
+    color: "#ef4444",
+    is_half_day: false,
+    start_time: "09:00:00",
+    end_time: "13:00:00"
+  });
+
   // Initial Auth & Data
   async function init() {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-         setUserId(user.id);
-         const { data: profile } = await supabase.from("employees").select("role").eq("id", user.id).single();
-         if (profile) setUserRole(profile.role);
+        setUserId(user.id);
+        const { data: profile } = await supabase.from("employees").select("role").eq("id", user.id).maybeSingle();
+        if (profile) setUserRole(profile.role);
       }
-      
-      const { data: emps } = await supabase.from("employees").select("id, name, department, designation, employee_id, monthly_leave_quota, leave_balance").order("name");
-      setEmployees(emps || []);
-      
+
+      const empRes = await fetch('/api/employees').then(r => r.json());
+      setEmployees(empRes.employees || []);
+
       await loadLogsForDate(selectedDate);
     } finally {
       setLoading(false);
@@ -197,12 +229,12 @@ export default function AdminAttendancePage() {
     const { data: att } = await supabase.from("attendance_logs").select("*, modified_by_name:employees!modified_by(name)").eq("date", dateStr);
     const logMap: Record<string, DayRecord & { modified_by_name?: string }> = {};
     att?.forEach(l => {
-      logMap[l.employee_id] = { 
-         clock_in: l.clock_in, 
-         clock_out: l.clock_out, 
-         status: l.status, 
-         id: l.id,
-         modified_by_name: l.modified_by_name?.name 
+      logMap[l.employee_id] = {
+        clock_in: l.clock_in,
+        clock_out: l.clock_out,
+        status: l.status,
+        id: l.id,
+        modified_by_name: l.modified_by_name?.name
       };
     });
     setDailyLogs(logMap);
@@ -227,11 +259,27 @@ export default function AdminAttendancePage() {
     setLeaves(data || []);
   }
 
+  async function loadHolidays() {
+    const start = dayjs(selectedDate).startOf('month').format("YYYY-MM-DD");
+    const end = dayjs(selectedDate).endOf('month').format("YYYY-MM-DD");
+    const { data } = await supabase.from("system_holidays").select("*").gte("date", start).lte("date", end);
+    const hm: Record<string, any> = {};
+    data?.forEach(h => hm[h.date] = h);
+    setHolidays(hm);
+  }
+
+  async function loadProtocols() {
+    const { data } = await supabase.from("attendance_protocols").select("*").order("created_at", { ascending: false });
+    setProtocols(data || []);
+  }
+
   useEffect(() => { init(); }, []); // Run once on mount
   useEffect(() => { loadLogsForDate(selectedDate); }, [selectedDate]); // Refetch on date change
-  useEffect(() => { 
+  useEffect(() => {
     if (tab === "leaves") loadLeaves();
-    else if (tab !== "daily") loadMonthData(); 
+    else if (tab === "holidays") loadHolidays();
+    else if (tab === "protocols") loadProtocols();
+    else if (tab !== "daily") loadMonthData();
   }, [tab, selectedDate]);
 
   useEffect(() => {
@@ -239,8 +287,23 @@ export default function AdminAttendancePage() {
       loadLogsForDate(selectedDate);
       if (tab !== "daily") loadMonthData();
     }).subscribe();
-    return () => { supabase.removeChannel(chan); };
+    const chan2 = supabase.channel("holidays_updates").on('postgres_changes', { event: '*', schema: 'public', table: 'system_holidays' }, () => {
+      loadHolidays();
+    }).subscribe();
+    return () => { supabase.removeChannel(chan); supabase.removeChannel(chan2); };
   }, [tab, selectedDate]);
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowHolidayModal(false);
+        setShowLeaveModal(false);
+        setShowOverride(false);
+      }
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, []);
 
   // Actions
   async function handleCheckAction(type: "in" | "out") {
@@ -249,11 +312,11 @@ export default function AdminAttendancePage() {
     try {
       const nowTime = dayjs().format("HH:mm:ss");
       const today = dayjs().format("YYYY-MM-DD");
-      
+
       if (type === "in") {
         const isLate = dayjs().hour() >= 10;
         const status: AttStatus = isLate ? "late" : "present";
-        
+
         // Optimistic UI Update
         setDailyLogs(prev => ({
           ...prev,
@@ -261,12 +324,12 @@ export default function AdminAttendancePage() {
         }));
 
         const { error } = await supabase.from("attendance_logs").upsert({
-          employee_id: userId, 
-          date: today, 
-          clock_in: nowTime, 
+          employee_id: userId,
+          date: today,
+          clock_in: nowTime,
           status: status
         }, { onConflict: "employee_id,date" });
-        
+
         if (error) {
           console.error("Attendance Sync Error:", error);
           throw new Error(`Sync Error: ${error.message}`);
@@ -275,21 +338,21 @@ export default function AdminAttendancePage() {
       } else {
         const { error } = await supabase.from("attendance_logs").update({ clock_out: nowTime })
           .eq("employee_id", userId).eq("date", today);
-        
+
         if (error) {
           console.error("Attendance Sync Error:", error);
           throw new Error(`Sync Error: ${error.message}`);
         }
-        
+
         // Optimistic UI Update
         setDailyLogs(prev => ({
           ...prev,
           [userId]: { ...prev[userId], clock_out: nowTime } as any
         }));
-        
+
         showToast("Protocol Safely Concluded", "success");
       }
-      
+
       // Refresh to ensure absolute consistency
       if (selectedDate === today) loadLogsForDate(today);
     } catch (e: any) {
@@ -331,20 +394,20 @@ export default function AdminAttendancePage() {
   async function handleAdminDelete(empId: string) {
     if (!confirm("Are you sure you want to purge this attendance record? This will be logged.")) return;
     try {
-       const { error } = await supabase.from("attendance_logs").delete().eq("employee_id", empId).eq("date", selectedDate);
-       if (error) throw error;
-       showToast("Record purged successfully", "success");
-       loadLogsForDate(selectedDate);
+      const { error } = await supabase.from("attendance_logs").delete().eq("employee_id", empId).eq("date", selectedDate);
+      if (error) throw error;
+      showToast("Record purged successfully", "success");
+      loadLogsForDate(selectedDate);
     } catch (e: any) {
-       showToast(e.message, "error");
+      showToast(e.message, "error");
     }
   }
 
   async function handleLeaveStatus(id: string, status: "approved" | "rejected") {
     try {
-      const { error } = await supabase.from("leave_requests").update({ 
-        status, 
-        approved_by: userId 
+      const { error } = await supabase.from("leave_requests").update({
+        status,
+        approved_by: userId
       }).eq("id", id);
       if (error) throw error;
       showToast(`Protocol ${status} successfully`, "success");
@@ -357,13 +420,17 @@ export default function AdminAttendancePage() {
   async function handleManualLeave() {
     if (!leaveForm.empId) return;
     try {
+      const dayCount = dayjs(leaveForm.to).diff(dayjs(leaveForm.from), 'day') + 1;
       const { error } = await supabase.from("leave_requests").insert({
         employee_id: leaveForm.empId,
         type: leaveForm.type,
         from_date: leaveForm.from,
         to_date: leaveForm.to,
+        start_date: leaveForm.from,
+        end_date: leaveForm.to,
+        days: dayCount,
         reason: leaveForm.reason,
-        status: userRole === "super_admin" ? "approved" : "pending",
+        status: userRole === "super_admin" ? "Approved" : "Pending", // Match capitalized status for safety
         approved_by: userRole === "super_admin" ? userId : null
       });
       if (error) throw error;
@@ -374,6 +441,78 @@ export default function AdminAttendancePage() {
       showToast(e.message, "error");
     }
   }
+
+  async function handleHolidaySubmit() {
+    if (!holidayForm.title || !holidayDate) return;
+    try {
+      const { error } = await supabase.from("system_holidays").upsert({
+        date: holidayDate,
+        title: holidayForm.title,
+        description: holidayForm.description,
+        type: holidayForm.type,
+        color: holidayForm.color,
+        is_half_day: holidayForm.is_half_day,
+        start_time: holidayForm.is_half_day ? holidayForm.start_time : null,
+        end_time: holidayForm.is_half_day ? holidayForm.end_time : null
+      }, { onConflict: "date" });
+      if (error) throw error;
+      showToast("Holiday protocol published successfully", "success");
+      setShowHolidayModal(false);
+      loadHolidays();
+    } catch (e: any) {
+      showToast(e.message, "error");
+    }
+  }
+
+  async function handleProtocolSubmit() {
+    if (!protocolForm.title) return;
+    try {
+      const { data, error } = await supabase.from("attendance_protocols").insert({
+        title: protocolForm.title,
+        check_in_time: protocolForm.check_in_time,
+        check_out_time: protocolForm.check_out_time,
+        target_type: protocolForm.type,
+        type: protocolForm.type,
+        days: protocolForm.days,
+        effective_from: new Date().toISOString().split("T")[0],
+        status: "active",
+      }).select();
+      if (error) {
+        console.error("Protocol insert error:", JSON.stringify(error));
+        throw error;
+      }
+
+      // Broadcast notification to employees
+      await supabase.from("notifications").insert({
+        title: "📋 New Timing Protocol Published",
+        message: `"${protocolForm.title}" is now active. Check-in: ${protocolForm.check_in_time} → Check-out: ${protocolForm.check_out_time}. Active days: ${protocolForm.days.join(", ")}.`,
+        type: "info",
+        target: protocolForm.type === "All" ? "all" : protocolForm.type,
+        created_by: userId,
+      });
+
+      // Play notification chime
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
+      } catch { /* audio ctx unavailable */ }
+
+      showToast("Timing Protocol published & employees notified!", "success");
+      setShowProtocolModal(false);
+      loadProtocols();
+    } catch (e: any) {
+      showToast(e.message || "Failed to save protocol", "error");
+    }
+  }
+
 
   const depts = ["All", ...new Set(employees.map(e => e.department).filter(Boolean))];
   const filtered = employees.filter(e => {
@@ -392,28 +531,13 @@ export default function AdminAttendancePage() {
   return (
     <>
       <DashboardShell
-        title="Attendance"
-        subtitle="Track, manage and audit workforce attendance."
+        title="Attendance Dashboard"
+        subtitle="View and manage employee attendance records."
         actions={
-          <div className="flex items-center">
-            <DigitalClock clockIn={myTodayLog?.clock_in} clockOut={myTodayLog?.clock_out} />
-            <div className="flex items-center gap-2">
-              <Button 
-                 variant="outline" size="sm" onClick={() => handleCheckAction("in")} 
-                 disabled={checking || (!!myTodayLog?.clock_in && isSelectedToday) || !isSelectedToday} 
-                 className="h-10 px-6 rounded-xl font-bold border-emerald-500/20 text-emerald-600 hover:bg-emerald-500/5 transition-all">
-                <Play size={14} className="mr-2" /> Check In
-              </Button>
-              <Button 
-                 variant="outline" size="sm" onClick={() => handleCheckAction("out")} 
-                 disabled={checking || !myTodayLog?.clock_in || !!myTodayLog?.clock_out}
-                 className="h-10 px-6 rounded-xl font-bold border-rose-500/20 text-rose-600 hover:bg-rose-500/5 transition-all">
-                <Square size={14} className="mr-2" /> Check Out
-              </Button>
-              <Button variant="secondary" size="sm" className="h-10 px-4 rounded-xl font-bold">
-                <Download size={14} className="mr-2" /> Export
-              </Button>
-            </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" className="h-10 px-4 rounded-xl font-bold">
+              <Download size={14} className="mr-2" /> Export
+            </Button>
           </div>
         }
       >
@@ -421,10 +545,12 @@ export default function AdminAttendancePage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5 shadow-inner">
               {[
-                { key: "daily",    label: "Daily Log",    icon: List },
-                { key: "logsheet", label: "Log Sheet",    icon: LayoutGrid },
-                { key: "summary",  label: "Monthly Summary", icon: CalendarRange },
-                { key: "leaves",   label: "Leave Approval", icon: Palmtree },
+                { key: "daily", label: "Daily Attendance", icon: List },
+                { key: "logsheet", label: "Log Sheet", icon: LayoutGrid },
+                { key: "summary", label: "Monthly Summary", icon: CalendarRange },
+                { key: "leaves", label: "Leave Approval", icon: Palmtree },
+                { key: "holidays", label: "Holidays", icon: Palmtree },
+                { key: "protocols", label: "Shift Times", icon: AlarmClock },
               ].map(({ key, label, icon: Icon }) => (
                 <button key={key} onClick={() => setTab(key as ViewTab)}
                   className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all", tab === key ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}>
@@ -439,7 +565,7 @@ export default function AdminAttendancePage() {
                 <CalendarDays size={14} className="text-theme-primary" />
                 <span className="text-xs font-bold text-theme-fg tabular-nums">{dayjs(selectedDate).format("D MMM, YYYY")}</span>
                 {!isSelectedToday && (
-                  <button 
+                  <button
                     onClick={() => setSelectedDate(dayjs().format("YYYY-MM-DD"))}
                     title="Reset to Today"
                     className="ml-2 p-1 rounded-md bg-theme-primary/10 text-theme-primary hover:bg-theme-primary hover:text-white transition-all"
@@ -470,96 +596,106 @@ export default function AdminAttendancePage() {
               </div>
 
               <div className="page-card p-0 overflow-hidden">
-                 <div className="flex flex-col gap-3 border-b border-theme-border px-6 py-5 sm:flex-row sm:items-center sm:justify-between bg-theme-page/10">
-                   <div className="flex flex-wrap gap-1.5">
-                     {depts.map(d => (
-                       <button key={d} onClick={() => setDeptFilter(d)} className={cn("rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all", deptFilter === d ? "bg-theme-primary text-theme-surface shadow-md" : "bg-theme-raised text-theme-muted hover:text-theme-fg")}>{d}</button>
-                     ))}
-                   </div>
-                   <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
-                     <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 w-52 rounded-xl border border-theme-border bg-theme-page pl-9 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong" />
-                   </div>
-                 </div>
+                <div className="flex flex-col gap-3 border-b border-theme-border px-6 py-5 sm:flex-row sm:items-center sm:justify-between bg-theme-page/10">
+                  <div className="flex flex-wrap gap-1.5">
+                    {depts.map(d => (
+                      <button key={d} onClick={() => setDeptFilter(d)} className={cn("rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all", deptFilter === d ? "bg-theme-primary text-theme-surface shadow-md" : "bg-theme-raised text-theme-muted hover:text-theme-fg")}>{d}</button>
+                    ))}
+                  </div>
+                  <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
+                    <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 w-52 rounded-xl border border-theme-border bg-theme-page pl-9 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong" />
+                  </div>
+                </div>
 
-                 <div className="overflow-x-auto">
-                   <table className="w-full text-sm">
-                     <thead>
-                       <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
-                         <th className="px-5 py-3">Employee</th>
-                         <th className="px-5 py-3">Department / Designation</th>
-                         <th className="px-5 py-3">Check In</th>
-                         <th className="px-5 py-3">Check Out</th>
-                         <th className="px-5 py-3">Hours</th>
-                         <th className="px-5 py-3">Leave Quota</th>
-                         <th className="px-5 py-3 text-right">Status</th>
-                       </tr>
-                     </thead>
-                     <tbody className="divide-y divide-theme-border">
-                       {loading ? (
-                         <tr><td colSpan={7} className="px-6 py-12 text-center text-xs text-theme-muted">Synchronizing Protocols...</td></tr>
-                       ) : filtered.map(emp => {
-                         const log: any = dailyLogs[emp.id];
-                         const isAdmin = userRole === "super_admin";
-                         return (
-                           <tr key={emp.id} className="group hover:bg-theme-raised/30 transition-colors">
-                             <td className="px-5 py-3"><div className="flex items-center gap-3">
-                               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-bold">{getInitials(emp.name)}</div>
-                               <span className="text-sm font-semibold text-theme-fg">{emp.name}</span>
-                               {emp.id === userId && <Badge variant="default" className="text-[10px] h-5 rounded-md">YOU</Badge>}
-                             </div></td>
-                             <td className="px-5 py-3"><p className="text-xs font-semibold text-theme-fg">{emp.department}</p><p className="text-xs text-theme-muted">{emp.designation}</p></td>
-                             <td className="px-5 py-3 font-mono text-xs text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}</td>
-                             <td className="px-5 py-3 font-mono text-xs text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}</td>
-                             <td className="px-5 py-3 text-xs font-semibold text-theme-fg tabular-nums">{log?.clock_in ? formatDurationDisplay(log.clock_in, log.clock_out) : "—"}</td>
-                             <td className="px-5 py-3">
-                                <div className="flex items-center gap-1.5 text-xs font-semibold text-theme-muted">
-                                  <Coffee size={13} />
-                                  <span className="tabular-nums tracking-tight">{emp.monthly_leave_quota || 0} L/M</span>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
+                        <th className="px-5 py-3">Employee</th>
+                        <th className="px-5 py-3">Department / Designation</th>
+                        <th className="px-5 py-3">Check In</th>
+                        <th className="px-5 py-3">Check Out</th>
+                        <th className="px-5 py-3">Hours</th>
+                        <th className="px-5 py-3">Leave Quota</th>
+                        <th className="px-5 py-3 text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-theme-border">
+                      {loading ? (
+                        <tr><td colSpan={7} className="px-6 py-12 text-center text-xs text-theme-muted">Loading attendance data...</td></tr>
+                      ) : filtered.map(emp => {
+                        const log: any = dailyLogs[emp.id];
+                        const isAdmin = userRole === "super_admin";
+                        return (
+                          <tr key={emp.id} className="group hover:bg-theme-raised/30 transition-colors">
+                            <td className="px-5 py-3"><div className="flex items-center gap-3">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-bold">{getInitials(emp.name)}</div>
+                              <span className="text-sm font-semibold text-theme-fg">{emp.name}</span>
+                              {emp.id === userId && <Badge variant="default" className="text-[10px] h-5 rounded-md">YOU</Badge>}
+                            </div></td>
+                            <td className="px-5 py-3"><p className="text-xs font-semibold text-theme-fg">{emp.department}</p><p className="text-xs text-theme-muted">{emp.designation}</p></td>
+                            <td className="px-5 py-3">
+                              <div className="flex flex-col">
+                                <span className="font-mono text-xs font-bold text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}</span>
+                                {log?.clock_in && <span className="text-[10px] text-theme-subtle font-medium mt-0.5">{dayjs(selectedDate).format("DD MMM, YYYY")}</span>}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex flex-col">
+                                <span className="font-mono text-xs font-bold text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}</span>
+                                {log?.clock_out && <span className="text-[10px] text-theme-subtle font-medium mt-0.5">{dayjs(selectedDate).format("DD MMM, YYYY")}</span>}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-xs font-semibold text-theme-fg tabular-nums">{log?.clock_in ? formatDurationDisplay(log.clock_in, log.clock_out, selectedDate) : "—"}</td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-1.5 text-xs font-semibold text-theme-muted">
+                                <Coffee size={13} />
+                                <span className="tabular-nums tracking-tight">{emp.monthly_leave_quota || 0} L/M</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-right">
+                              <div className="flex items-center justify-end gap-3">
+                                <div className="flex flex-col items-end">
+                                  <Badge variant={STATUS_BADGE[log?.status || 'absent']}>{log?.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1).replace('_', ' ') : "Absent"}</Badge>
+                                  {log?.modified_by_name && (
+                                    <span className="text-xs font-medium text-amber-600 mt-1 opacity-80">Modified by {log.modified_by_name}</span>
+                                  )}
                                 </div>
-                              </td>
-                             <td className="px-5 py-3 text-right">
-                                <div className="flex items-center justify-end gap-3">
-                                   <div className="flex flex-col items-end">
-                                      <Badge variant={STATUS_BADGE[log?.status || 'absent']}>{log?.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1).replace('_', ' ') : "Absent"}</Badge>
-                                      {log?.modified_by_name && (
-                                        <span className="text-xs font-medium text-amber-600 mt-1 opacity-80">Modified by {log.modified_by_name}</span>
-                                      )}
-                                   </div>
-                                   {isAdmin && (
-                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button 
-                                           onClick={() => {
-                                              setTargetEmp(emp);
-                                              setOverrideForm({
-                                                 clock_in: log?.clock_in || "09:00:00",
-                                                 clock_out: log?.clock_out || "18:00:00",
-                                                 status: log?.status || "present",
-                                                 reason: ""
-                                              });
-                                              setShowOverride(true);
-                                           }}
-                                           className="p-1.5 rounded-lg bg-theme-raised text-theme-muted hover:text-theme-fg transition-all"
-                                        >
-                                           <Edit2 size={13} />
-                                        </button>
-                                        {log && (
-                                          <button 
-                                             onClick={() => handleAdminDelete(emp.id)}
-                                             className="p-1.5 rounded-lg bg-rose-50 text-rose-400 hover:text-rose-600 transition-all"
-                                          >
-                                             <X size={13} />
-                                          </button>
-                                        )}
-                                     </div>
-                                   )}
-                                </div>
-                             </td>
-                           </tr>
-                         )
-                       })}
-                     </tbody>
-                   </table>
-                 </div>
+                                {isAdmin && (
+                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={() => {
+                                        setTargetEmp(emp);
+                                        setOverrideForm({
+                                          clock_in: log?.clock_in || "09:00:00",
+                                          clock_out: log?.clock_out || "18:00:00",
+                                          status: log?.status || "present",
+                                          reason: ""
+                                        });
+                                        setShowOverride(true);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-theme-raised text-theme-muted hover:text-theme-fg transition-all"
+                                    >
+                                      <Edit2 size={13} />
+                                    </button>
+                                    {log && (
+                                      <button
+                                        onClick={() => handleAdminDelete(emp.id)}
+                                        className="p-1.5 rounded-lg bg-rose-50 text-rose-400 hover:text-rose-600 transition-all"
+                                      >
+                                        <X size={13} />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </>
           )}
@@ -590,9 +726,9 @@ export default function AdminAttendancePage() {
                           const st = monthLogs[emp.id]?.[dateCode]?.status;
                           return (
                             <td key={d} className="px-0.5 py-1 text-center">
-                               <div className={cn("mx-auto h-6 w-7 flex items-center justify-center rounded text-[9px] font-black transition-all", st ? STATUS_CELL[st] : "bg-theme-raised/30 text-theme-subtle/20")}>
-                                 {st ? STATUS_LABEL[st] : "—"}
-                               </div>
+                              <div className={cn("mx-auto h-6 w-7 flex items-center justify-center rounded text-[9px] font-black transition-all", st ? STATUS_CELL[st] : "bg-theme-raised/30 text-theme-subtle/20")}>
+                                {st ? STATUS_LABEL[st] : "—"}
+                              </div>
                             </td>
                           )
                         })}
@@ -607,42 +743,42 @@ export default function AdminAttendancePage() {
           {/* ── MONTHLY SUMMARY ── */}
           {tab === "summary" && (
             <div className="page-card p-0 overflow-hidden">
-               <div className="border-b border-theme-border px-5 py-4 font-bold text-theme-fg flex justify-between items-center">
-                 <span>Monthly Performance Audit — {dayjs(selectedDate).format("MMMM YYYY")}</span>
-                 <Target size={14} className="text-theme-muted" />
-               </div>
-               <table className="w-full text-sm">
-                  <thead><tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted font-semibold">
-                    <th className="px-5 py-3">Employee</th>
-                    <th className="px-5 py-3 text-center">Present</th>
-                    <th className="px-5 py-3 text-center">Late</th>
-                    <th className="px-5 py-3 text-center">Absent</th>
-                    <th className="px-5 py-3 text-right">Total Duration</th>
-                  </tr></thead>
-                  <tbody className="divide-y divide-theme-border">
-                    {filtered.map(emp => {
-                      const logs = Object.values(monthLogs[emp.id] || {});
-                      const p = logs.filter(l => l.status === 'present').length;
-                      const l = logs.filter(l => l.status === 'late').length;
-                      const a = logs.filter(l => l.status === 'absent').length;
-                      let totalMin = 0;
-                      logs.forEach(log => {
-                        if (log.clock_in && log.clock_out) {
-                          totalMin += Math.abs(dayjs(`2000-01-01 ${log.clock_out}`).diff(dayjs(`2000-01-01 ${log.clock_in}`), 'm'));
-                        }
-                      });
-                      return (
-                        <tr key={emp.id} className="hover:bg-theme-raised/40 transition-colors">
-                          <td className="px-5 py-3 font-semibold text-theme-fg">{emp.name}</td>
-                          <td className="px-5 py-3 text-center font-semibold text-emerald-600">{p}</td>
-                          <td className="px-5 py-3 text-center font-semibold text-amber-600">{l}</td>
-                          <td className="px-5 py-3 text-center font-semibold text-red-500">{a}</td>
-                          <td className="px-5 py-3 text-right font-medium tabular-nums">{Math.floor(totalMin/60)} hr {totalMin%60} min</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-               </table>
+              <div className="border-b border-theme-border px-5 py-4 font-bold text-theme-fg flex justify-between items-center">
+                <span>Monthly Performance Audit — {dayjs(selectedDate).format("MMMM YYYY")}</span>
+                <Target size={14} className="text-theme-muted" />
+              </div>
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted font-semibold">
+                  <th className="px-5 py-3">Employee</th>
+                  <th className="px-5 py-3 text-center">Present</th>
+                  <th className="px-5 py-3 text-center">Late</th>
+                  <th className="px-5 py-3 text-center">Absent</th>
+                  <th className="px-5 py-3 text-right">Total Duration</th>
+                </tr></thead>
+                <tbody className="divide-y divide-theme-border">
+                  {filtered.map(emp => {
+                    const logs = Object.values(monthLogs[emp.id] || {});
+                    const p = logs.filter(l => l.status === 'present').length;
+                    const l = logs.filter(l => l.status === 'late').length;
+                    const a = logs.filter(l => l.status === 'absent').length;
+                    let totalMin = 0;
+                    logs.forEach(log => {
+                      if (log.clock_in && log.clock_out) {
+                        totalMin += Math.abs(dayjs(`2000-01-01 ${log.clock_out}`).diff(dayjs(`2000-01-01 ${log.clock_in}`), 'm'));
+                      }
+                    });
+                    return (
+                      <tr key={emp.id} className="hover:bg-theme-raised/40 transition-colors">
+                        <td className="px-5 py-3 font-semibold text-theme-fg">{emp.name}</td>
+                        <td className="px-5 py-3 text-center font-semibold text-emerald-600">{p}</td>
+                        <td className="px-5 py-3 text-center font-semibold text-amber-600">{l}</td>
+                        <td className="px-5 py-3 text-center font-semibold text-red-500">{a}</td>
+                        <td className="px-5 py-3 text-right font-medium tabular-nums">{Math.floor(totalMin / 60)} hr {totalMin % 60} min</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
           {/* ── LEAVE APPROVAL ── */}
@@ -656,7 +792,7 @@ export default function AdminAttendancePage() {
                   </Button>
                 )}
               </div>
-              
+
               <div className="page-card p-0 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
@@ -666,7 +802,7 @@ export default function AdminAttendancePage() {
                       <th className="px-5 py-3">Duration</th>
                       <th className="px-5 py-3">Reason</th>
                       <th className="px-5 py-3 text-right">Action</th>
-                     </tr>
+                    </tr>
                   </thead>
                   <tbody className="divide-y divide-theme-border">
                     {leaves.length === 0 ? (
@@ -674,8 +810,8 @@ export default function AdminAttendancePage() {
                     ) : leaves.map(req => (
                       <tr key={req.id} className="hover:bg-theme-raised/30 transition-colors">
                         <td className="px-5 py-3">
-                           <p className="text-sm font-semibold text-theme-fg">{req.employee?.name}</p>
-                           <p className="text-xs text-theme-muted mt-0.5">{req.employee?.department}</p>
+                          <p className="text-sm font-semibold text-theme-fg">{req.employee?.name}</p>
+                          <p className="text-xs text-theme-muted mt-0.5">{req.employee?.department}</p>
                         </td>
                         <td className="px-5 py-3 text-xs font-semibold text-theme-fg capitalize">{req.type}</td>
                         <td className="px-5 py-3">
@@ -702,158 +838,640 @@ export default function AdminAttendancePage() {
               </div>
             </div>
           )}
+
+          {tab === "holidays" && (
+            <div className="enterprise-card bg-theme-surface p-0 overflow-hidden flex flex-col border border-theme-border shadow-xl h-[650px]">
+              <div className="p-4 border-b border-theme-border flex items-center justify-between bg-theme-page/50">
+                <div className="flex items-center gap-4">
+                  {/* Custom Month Dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => { setShowMonthSelect(!showMonthSelect); setShowYearSelect(false); }}
+                      className="flex items-center gap-2 text-xl font-black text-theme-fg tracking-tight hover:text-theme-primary transition-colors"
+                    >
+                      {dayjs(selectedDate).format('MMMM')}
+                      <ChevronDown size={16} className="text-theme-subtle" />
+                    </button>
+                    {showMonthSelect && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowMonthSelect(false)} />
+                        <div className="absolute top-full left-0 mt-2 w-48 bg-theme-surface border border-theme-border rounded-xl shadow-2xl z-50 p-2 grid grid-cols-2 gap-1 animate-in slide-in-from-top-2">
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <button
+                              key={i}
+                              onClick={() => { setSelectedDate(dayjs(selectedDate).month(i).format('YYYY-MM-DD')); setShowMonthSelect(false); }}
+                              className={cn(
+                                "text-left px-3 py-2 text-[11px] font-bold uppercase tracking-widest rounded-lg transition-all",
+                                dayjs(selectedDate).month() === i ? "bg-theme-primary text-white" : "text-theme-fg hover:bg-theme-raised"
+                              )}
+                            >
+                              {dayjs().month(i).format('MMM')}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Custom Year Dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => { setShowYearSelect(!showYearSelect); setShowMonthSelect(false); }}
+                      className="flex items-center gap-2 text-xl font-black text-theme-fg tracking-tight hover:text-theme-primary transition-colors"
+                    >
+                      {dayjs(selectedDate).year()}
+                      <ChevronDown size={16} className="text-theme-subtle" />
+                    </button>
+                    {showYearSelect && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowYearSelect(false)} />
+                        <div className="absolute top-full left-0 mt-2 w-32 bg-theme-surface border border-theme-border rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1 animate-in slide-in-from-top-2">
+                          {Array.from({ length: 7 }).map((_, i) => {
+                            const yr = dayjs().year() - 3 + i;
+                            return (
+                              <button
+                                key={yr}
+                                onClick={() => { setSelectedDate(dayjs(selectedDate).year(yr).format('YYYY-MM-DD')); setShowYearSelect(false); }}
+                                className={cn(
+                                  "text-left px-3 py-2 text-xs font-bold rounded-lg transition-all text-center",
+                                  dayjs(selectedDate).year() === yr ? "bg-theme-primary text-white" : "text-theme-fg hover:bg-theme-raised"
+                                )}
+                              >
+                                {yr}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {userRole === "super_admin" && (
+                    <button
+                      onClick={() => {
+                        const today = dayjs().format('YYYY-MM-DD');
+                        setHolidayDate(today);
+                        setHolidayForm({ title: "", description: "", type: "public", color: "#ef4444", is_half_day: false, start_time: "09:00:00", end_time: "13:00:00" });
+                        setShowHolidayModal(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-theme-primary text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-theme-primary/90 transition-all shadow-md shadow-theme-primary/25"
+                    >
+                      <CalendarDays size={13} />
+                      Add Holiday
+                    </button>
+                  )}
+                  <div className="flex items-center gap-1.5 p-1 bg-theme-surface border border-theme-border rounded-2xl shadow-sm">
+                    <button
+                      onClick={() => setSelectedDate(dayjs(selectedDate).subtract(1, 'month').format('YYYY-MM-DD'))}
+                      className="p-2.5 hover:bg-theme-raised rounded-xl transition-all text-theme-subtle hover:text-theme-primary"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <button
+                      onClick={() => setSelectedDate(dayjs().format('YYYY-MM-DD'))}
+                      className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-theme-muted hover:text-theme-primary hover:bg-theme-raised rounded-xl transition-all"
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => setSelectedDate(dayjs(selectedDate).add(1, 'month').format('YYYY-MM-DD'))}
+                      className="p-2.5 hover:bg-theme-raised rounded-xl transition-all text-theme-subtle hover:text-theme-primary"
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 flex flex-col bg-theme-page">
+                <div className="grid grid-cols-7 border-b border-theme-border bg-theme-surface">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <div key={day} className="py-4 text-center text-[10px] font-black uppercase tracking-widest text-theme-muted">{day}</div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 flex-1 auto-rows-[1fr]">
+                  {Array.from({ length: dayjs(selectedDate).startOf('month').day() }).map((_, i) => <div key={`empty-${i}`} className="border-r border-b border-theme-border bg-theme-surface/30 min-h-[60px]" />)}
+
+                  {Array.from({ length: dayjs(selectedDate).daysInMonth() }).map((_, i) => {
+                    const dNum = i + 1;
+                    const dateStr = dayjs(selectedDate).date(dNum).format('YYYY-MM-DD');
+                    const holi = holidays[dateStr];
+                    const isToday = dateStr === dayjs().format('YYYY-MM-DD');
+                    const isSelected = dateStr === selectedDate;
+
+                    return (
+                      <div
+                        key={dateStr}
+                        onClick={() => {
+                          setSelectedDate(dateStr);
+                          setHolidayDate(dateStr);
+                          setHolidayForm({
+                            title: holi?.title || "",
+                            description: holi?.description || "",
+                            type: holi?.type || "public",
+                            color: holi?.color || "#ef4444",
+                            is_half_day: holi?.is_half_day || false,
+                            start_time: holi?.start_time || "09:00:00",
+                            end_time: holi?.end_time || "13:00:00"
+                          });
+                          if (userRole === "super_admin") setShowHolidayModal(true);
+                        }}
+                        className={cn(
+                          "relative border-r border-b border-theme-border p-1.5 transition-all min-h-[80px] flex flex-col group overflow-visible cursor-pointer",
+                          isSelected ? "bg-theme-raised" : "bg-theme-surface/50 hover:bg-theme-raised/40",
+                          isToday ? "ring-2 ring-inset ring-theme-primary" : ""
+                        )}
+                      >
+                        <div className="flex justify-between items-start mb-0.5 z-10">
+                          <span className={cn(
+                            "text-xs font-black w-6 h-6 flex items-center justify-center rounded-full transition-colors",
+                            isToday ? "bg-theme-primary text-white" :
+                              isSelected ? "bg-theme-fg text-theme-surface" : "text-theme-fg/90 group-hover:text-theme-primary group-hover:bg-theme-primary/10"
+                          )}>
+                            {dNum}
+                          </span>
+                        </div>
+                        {holi && (
+                          <div className="mt-auto space-y-1 rounded px-1.5 py-1 mb-1 shadow-sm relative group/holi z-20" style={{ backgroundColor: `${holi.color}20`, borderLeft: `3px solid ${holi.color}` }}>
+                            <span className="block text-[9px] font-black uppercase tracking-widest truncate" style={{ color: holi.color }}>{holi.title}</span>
+                            {holi.is_half_day && <span className="block text-[9px] font-bold font-mono opacity-100" style={{ color: holi.color }}>{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>}
+
+                            {/* Hover Tooltip Popup */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-theme-surface border border-theme-border rounded-xl shadow-2xl p-4 opacity-0 pointer-events-none group-hover/holi:opacity-100 transition-all duration-200 z-[100] transform scale-95 group-hover/holi:scale-100">
+                              <h4 className="text-sm font-black uppercase tracking-widest mb-1.5 border-b border-theme-border pb-1.5" style={{ color: holi.color }}>{holi.title}</h4>
+                              {holi.description && <p className="text-[12px] text-theme-subtle mb-3 leading-relaxed font-medium">{holi.description}</p>}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">{holi.type}</span>
+                                {holi.is_half_day ? (
+                                  <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider font-mono">{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>
+                                ) : (
+                                  <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">Full Day</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── TIMING PROTOCOLS ── */}
+          {tab === "protocols" && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-base font-black text-theme-fg tracking-tight">Timing Protocols</h3>
+                {userRole === "super_admin" && (
+                  <Button onClick={() => setShowProtocolModal(true)} size="sm" className="rounded-xl font-bold bg-theme-primary text-white">
+                    <AlarmClock size={14} className="mr-2" /> New Protocol
+                  </Button>
+                )}
+              </div>
+              
+              <div className="page-card p-0 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
+                      <th className="px-5 py-3">Protocol Title</th>
+                      <th className="px-5 py-3">Timing Setup</th>
+                      <th className="px-5 py-3">Target Scope</th>
+                      <th className="px-5 py-3 text-right">Actions</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-theme-border">
+                    {protocols.length === 0 ? (
+                      <tr><td colSpan={4} className="px-6 py-12 text-center text-xs text-theme-muted">No timing protocols found.</td></tr>
+                    ) : protocols.map(p => (
+                      <tr key={p.id} className="hover:bg-theme-raised/30 transition-colors">
+                        <td className="px-5 py-3">
+                           <p className="text-sm font-semibold text-theme-fg">{p.title}</p>
+                           <p className="text-xs text-theme-muted mt-0.5">{p.days?.length} Days/Week</p>
+                        </td>
+                        <td className="px-5 py-3">
+                           <div className="flex items-center gap-2">
+                             <Badge variant="default" className="font-mono text-[10px] uppercase">{dayjs(`2000-01-01 ${p.check_in_time}`).format("hh:mm A")}</Badge>
+                             <span className="text-theme-subtle">to</span>
+                             <Badge variant="default" className="font-mono text-[10px] uppercase">{dayjs(`2000-01-01 ${p.check_out_time}`).format("hh:mm A")}</Badge>
+                           </div>
+                        </td>
+                        <td className="px-5 py-3 text-xs font-semibold text-theme-fg">{p.type}</td>
+                        <td className="px-5 py-3 text-right">
+                           <button onClick={async () => {
+                             if(confirm("Delete this protocol?")) {
+                               await supabase.from("attendance_protocols").delete().eq("id", p.id);
+                               loadProtocols();
+                             }
+                           }} className="p-1.5 rounded-lg bg-rose-50 text-rose-400 hover:text-rose-600 transition-all inline-flex">
+                             <X size={13} />
+                           </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </DashboardShell>
+
+      <div className={cn(
+        "fixed inset-0 z-[10000] flex justify-end bg-black/40 backdrop-blur-[2px] transition-all duration-1000 ease-in-out",
+        showHolidayModal ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+      )}>
+        {/* Backdrop Click */}
+        <div className="absolute inset-0 cursor-pointer" onClick={() => setShowHolidayModal(false)} />
+
+        <div
+          className={cn(
+            "w-full max-w-md bg-theme-surface h-full shadow-2xl border-l border-theme-border relative flex flex-col transition-all duration-1000 ease-in-out"
+          )}
+          style={{
+            transform: showHolidayModal ? 'translateX(0) rotateY(0) scale(1)' : 'translateX(100%) rotateY(-15deg) scale(0.95)',
+            transformOrigin: 'right center',
+            perspective: '2000px',
+            opacity: showHolidayModal ? 1 : 0
+          }}
+        >
+          <div className="p-6 border-b border-theme-border flex items-center justify-between bg-theme-surface">
+            <div>
+              <h3 className="text-xl font-black text-theme-fg tracking-tight">
+                {holidays[holidayDate] ? "Edit Holiday" : "New Holiday"}
+              </h3>
+              <p className="text-xs text-theme-muted font-medium mt-1">
+                {holidays[holidayDate]
+                  ? `Editing: ${dayjs(holidayDate).format('DD MMMM, YYYY')}`
+                  : `Setting holiday for ${dayjs(holidayDate).format('DD MMMM, YYYY')}`
+                }
+              </p>
+            </div>
+            <button onClick={() => setShowHolidayModal(false)} className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-theme-raised transition-all text-theme-muted hover:text-theme-fg border border-theme-border">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-8 space-y-6">
+            <div className="space-y-4">
+              <div className="p-4 bg-theme-page/50 border border-theme-border rounded-2xl">
+                <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Selected Date</label>
+                <div className="flex items-center gap-3 text-theme-fg">
+                  <CalendarDays size={18} className="text-theme-primary" />
+                  <span className="text-lg font-bold">{dayjs(holidayDate).format('DD MMMM, YYYY')}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Event Title</label>
+                <input
+                  type="text"
+                  value={holidayForm.title}
+                  onChange={e => setHolidayForm({ ...holidayForm, title: e.target.value })}
+                  placeholder="e.g. Christmas Day"
+                  className="w-full h-12 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary focus:ring-4 focus:ring-theme-primary/10 transition-all shadow-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Description</label>
+                <textarea
+                  value={holidayForm.description}
+                  onChange={e => setHolidayForm({ ...holidayForm, description: e.target.value })}
+                  placeholder="Enter holiday details or reason..."
+                  className="w-full h-28 p-4 bg-theme-page border border-theme-border rounded-xl text-sm font-medium text-theme-fg outline-none focus:border-theme-primary focus:ring-4 focus:ring-theme-primary/10 resize-none transition-all shadow-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Category</label>
+                  <select
+                    value={holidayForm.type}
+                    onChange={e => setHolidayForm({ ...holidayForm, type: e.target.value })}
+                    className="w-full h-12 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm cursor-pointer"
+                  >
+                    <option value="public">Public Holiday</option>
+                    <option value="company">Company Holiday</option>
+                    <option value="restricted">Restricted Holiday</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">UI Accent</label>
+                  <div className="flex gap-2 p-1 bg-theme-page border border-theme-border rounded-xl h-12">
+                    <input
+                      type="color"
+                      value={holidayForm.color}
+                      onChange={e => setHolidayForm({ ...holidayForm, color: e.target.value })}
+                      className="flex-1 h-full rounded-lg cursor-pointer bg-transparent border-none p-0"
+                    />
+                    <div className="w-10 h-full rounded-lg" style={{ backgroundColor: holidayForm.color }} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-theme-page/30 border border-theme-border rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-all", holidayForm.is_half_day ? "bg-theme-primary text-white" : "bg-theme-raised text-theme-muted")}>
+                      <Clock size={20} />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-black text-theme-fg uppercase tracking-widest">Half Day Session</span>
+                      <span className="text-[10px] text-theme-muted font-medium">Toggle for specific timing</span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="hd"
+                    checked={holidayForm.is_half_day}
+                    onChange={e => setHolidayForm({ ...holidayForm, is_half_day: e.target.checked })}
+                    className="w-6 h-6 rounded-lg bg-theme-page border-theme-border text-theme-primary focus:ring-offset-0 focus:ring-0 cursor-pointer"
+                  />
+                </div>
+
+                {holidayForm.is_half_day && (
+                  <div className="grid grid-cols-2 gap-4 mt-4 animate-in slide-in-from-top-2 duration-300">
+                    <div>
+                      <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Starts At</label>
+                      <input type="time" value={holidayForm.start_time} onChange={e => setHolidayForm({ ...holidayForm, start_time: e.target.value })} className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Ends At</label>
+                      <input type="time" value={holidayForm.end_time} onChange={e => setHolidayForm({ ...holidayForm, end_time: e.target.value })} className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 bg-theme-surface border-t border-theme-border flex items-center justify-between gap-3 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+            {holidays[holidayDate] ? (
+              <button onClick={async () => {
+                if (confirm("Permanently delete this holiday from calendar?")) {
+                  await supabase.from("system_holidays").delete().eq("date", holidayDate);
+                  setShowHolidayModal(false); loadHolidays();
+                }
+              }} className="px-5 py-3 text-sm font-black uppercase tracking-widest text-red-500 hover:bg-red-500/10 rounded-xl transition-all border border-red-200/40 hover:border-red-300/60">
+                Delete
+              </button>
+            ) : (
+              <div />
+            )}
+
+            <div className="flex gap-3">
+              <button onClick={() => setShowHolidayModal(false)} className="px-6 py-3 text-sm font-black uppercase tracking-widest text-theme-muted hover:text-theme-fg transition-all">Cancel</button>
+              <Button onClick={handleHolidaySubmit} className="px-8 h-12 bg-theme-primary text-white shadow-lg shadow-theme-primary/25 rounded-xl font-black uppercase tracking-widest text-[11px]">
+                {holidays[holidayDate] ? "Update Holiday" : "Publish Holiday"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* MANUAL LEAVE MODAL */}
       {showLeaveModal && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-           <div className="w-full max-w-md bg-theme-surface rounded-2xl shadow-2xl overflow-hidden border border-theme-border animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-md bg-theme-surface rounded-2xl shadow-2xl overflow-hidden border border-theme-border animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-theme-border flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-theme-fg">Manual Leave Entry</h3>
+              <button onClick={() => setShowLeaveModal(false)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-xs font-medium text-theme-muted mb-1.5">Select Employee</label>
+                <select
+                  value={leaveForm.empId}
+                  onChange={(e) => setLeaveForm({ ...leaveForm, empId: e.target.value })}
+                  className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
+                >
+                  <option value="">Choose Employee...</option>
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.name} ({e.employee_id})</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-theme-muted mb-1.5">From Date</label>
+                  <input type="date" value={leaveForm.from} onChange={(e) => setLeaveForm({ ...leaveForm, from: e.target.value })} className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none shadow-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-theme-muted mb-1.5">To Date</label>
+                  <input type="date" value={leaveForm.to} onChange={(e) => setLeaveForm({ ...leaveForm, to: e.target.value })} className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none shadow-sm" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-theme-muted mb-1.5">Leave Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {['sick', 'casual', 'earned', 'unpaid'].map(t => (
+                    <button key={t} onClick={() => setLeaveForm({ ...leaveForm, type: t })} className={cn("h-10 text-xs font-semibold capitalize rounded-lg border transition-all", leaveForm.type === t ? "bg-theme-primary text-theme-surface border-theme-primary" : "bg-theme-page text-theme-muted border-theme-border hover:bg-theme-raised")}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-theme-muted mb-1.5">Reason (Optional)</label>
+                <textarea value={leaveForm.reason} onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })} className="w-full h-24 p-4 bg-theme-page border border-theme-border rounded-xl text-sm font-medium text-theme-fg outline-none focus:border-theme-primary resize-none shadow-sm" />
+              </div>
+            </div>
+
+            <div className="p-6 bg-theme-page border-t border-theme-border flex items-center justify-end gap-3">
+              <button onClick={() => setShowLeaveModal(false)} className="px-6 py-2.5 text-sm font-semibold text-theme-muted hover:text-theme-fg rounded-lg transition-colors">Cancel</button>
+              <Button onClick={handleManualLeave}>Apply Protocol</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    {/* TIMING PROTOCOL MODAL */}
+      {showProtocolModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+           <div className="w-full max-w-lg bg-theme-surface rounded-2xl shadow-2xl overflow-hidden border border-theme-border animate-in zoom-in-95 duration-200">
               <div className="p-6 border-b border-theme-border flex items-center justify-between">
-                 <h3 className="text-lg font-semibold text-theme-fg">Manual Leave Entry</h3>
-                 <button onClick={() => setShowLeaveModal(false)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg">
+                 <div>
+                   <h3 className="text-lg font-black text-theme-fg">Timing Protocol</h3>
+                   <p className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mt-1">Configure automated shift rules</p>
+                 </div>
+                 <button onClick={() => setShowProtocolModal(false)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg">
                     <X size={18} />
                  </button>
               </div>
               
               <div className="p-6 space-y-5">
                  <div>
-                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Select Employee</label>
-                    <select 
-                       value={leaveForm.empId}
-                       onChange={(e) => setLeaveForm({...leaveForm, empId: e.target.value})}
-                       className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
-                    >
-                       <option value="">Choose Employee...</option>
-                       {employees.map(e => <option key={e.id} value={e.id}>{e.name} ({e.employee_id})</option>)}
-                    </select>
+                    <label className="block text-xs font-black uppercase tracking-widest text-theme-muted mb-2">Protocol Title</label>
+                    <input 
+                      type="text" 
+                      value={protocolForm.title}
+                      onChange={(e) => setProtocolForm({...protocolForm, title: e.target.value})}
+                      placeholder="e.g. General Shift, Night Shift..."
+                      className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" 
+                    />
                  </div>
 
                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                       <label className="block text-xs font-medium text-theme-muted mb-1.5">From Date</label>
-                       <input type="date" value={leaveForm.from} onChange={(e) => setLeaveForm({...leaveForm, from: e.target.value})} className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none shadow-sm" />
+                       <label className="block text-xs font-black uppercase tracking-widest text-theme-muted mb-2">Check-in Time</label>
+                       <input 
+                         type="time" 
+                         value={protocolForm.check_in_time}
+                         onChange={(e) => setProtocolForm({...protocolForm, check_in_time: e.target.value})}
+                         className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none shadow-sm" 
+                       />
                     </div>
                     <div>
-                       <label className="block text-xs font-medium text-theme-muted mb-1.5">To Date</label>
-                       <input type="date" value={leaveForm.to} onChange={(e) => setLeaveForm({...leaveForm, to: e.target.value})} className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none shadow-sm" />
+                       <label className="block text-xs font-black uppercase tracking-widest text-theme-muted mb-2">Check-out Time</label>
+                       <input 
+                         type="time" 
+                         value={protocolForm.check_out_time}
+                         onChange={(e) => setProtocolForm({...protocolForm, check_out_time: e.target.value})}
+                         className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none shadow-sm" 
+                       />
                     </div>
                  </div>
 
                  <div>
-                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Leave Type</label>
-                    <div className="grid grid-cols-2 gap-2">
-                       {['sick', 'casual', 'earned', 'unpaid'].map(t => (
-                          <button key={t} onClick={() => setLeaveForm({...leaveForm, type: t})} className={cn("h-10 text-xs font-semibold capitalize rounded-lg border transition-all", leaveForm.type === t ? "bg-theme-primary text-theme-surface border-theme-primary" : "bg-theme-page text-theme-muted border-theme-border hover:bg-theme-raised")}>
-                             {t}
-                          </button>
-                       ))}
-                    </div>
+                    <label className="block text-xs font-black uppercase tracking-widest text-theme-muted mb-2">Target Scope</label>
+                    <select 
+                       value={protocolForm.type}
+                       onChange={(e) => setProtocolForm({...protocolForm, type: e.target.value})}
+                       className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
+                    >
+                       <option value="All">Global - All Employees</option>
+                       {depts.filter(d => d !== "All").map(d => <option key={d} value={`Department:${d}`}>{d} Department</option>)}
+                    </select>
                  </div>
 
                  <div>
-                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Reason (Optional)</label>
-                    <textarea value={leaveForm.reason} onChange={(e) => setLeaveForm({...leaveForm, reason: e.target.value})} className="w-full h-24 p-4 bg-theme-page border border-theme-border rounded-xl text-sm font-medium text-theme-fg outline-none focus:border-theme-primary resize-none shadow-sm" />
+                    <label className="block text-xs font-black uppercase tracking-widest text-theme-muted mb-2">Active Days</label>
+                    <div className="flex flex-wrap gap-2">
+                       {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => {
+                         const isActive = protocolForm.days.includes(day);
+                         return (
+                           <button 
+                             key={day}
+                             onClick={() => {
+                               const newDays = isActive 
+                                 ? protocolForm.days.filter(d => d !== day)
+                                 : [...protocolForm.days, day];
+                               setProtocolForm({...protocolForm, days: newDays});
+                             }}
+                             className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-all border", 
+                               isActive ? "bg-theme-primary text-white border-theme-primary shadow-sm" : "bg-theme-page text-theme-muted border-theme-border hover:bg-theme-raised"
+                             )}
+                           >
+                             {day}
+                           </button>
+                         )
+                       })}
+                    </div>
                  </div>
               </div>
 
               <div className="p-6 bg-theme-page border-t border-theme-border flex items-center justify-end gap-3">
-                 <button onClick={() => setShowLeaveModal(false)} className="px-6 py-2.5 text-sm font-semibold text-theme-muted hover:text-theme-fg rounded-lg transition-colors">Cancel</button>
-                 <Button onClick={handleManualLeave}>Apply Protocol</Button>
+                 <button onClick={() => setShowProtocolModal(false)} className="px-6 py-2.5 text-xs font-black uppercase tracking-widest text-theme-muted hover:text-theme-fg rounded-lg transition-colors">Cancel</button>
+                 <Button onClick={handleProtocolSubmit} className="text-[11px] font-black uppercase tracking-widest px-6 h-10 shadow-lg shadow-theme-primary/20">Establish Protocol</Button>
               </div>
            </div>
         </div>
       )}
-      
+
       {/* ADMIN OVERRIDE MODAL */}
       {showOverride && targetEmp && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-           <div className="w-full max-w-md bg-theme-surface rounded-2xl shadow-2xl overflow-hidden border border-theme-border animate-in zoom-in-95 duration-200">
-              <div className="p-6 border-b border-theme-border flex items-center justify-between">
-                 <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 flex items-center justify-center bg-theme-primary text-theme-surface rounded-full font-bold text-sm">
-                       {getInitials(targetEmp.name)}
-                    </div>
-                    <div>
-                       <h3 className="text-sm font-semibold text-theme-fg">{targetEmp.name}</h3>
-                       <p className="text-xs text-theme-muted font-medium">{targetEmp.employee_id} • {targetEmp.designation}</p>
-                    </div>
-                 </div>
-                 <button onClick={() => setShowOverride(false)} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg">
-                    <X size={18} />
-                 </button>
+          <div className="w-full max-w-2xl bg-theme-surface rounded-2xl shadow-2xl overflow-hidden border border-theme-border animate-in zoom-in-95 duration-200">
+            <div className="p-7 border-b border-theme-border flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 flex items-center justify-center bg-gradient-to-br from-theme-primary to-theme-primary/80 text-theme-surface rounded-full font-bold text-base">
+                  {getInitials(targetEmp.name)}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-theme-fg">{targetEmp.name}</h3>
+                  <p className="text-xs text-theme-muted font-medium">{targetEmp.employee_id} • {targetEmp.designation}</p>
+                </div>
               </div>
-              
-              <div className="p-6 space-y-5">
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                       <label className="block text-xs font-medium text-theme-muted mb-1.5">Clock In</label>
-                       <input 
-                          type="time" 
-                          step="1"
-                          value={overrideForm.clock_in}
-                          onChange={(e) => setOverrideForm({...overrideForm, clock_in: e.target.value})}
-                          className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
-                       />
-                    </div>
-                    <div>
-                       <label className="block text-xs font-medium text-theme-muted mb-1.5">Clock Out</label>
-                       <input 
-                          type="time" 
-                          step="1"
-                          value={overrideForm.clock_out}
-                          onChange={(e) => setOverrideForm({...overrideForm, clock_out: e.target.value})}
-                          className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
-                       />
-                    </div>
-                 </div>
+              <button onClick={() => setShowOverride(false)} className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg">
+                <X size={20} />
+              </button>
+            </div>
 
-                 <div>
-                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Attendance Status</label>
-                    <div className="grid grid-cols-3 gap-2">
-                       {(['present', 'late', 'absent', 'on_duty', 'half_day', 'leave'] as AttStatus[]).map(s => (
-                          <button 
-                             key={s}
-                             onClick={() => setOverrideForm({...overrideForm, status: s})}
-                             className={cn(
-                                "h-10 text-xs font-semibold capitalize rounded-lg border transition-all",
-                                overrideForm.status === s 
-                                   ? "bg-theme-primary text-theme-surface border-theme-primary" 
-                                   : "bg-theme-page text-theme-muted border-theme-border hover:bg-theme-raised"
-                             )}
-                          >
-                             {s.replace('_', ' ')}
-                          </button>
-                       ))}
-                    </div>
-                 </div>
-
-                 <div>
-                    <label className="block text-xs font-medium text-theme-muted mb-1.5">Reason for Override</label>
-                    <textarea 
-                       placeholder="e.g. Forgot to sign in, System downtime..."
-                       value={overrideForm.reason}
-                       onChange={(e) => setOverrideForm({...overrideForm, reason: e.target.value})}
-                       className="w-full h-24 p-4 bg-theme-page border border-theme-border rounded-xl text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all resize-none shadow-sm"
-                    />
-                 </div>
+            <div className="p-8 space-y-7">
+              {/* Time Pickers - Full Width */}
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-theme-fg mb-3">Clock In</label>
+                  <TimePicker
+                    value={overrideForm.clock_in}
+                    onChange={(time) => setOverrideForm({ ...overrideForm, clock_in: time })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-theme-fg mb-3">Clock Out</label>
+                  <TimePicker
+                    value={overrideForm.clock_out}
+                    onChange={(time) => setOverrideForm({ ...overrideForm, clock_out: time })}
+                  />
+                </div>
               </div>
 
-              <div className="p-6 bg-theme-page border-t border-theme-border flex items-center justify-end gap-3">
-                 <button 
-                    onClick={() => setShowOverride(false)}
-                    className="px-6 py-2.5 text-sm font-semibold text-theme-muted hover:text-theme-fg rounded-lg transition-colors"
-                 >
-                    Cancel
-                 </button>
-                 <Button 
-                    onClick={handleAdminOverride}
-                    disabled={checking}
-                 >
-                    {checking ? "Applying..." : "Confirm Override"}
-                 </Button>
+              <div className="h-px bg-gradient-to-r from-transparent via-theme-border to-transparent"></div>
+
+              <div>
+                <label className="block text-sm font-semibold text-theme-fg mb-4">Attendance Status</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {(['present', 'late', 'absent', 'on_duty', 'half_day', 'leave'] as AttStatus[]).map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setOverrideForm({ ...overrideForm, status: s })}
+                      className={cn(
+                        "h-11 text-xs font-bold capitalize rounded-lg border transition-all",
+                        overrideForm.status === s
+                          ? "bg-theme-primary text-theme-surface border-theme-primary shadow-md"
+                          : "bg-theme-page text-theme-muted border-theme-border hover:bg-theme-raised hover:border-theme-primary/50"
+                      )}
+                    >
+                      {s.replace('_', ' ')}
+                    </button>
+                  ))}
+                </div>
               </div>
-           </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-theme-fg mb-3">Reason for Override</label>
+                <textarea
+                  placeholder="e.g. Forgot to sign in, System downtime, Technical issue..."
+                  value={overrideForm.reason}
+                  onChange={(e) => setOverrideForm({ ...overrideForm, reason: e.target.value })}
+                  className="w-full h-28 p-4 bg-theme-page border border-theme-border rounded-xl text-sm font-medium text-theme-fg outline-none focus:border-theme-primary focus:ring-2 focus:ring-theme-primary/20 transition-all resize-none shadow-sm"
+                />
+              </div>
+            </div>
+
+            <div className="p-7 bg-theme-page border-t border-theme-border flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowOverride(false)}
+                className="px-7 py-3 text-sm font-semibold text-theme-muted hover:text-theme-fg hover:bg-theme-raised rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <Button
+                onClick={handleAdminOverride}
+                disabled={checking}
+              >
+                {checking ? "Applying..." : "Confirm Override"}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </>

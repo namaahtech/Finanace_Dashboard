@@ -1,5 +1,5 @@
 -- Shift Management Infrastructure Patch
--- Namaah Pulse Enterprise Scaling
+-- Namaah Nexus Enterprise Scaling
 
 -- 1. Create Shifts Registry
 CREATE TABLE shifts (

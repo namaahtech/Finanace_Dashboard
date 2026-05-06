@@ -14,7 +14,7 @@ interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: "employee" | "hr" | "lead" | "super_admin" | "accounts" | "sales";
+  role: "employee" | "hr" | "lead" | "super_admin" | "accounts" | "sales" | "manager";
   employee_id: string;
   department: string;
   designation: string;
@@ -107,7 +107,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // 3. Dynamic Router Injection
     if (emp.role === "employee") router.push("/dashboard");
-    else if (emp.role === "lead") router.push("/admin/kpi");
+    else if (emp.role === "lead") router.push("/lead/dashboard");
+    else if (emp.role === "manager") router.push("/manager/dashboard");
     else router.push("/admin");
   }, [router]);
 

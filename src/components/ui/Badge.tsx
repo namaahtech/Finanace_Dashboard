@@ -1,11 +1,12 @@
 import { cn } from "@/lib/utils";
 
-type BadgeVariant = "default" | "success" | "warning" | "danger" | "info" | "purple";
+type BadgeVariant = "default" | "success" | "warning" | "danger" | "info" | "purple" | "secondary";
 
 interface BadgeProps {
  variant?: BadgeVariant;
  children: React.ReactNode;
  className?: string;
+ style?: React.CSSProperties;
 }
 
 const variants: Record<BadgeVariant, string> = {
@@ -15,9 +16,10 @@ const variants: Record<BadgeVariant, string> = {
  danger: "bg-theme-danger-bg text-theme-danger-fg",
  info: "bg-theme-info-bg text-theme-info-fg",
  purple: "bg-theme-purple-bg text-theme-purple-fg",
+ secondary: "bg-theme-raised/50 text-theme-muted border border-theme-border",
 };
 
-export function Badge({ variant = "default", children, className }: BadgeProps) {
+export function Badge({ variant = "default", children, className, style }: BadgeProps) {
  return (
  <span
  className={cn(
@@ -25,6 +27,7 @@ export function Badge({ variant = "default", children, className }: BadgeProps) 
  variants[variant],
  className
  )}
+ style={style}
  >
  {children}
  </span>

@@ -16,14 +16,17 @@ import {
   TrendingUp,
   Users,
   RefreshCw,
-  ArrowRightLeft,
   ChevronDown,
+  Mail,
+  ArrowRightLeft,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/Toast";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { validateGSTIN, extractPANFromGSTIN } from "@/lib/gst";
+import { AlertTriangle } from "lucide-react";
 
 const formatRupee = (amount: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -111,7 +114,11 @@ export default function CRMClientsPage() {
         status: (c.status as any) || "Active",
         tier: (c.tier as any) || "Standard",
         convertedDate: c.converted_at ? new Date(c.converted_at).toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }) : new Date(c.created_at).toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }),
-        fromPipeline: !!c.from_pipeline
+        fromPipeline: !!c.from_pipeline,
+        gstin: c.gstin || "",
+        pan: c.pan || "",
+        email: c.email || "",
+        address: c.address || ""
       }));
       setConvertedClients(mapped);
     }
@@ -129,6 +136,10 @@ export default function CRMClientsPage() {
     empId: "",
     status: "Active" as ConvertedClient["status"],
     tier: "Standard" as ConvertedClient["tier"],
+    gstin: "",
+    pan: "",
+    email: "",
+    address: ""
   });
 
   const filtered = useMemo(() => {
@@ -158,17 +169,21 @@ export default function CRMClientsPage() {
         company: newForm.company,
         lead_name: newForm.leadName,
         lead_phone: newForm.leadPhone,
+        email: newForm.email,
+        address: newForm.address,
         value: newForm.value,
         status: newForm.status,
         tier: newForm.tier,
-        from_pipeline: false
+        from_pipeline: false,
+        gstin: newForm.gstin,
+        pan: newForm.pan
       }]);
 
     if (error) {
       showToast("Failed to add client", "error");
     } else {
       showToast("Client added to registry", "success");
-      setNewForm({ company: "", leadName: "", leadPhone: "", value: 0, empName: "", empId: "", status: "Active", tier: "Standard" });
+      setNewForm({ company: "", leadName: "", leadPhone: "", value: 0, empName: "", empId: "", status: "Active", tier: "Standard", gstin: "", pan: "", email: "", address: "" });
       setIsAddingNew(false);
     }
   };
@@ -190,6 +205,10 @@ export default function CRMClientsPage() {
         value: editValues.value,
         status: editValues.status,
         tier: editValues.tier,
+        gstin: editValues.gstin,
+        pan: editValues.pan,
+        email: editValues.email,
+        address: editValues.address
       })
       .eq('id', editingId);
 
@@ -275,12 +294,11 @@ export default function CRMClientsPage() {
             <thead>
               <tr className="border-b border-black/[0.04]">
                 <th className="w-10 px-4 py-3 border-r border-black/[0.04]"></th>
-                {["Company", "Contact Person", "Phone", "Revenue (₹)", "Assigned Employee", "Status", "Tier", "Date", "Pipeline?"].map((h) => (
+                {["Company", "Contact Person", "Phone", "Mail ID", "Revenue (₹)", "Assigned Employee", "Status", "Tier", "Date", "GSTIN", "PAN", "Address", "Pipeline Status"].map((h) => (
                   <th key={h} className="px-4 py-3 text-[10px] font-black text-black/30 uppercase tracking-widest border-r border-black/[0.04] whitespace-nowrap">
                     <div className="flex items-center gap-1">{h} <ChevronDown size={10} className="opacity-40" /></div>
                   </th>
                 ))}
-                <th className="px-4 py-3 text-[10px] font-black text-black/30 uppercase tracking-widest"></th>
               </tr>
             </thead>
             <tbody>
@@ -342,6 +360,17 @@ export default function CRMClientsPage() {
                       )}
                     </td>
 
+                    {/* Mail ID */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      {isEditing ? (
+                        <input value={editValues.email || ""} onChange={(e) => setEditValues({ ...editValues, email: e.target.value })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full" />
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-[12px] font-bold text-black/50">
+                          <Mail size={10} className="text-black/20" /> {client.email || "—"}
+                        </div>
+                      )}
+                    </td>
+
                     {/* Revenue */}
                     <td className="px-4 py-3 border-r border-black/[0.04]">
                       {isEditing ? (
@@ -391,6 +420,41 @@ export default function CRMClientsPage() {
                       {client.convertedDate}
                     </td>
 
+                    {/* GSTIN */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      {isEditing ? (
+                        <div className="relative">
+                          <input value={editValues.gstin || ""} onChange={(e) => {
+                            const v = e.target.value.toUpperCase();
+                            setEditValues({ ...editValues, gstin: v, pan: extractPANFromGSTIN(v) || editValues.pan });
+                          }} className={cn("bg-transparent text-[11px] font-bold outline-none border-b w-full uppercase", 
+                            editValues.gstin && !validateGSTIN(editValues.gstin) ? "border-rose-500" : "border-black/10"
+                          )} />
+                          {editValues.gstin && !validateGSTIN(editValues.gstin) && <AlertTriangle size={10} className="absolute right-0 top-1 text-rose-500" />}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] font-bold text-black/50">{client.gstin || "—"}</span>
+                      )}
+                    </td>
+
+                    {/* PAN */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      {isEditing ? (
+                        <input value={editValues.pan || ""} onChange={(e) => setEditValues({ ...editValues, pan: e.target.value.toUpperCase() })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 w-full uppercase" />
+                      ) : (
+                        <span className="text-[11px] font-bold text-black/50">{client.pan || "—"}</span>
+                      )}
+                    </td>
+
+                    {/* Address */}
+                    <td className="px-4 py-3 border-r border-black/[0.04]">
+                      {isEditing ? (
+                        <input value={editValues.address || ""} onChange={(e) => setEditValues({ ...editValues, address: e.target.value })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 w-full" />
+                      ) : (
+                        <span className="text-[11px] font-bold text-black/50 truncate max-w-[150px]" title={client.address}>{client.address || "—"}</span>
+                      )}
+                    </td>
+
                     {/* From Pipeline badge */}
                     <td className="px-4 py-3 border-r border-black/[0.04] text-center">
                       {client.fromPipeline && (
@@ -431,6 +495,9 @@ export default function CRMClientsPage() {
                     <input placeholder="+91 ..." value={newForm.leadPhone} onChange={(e) => setNewForm({ ...newForm, leadPhone: e.target.value })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full placeholder:text-black/20" />
                   </td>
                   <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <input placeholder="mail@example.com" value={newForm.email || ""} onChange={(e) => setNewForm({ ...newForm, email: e.target.value })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full placeholder:text-black/20" />
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
                     <input type="number" placeholder="Value" value={newForm.value || ""} onChange={(e) => setNewForm({ ...newForm, value: Number(e.target.value) })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full placeholder:text-black/20" />
                   </td>
                   <td className="px-4 py-3 border-r border-black/[0.04]">
@@ -446,12 +513,38 @@ export default function CRMClientsPage() {
                       <option>Standard</option><option>Key Account</option><option>Strategic</option>
                     </select>
                   </td>
-                  <td colSpan={3} className="px-4 py-3 text-[10px] text-black/25 font-black uppercase italic animate-pulse">Draft Mode...</td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <span className="text-[11px] font-bold text-black/20 italic">Today</span>
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <div className="relative">
+                      <input 
+                        placeholder="GSTIN" 
+                        value={newForm.gstin} 
+                        onChange={(e) => {
+                          const val = e.target.value.toUpperCase();
+                          const pan = extractPANFromGSTIN(val);
+                          setNewForm({ ...newForm, gstin: val, pan: pan || newForm.pan });
+                        }} 
+                        className={cn("bg-transparent text-[11px] font-bold outline-none border-b w-full uppercase", 
+                          newForm.gstin && !validateGSTIN(newForm.gstin) ? "border-rose-500" : "border-black/10"
+                        )} 
+                      />
+                      {newForm.gstin && !validateGSTIN(newForm.gstin) && <AlertTriangle size={10} className="absolute right-0 top-1 text-rose-500" />}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <input placeholder="PAN" value={newForm.pan} onChange={(e) => setNewForm({ ...newForm, pan: e.target.value.toUpperCase() })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 w-full uppercase" />
+                  </td>
+                  <td className="px-4 py-3 border-r border-black/[0.04]">
+                    <input placeholder="Billing Address" value={newForm.address} onChange={(e) => setNewForm({ ...newForm, address: e.target.value })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 w-full" />
+                  </td>
+                  <td className="px-4 py-3 text-[10px] text-black/25 font-black uppercase italic animate-pulse whitespace-nowrap">Draft Mode...</td>
                 </tr>
               ) : (
                 <tr onClick={() => setIsAddingNew(true)} className="hover:bg-black/[0.015] transition-colors cursor-pointer group border-b border-dashed border-black/10">
                   <td className="px-4 py-3 border-r border-black/[0.04]"></td>
-                  <td colSpan={10} className="px-4 py-3">
+                  <td colSpan={12} className="px-4 py-3">
                     <div className="flex items-center gap-2 text-[11px] font-black text-black/25 uppercase tracking-widest group-hover:text-black transition-colors">
                       <Plus size={13} /> Add New Client
                     </div>

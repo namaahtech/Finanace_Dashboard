@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     let query = supabase.from("claims").select(`
       id, amount, status, cycle, queue_position, requested_at,
       employee:employees(name, employee_id, department),
-      incentive:incentives(amount, month, year)
+      incentive:incentives(total_amount, month, year)
     `);
 
     if (status && status !== "all") {
@@ -48,16 +48,17 @@ export async function POST(req: NextRequest) {
 
     // Submit a claim
     const { incentiveId } = body;
-    const { data: incentive } = await supabase.from("incentives").select("amount, employee").eq("id", incentiveId).single();
-    if (!incentive) throw new Error("Incentive not found");
+    const { data: incentive, error: incError } = await supabase.from("incentives").select("total_amount, employee_id").eq("id", incentiveId).single();
+    if (incError || !incentive) throw new Error(incError?.message || "Incentive not found");
 
-    const { data } = await supabase.from("claims").insert({
-       employee_id: incentive.employee,
+    const { data, error: insError } = await supabase.from("claims").insert({
+       employee_id: incentive.employee_id,
        incentive_id: incentiveId,
-       amount: incentive.amount,
+       amount: incentive.total_amount,
        status: "pending"
     }).select().single();
 
+    if (insError) throw new Error(insError.message);
     return NextResponse.json(data);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -74,7 +75,7 @@ export async function PATCH(req: NextRequest) {
 
     await supabase.from("claims").update({ status: "processed" }).eq("id", claimId);
     return NextResponse.json({ message: "Claim processed" });
-  } catch (err) {
-    return NextResponse.json({ error: "Dummy error" }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Failed to process claim" }, { status: 500 });
   }
 }

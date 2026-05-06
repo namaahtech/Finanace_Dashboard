@@ -1,7 +1,7 @@
-# Namaah Pulse — Developer Handoff
+# Namaah Nexus — Developer Handoff
 **Branch:** `preview` | **Date:** April 8, 2026 | **Prepared by:** Accounts & Finance Lead
 
-> **Context:** This is a platform transformation of Namaah Pulse — Namaah Startup's internal ops system.
+> **Context:** This is a platform transformation of Namaah Nexus — Namaah Startup's internal ops system.
 > We are migrating from MongoDB → Supabase and building 14 modules for 80+ people across 21 teams.
 > **All work must stay on the `preview` branch. `main` is protected.**
 

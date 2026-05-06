@@ -4,6 +4,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes loading-bar {
+  0%   { transform: translateX(-100%); width: 40%; }
+  50%  { width: 60%; }
+  100% { transform: translateX(280%); width: 40%; }
+}
+
 /* ─────────────────────────────────────────────────────────
    CSS DESIGN TOKENS — light & dark
    All colours reference these vars so toggling .dark

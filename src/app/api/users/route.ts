@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
 
-    const { name, email, role, department, designation, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary } = body;
+    const { name, email, role, department, designation, matrix_role, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary, salary_min, salary_max, kpi_weight, kra_weight, behavioral_weight, enable_salary_linkage } = body;
 
     if (!name || !email || !role) {
       return NextResponse.json({ error: "Missing highly critical parameters (Name, Email, Role)" }, { status: 400 });
@@ -33,25 +33,36 @@ export async function POST(req: Request) {
     // 3. Systematically link the created User ID structurally to employee DB table
     const employee_id_gen = `NP-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const insertData: any = {
+      id: user.id,   // Mapped to strict auth.user (RLS)
+      name,
+      email,
+      employee_id: body.employee_id || employee_id_gen,
+      role,
+      department,
+      designation,
+      matrix_role: matrix_role || null,
+      team_id: team_id || null,
+      shift_id: shift_id || null,
+      monthly_leave_quota: monthly_leave_quota || 1.5,
+      leave_balance: monthly_leave_quota || 1.5,
+      joining_date: joining_date || new Date().toISOString(),
+      employment_type: employment_type || 'full_time',
+      salary_structure: salary_structure || 'fixed_monthly',
+      base_salary: base_salary ? Number(base_salary) : 0
+    };
+
+    // Add salary fields only if they're provided (migration may not be applied yet)
+    if (salary_min !== undefined) insertData.salary_min = salary_min ? Number(salary_min) : null;
+    if (salary_max !== undefined) insertData.salary_max = salary_max ? Number(salary_max) : null;
+    if (kpi_weight !== undefined) insertData.kpi_weight = kpi_weight ? Number(kpi_weight) : 40;
+    if (kra_weight !== undefined) insertData.kra_weight = kra_weight ? Number(kra_weight) : 40;
+    if (behavioral_weight !== undefined) insertData.behavioral_weight = behavioral_weight ? Number(behavioral_weight) : 20;
+    if (enable_salary_linkage !== undefined) insertData.enable_salary_linkage = enable_salary_linkage || false;
+
     const { error: dbError } = await supabase
       .from("employees")
-      .insert({
-        id: user.id,   // Mapped to strict auth.user (RLS)
-        name,
-        email,
-        employee_id: body.employee_id || employee_id_gen,
-        role,
-        department,
-        designation,
-        team_id: team_id || null,
-        shift_id: shift_id || null,
-        monthly_leave_quota: monthly_leave_quota || 1.5,
-        leave_balance: monthly_leave_quota || 1.5,
-        joining_date: joining_date || new Date().toISOString(),
-        employment_type: employment_type || 'full_time',
-        salary_structure: salary_structure || 'fixed_monthly',
-        base_salary: base_salary ? Number(base_salary) : 0
-      });
+      .insert(insertData);
 
     if (dbError) {
       // Revert if insertion failed
@@ -75,9 +86,9 @@ export async function POST(req: Request) {
       });
 
       const mailOptions = {
-        from: `"${config.company_name || "Namaah Pulse"}" <${config.smtp_user}>`,
+        from: `"${config.company_name || "Namaah Nexus"}" <${config.smtp_user}>`,
         to: email,
-        subject: `Welcome to ${config.company_name || "Namaah Pulse"} - Onboarding Initiated`,
+        subject: `Welcome to ${config.company_name || "Namaah Nexus"} - Onboarding Initiated`,
         html: `
           <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
             <div style="background-color: #0f172a; color: #ffffff; padding: 32px 20px; text-align: center;">
@@ -86,7 +97,7 @@ export async function POST(req: Request) {
             </div>
             <div style="padding: 40px; color: #1e293b; line-height: 1.6;">
               <h2 style="margin-top: 0; font-size: 20px; font-weight: 700;">Welcome Onboard, ${name}!</h2>
-              <p>Your professional account at <b>${config.company_name || "Namaah Pulse"}</b> has been successfully initialized. You now have access to the enterprise portal with the following credentials:</p>
+              <p>Your professional account at <b>${config.company_name || "Namaah Nexus"}</b> has been successfully initialized. You now have access to the enterprise portal with the following credentials:</p>
               
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 24px; border-radius: 8px; margin: 24px 0;">
                 <div style="margin-bottom: 12px; display: flex; align-items: center;">
@@ -109,7 +120,7 @@ export async function POST(req: Request) {
               
               <div style="margin-top: 32px; border-top: 1px solid #f1f5f9; pt: 24px;">
                 <p style="margin: 0; font-weight: 700; color: #0f172a;">Identity Management System</p>
-                <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 12px;">Automated Onboarding Engine · ${config.company_name || "Namaah Pulse"}</p>
+                <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 12px;">Automated Onboarding Engine · ${config.company_name || "Namaah Nexus"}</p>
               </div>
             </div>
           </div>
@@ -144,7 +155,7 @@ export async function GET(req: Request) {
     if (role) {
       query = query.eq("role", role);
     }
-    
+
     if (search) {
       query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,employee_id.ilike.%${search}%`);
     }
@@ -152,7 +163,34 @@ export async function GET(req: Request) {
     // Always sort by joined_at or created_at natively to display newest first
     query = query.order("created_at", { ascending: false });
 
-    const { data, count, error } = await query;
+    let { data, count, error } = await query;
+
+    // If select(*) fails due to missing columns, try without them
+    if (error && error.message?.includes("column")) {
+      console.warn("Some columns not found, fetching available columns only");
+
+      let fallbackQuery = supabase
+        .from("employees")
+        .select("id, name, email, employee_id, role, department, designation, team_id, joining_date, employment_type, salary_structure, base_salary, is_active, created_at, updated_at", { count: 'exact' });
+
+      if (role) {
+        fallbackQuery = fallbackQuery.eq("role", role);
+      }
+
+      if (search) {
+        fallbackQuery = fallbackQuery.or(`name.ilike.%${search}%,email.ilike.%${search}%,employee_id.ilike.%${search}%`);
+      }
+
+      const { data: fallbackData, count: fallbackCount, error: fallbackError } = await fallbackQuery.order("created_at", { ascending: false });
+
+      if (!fallbackError) {
+        data = fallbackData;
+        count = fallbackCount;
+        error = null;
+      } else {
+        throw fallbackError;
+      }
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

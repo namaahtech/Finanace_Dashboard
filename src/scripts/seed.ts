@@ -1,5 +1,5 @@
 /**
- * Seed script for Namaah Pulse.
+ * Seed script for Namaah Nexus.
  * Run: npm run seed
  *
  * Creates:

@@ -1,4 +1,4 @@
--- Initial seed data for Namaah Pulse
+-- Initial seed data for Namaah Nexus
 
 -- 1. Default System Configuration
 INSERT INTO system_config (revenue, profit_percentage, company_stage)

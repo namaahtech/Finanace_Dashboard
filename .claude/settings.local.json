@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(curl -s -X POST http://localhost:3004/api/invoices/generate-pdf -H 'Content-Type: application/json' -d '{:*)",
+      "Bash(npm run:*)",
+      "Bash(grep -l \"vendors\\\\|purchases\" /d/Finanace_Dashboard/src/supabase/migrations/*.sql)",
+      "Bash(find /d/Finanace_Dashboard/src/supabase -name \"*.sql\" -exec grep -l \"vendors\" {} \\\\;)",
+      "Bash(grep -r \"vendors\\\\|invoices\\\\|clients\" /d/Finanace_Dashboard/src/supabase/migrations/*.sql)",
+      "Bash(awk '{print $2}')",
+      "Bash(xargs -r kill -9)",
+      "Bash(curl -s http://localhost:3005/admin/kpi)",
+      "Bash(curl -s \"http://localhost:3005/api/kpi/calculate?employeeId=550e8400-e29b-41d4-a716-446655440000&month=4&year=2026\")",
+      "Bash(curl -s \"http://localhost:3005/api/kpi/calculate?employeeId=test&month=4&year=2026\")",
+      "Bash(pkill -9 -f \"node\\\\|next\\\\|npm\")",
+      "Bash(kill -9 869 782 822 699 758)",
+      "Bash(awk '{print $NF}')",
+      "Bash(xargs kill *)",
+      "Bash(kill -9 18112)",
+      "Bash(npm run *)",
+      "Bash(netstat -tuln)",
+      "Bash(curl -s http://localhost:3007/api/kpi/calculate?employeeId=test)",
+      "Bash(year=2026 2>&1)"
+    ]
+  }
+}
