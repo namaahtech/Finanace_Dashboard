@@ -6,14 +6,7 @@ import {
   LiveKitRoom,
   VideoConference,
   RoomAudioRenderer,
-  ControlBar,
-  useToken,
-  GridLayout,
-  ParticipantTile,
   ConnectionQualityIndicator,
-  TrackLoop,
-  useParticipants,
-  useRemoteParticipant,
   useRemoteParticipants,
   useRoomContext,
   useLocalParticipant,
@@ -41,13 +34,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 
 /* ─── AI Interviewer Sidepanel ────────────────────────────────────────────── */
-function InterviewerPanel({ 
-  application, 
+function InterviewerPanel({
+  application,
   onComplete,
   suggestQuestion,
   isAiLoading,
   aiSuggestion
-}: { 
+}: {
   application: any;
   onComplete: () => void;
   suggestQuestion: () => void;
@@ -57,34 +50,26 @@ function InterviewerPanel({
   const analysis = application?.talent_analysis?.[0] || {};
   const questions = analysis?.interview_questions || [];
   const score = analysis?.scoring?.match_score || 0;
-  
+
   const remoteParticipants = useRemoteParticipants();
-  const candidate = remoteParticipants.find(p => p.identity !== 'Interviewer');
+  const room = useRoomContext();
+  const candidate = remoteParticipants.find(p => p.identity !== "Interviewer");
 
-  const toggleRemoteMic = async () => {
+  const sendDataToCandidate = (payload: object) => {
     if (!candidate) return;
-    const isMuted = !candidate.isMicrophoneEnabled;
-    // LiveKit server handles the actual muting/unmuting via data messages or server API
-    // For local dev, we can use track.setMuted if we have permission, but usually 
-    // we send a data message to the candidate's client to request a mute.
-    const room = useRoomContext();
-    const encoder = new TextEncoder();
     room.localParticipant.publishData(
-      encoder.encode(JSON.stringify({ action: isMuted ? 'mute' : 'unmute', target: 'mic' })),
+      new TextEncoder().encode(JSON.stringify(payload)),
       { reliable: true, destinationIdentities: [candidate.identity] }
     );
   };
 
-  const toggleRemoteVideo = async () => {
-    if (!candidate) return;
-    const isOff = !candidate.isCameraEnabled;
-    const room = useRoomContext();
-    const encoder = new TextEncoder();
-    room.localParticipant.publishData(
-      encoder.encode(JSON.stringify({ action: isOff ? 'enable' : 'disable', target: 'video' })),
-      { reliable: true, destinationIdentities: [candidate.identity] }
-    );
-  };
+  const toggleRemoteMic = () => sendDataToCandidate({
+    action: candidate?.isMicrophoneEnabled ? "mute" : "unmute", target: "mic"
+  });
+
+  const toggleRemoteVideo = () => sendDataToCandidate({
+    action: candidate?.isCameraEnabled ? "disable" : "enable", target: "video"
+  });
 
   return (
     <div className="w-96 bg-zinc-950 border-l border-white/5 flex flex-col h-full">
@@ -305,13 +290,15 @@ export default function MeetingPage() {
         .single();
 
       if (error || !data) throw new Error("Interview not found");
-      
+
       setApplication(data.applications);
-      
-      const username = isAdmin ? "Interviewer" : data.applications.applicant_name;
-      const resp = await fetch(`/api/livekit/token?room=${id}&username=${username}`);
-      const { token } = await resp.json();
-      setToken(token);
+
+      const username = isAdmin ? "Interviewer" : (data.applications?.applicant_name || "Candidate");
+      // Use the main /api/livekit route which returns both token + wsUrl
+      const resp = await fetch(`/api/livekit?room=${encodeURIComponent(id)}&username=${encodeURIComponent(username)}`);
+      const json = await resp.json();
+      if (json.error) throw new Error(json.error);
+      setToken(json.token);
     } catch (err) {
       console.error(err);
     } finally {
@@ -322,17 +309,18 @@ export default function MeetingPage() {
   const suggestQuestion = async () => {
     setIsAiLoading(true);
     try {
-      const resp = await fetch('/api/admin/recruitment/process-application', {
-        method: 'POST',
-        body: JSON.stringify({ 
-          mode: 'suggest_question',
+      const resp = await fetch("/api/admin/recruitment/process-application", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "suggest_question",
           candidate_context: application?.talent_analysis?.[0] || {},
-          job_role: application?.applied_cluster_id
-        })
+          job_role: application?.applied_cluster_id,
+        }),
       });
       const data = await resp.json();
-      setAiSuggestion(data.suggestion);
-    } catch (err) {
+      setAiSuggestion(data.suggestion || "No suggestion generated.");
+    } catch {
       setAiSuggestion("Failed to generate suggestion.");
     } finally {
       setIsAiLoading(false);
