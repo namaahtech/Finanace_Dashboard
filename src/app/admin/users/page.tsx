@@ -53,13 +53,14 @@ interface User {
   enable_salary_linkage?: boolean;
 }
 
-const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger"> = {
+const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger" | "indigo"> = {
   employee: "default", hr: "info", lead: "success",
   manager: "purple", super_admin: "purple", accounts: "warning", sales: "danger",
+  internship: "indigo",
 };
 const ROLE_LABEL: Record<string, string> = {
-  employee: "Employee", hr: "HR", lead: "Team Lead", manager: "Department Manager",
-  super_admin: "Super Admin", accounts: "Accounts", sales: "Sales",
+  employee: "Employee", hr: "HR", manager: "Department Lead", lead: "Team Lead",
+  super_admin: "Super Admin", accounts: "Accounts", sales: "Sales", internship: "Internship",
 };
 
 function getInitials(name: string) {
@@ -260,8 +261,11 @@ export default function AdminUsersPage() {
     employment_type: "full_time", salary_structure: "fixed_monthly", base_salary: "",
     salary_min: "", salary_max: "",
     kpi_weight: 40, kra_weight: 40, behavioral_weight: 20,
-    enable_salary_linkage: false
+    enable_salary_linkage: false,
+    create_zoho_mail: true,
   });
+  const [zohoConnected, setZohoConnected] = useState(false);
+  const [zohoEmailPreview, setZohoEmailPreview] = useState("");
 
   async function load(q?: string) {
     setLoading(true);
@@ -286,12 +290,29 @@ export default function AdminUsersPage() {
     if (shiftsData) setShifts(shiftsData);
   }
 
-  useEffect(() => { 
+  useEffect(() => {
     if (!authLoading && user) {
-      load(); 
-      loadOrg(); 
+      load();
+      loadOrg();
+      // Check if Zoho Mail is connected
+      fetch("/api/mail/auth/connect").then(r => r.json()).then(d => {
+        setZohoConnected(d.config?.is_connected === true);
+      }).catch(() => {});
     }
   }, [authLoading, user]);
+
+  // Update Zoho email preview when name changes
+  useEffect(() => {
+    if (form.name && zohoConnected) {
+      const parts = form.name.trim().toLowerCase().split(" ");
+      const preview = parts.length >= 2
+        ? `${parts[0]}.${parts[parts.length - 1]}@namaah.in`
+        : `${parts[0]}@namaah.in`;
+      setZohoEmailPreview(preview);
+    } else {
+      setZohoEmailPreview("");
+    }
+  }, [form.name, zohoConnected]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => { 
@@ -320,7 +341,8 @@ export default function AdminUsersPage() {
       salary_min: "", salary_max: "",
       joiningDate: new Date().toISOString(),
       kpi_weight: 40, kra_weight: 40, behavioral_weight: 20,
-      enable_salary_linkage: false
+      enable_salary_linkage: false,
+      create_zoho_mail: true,
     });
     setShowForm(true);
   }
@@ -348,7 +370,8 @@ export default function AdminUsersPage() {
       kpi_weight: user.kpi_weight || 40,
       kra_weight: user.kra_weight || 40,
       behavioral_weight: user.behavioral_weight || 20,
-      enable_salary_linkage: user.enable_salary_linkage || false
+      enable_salary_linkage: user.enable_salary_linkage || false,
+      create_zoho_mail: false,
     });
     setShowForm(true);
   }
@@ -386,8 +409,32 @@ export default function AdminUsersPage() {
         await axios.patch(`/api/users/${editingId}`, payload);
         showToast("Employee protocol re-indexed successfully.", "success");
       } else {
-        await request({ url: "/api/users", method: "POST", data: payload });
-        showToast(`Secure onboarding initialized for ${form.email}`, "success");
+        const newEmployee = await request<{ id?: string }>({ url: "/api/users", method: "POST", data: payload });
+
+        // Auto-provision Zoho Mail if enabled and Zoho is connected
+        if (form.create_zoho_mail && zohoConnected && !editingId && newEmployee?.id) {
+          try {
+            const zohoRes = await fetch("/api/mail/accounts/create-employee", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                employee_id: newEmployee.id,
+                name: form.name,
+                domain: "namaah.in",
+              }),
+            });
+            const zohoData = await zohoRes.json();
+            if (zohoRes.ok) {
+              showToast(`Zoho Mail created: ${zohoData.email_address}`, "success");
+            } else {
+              showToast(`Employee added — Zoho mail creation failed: ${zohoData.error || "retry in Mail Config"}`, "warning");
+            }
+          } catch {
+            showToast(`Employee added — Zoho mail provisioning failed. Retry in Mail Config.`, "warning");
+          }
+        } else {
+          showToast(`Secure onboarding initialized for ${form.email}`, "success");
+        }
       }
       setShowForm(false);
       await load();
@@ -835,6 +882,44 @@ export default function AdminUsersPage() {
                     <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Commencement Date</label>
                     <DatePicker value={form.joiningDate} onChange={(d) => setForm({ ...form, joiningDate: d })} label="" />
                   </div>
+
+                  {/* Zoho Mail Auto-Provisioning — only for new employees */}
+                  {!editingId && (
+                    <div className="sm:col-span-2 border-t border-theme-border pt-4 mt-2">
+                      <div className={`p-4 rounded-xl border transition-all ${form.create_zoho_mail && zohoConnected ? "bg-blue-500/5 border-blue-500/20" : "bg-theme-raised border-theme-border"}`}>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={form.create_zoho_mail && zohoConnected}
+                            disabled={!zohoConnected}
+                            onChange={(e) => setForm({ ...form, create_zoho_mail: e.target.checked })}
+                            className="w-4 h-4 rounded border-theme-border accent-blue-500"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-theme-fg flex items-center gap-1.5">
+                                <Mail size={12} className="text-blue-500" />
+                                Auto-create Zoho Mail Account
+                              </span>
+                              {!zohoConnected && (
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500">
+                                  ZOHO NOT CONNECTED
+                                </span>
+                              )}
+                            </div>
+                            {zohoConnected && form.create_zoho_mail && zohoEmailPreview && (
+                              <p className="text-[11px] text-blue-500 font-mono mt-0.5">{zohoEmailPreview}</p>
+                            )}
+                            {!zohoConnected && (
+                              <p className="text-[10px] text-theme-muted mt-0.5">
+                                Connect Zoho Mail in <span className="text-theme-primary">Comms → Mail Config</span> to enable auto-provisioning.
+                              </p>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-theme-surface flex justify-end gap-3 border-t border-theme-border pt-4 mt-6">

@@ -1,51 +1,82 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import { useToast } from "@/components/ui/Toast";
 import { 
-  ChevronRight, 
   CheckCircle2, 
-  FileText, 
-  User, 
   Rocket, 
   ShieldCheck,
   ArrowRight,
   Loader2,
-  Clock
+  Clock,
+  Briefcase,
+  FileCheck,
+  Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import dayjs from "dayjs";
+import { cn } from "@/lib/utils";
 
-const STEPS = [
-  { id: "welcome", title: "Welcome", icon: Rocket },
-  { id: "nda", title: "NDA & Compliance", icon: ShieldCheck },
-  { id: "checklist", title: "First Day Tasks", icon: CheckCircle2 },
-  { id: "complete", title: "Ready to Launch", icon: ZapIcon }
+const TASKS = [
+  "Join the Department Slack/Discord",
+  "Setup your Profile Avatar",
+  "Complete 'Culture & Ethics' Video",
+  "Sync your Google Calendar"
 ];
 
-function ZapIcon({ size, className }: { size: number, classNameText?: string, className?: string }) {
-  return <Rocket size={size} className={className} />;
-}
-
 export default function OnboardingPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
-  const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [onboardingData, setOnboardingData] = useState<any>(null);
+  const [ndaAccepted, setNdaAccepted] = useState(false);
+  const [config, setConfig] = useState<any>(null);
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login");
+      return;
+    }
     if (user?.id) {
       fetchOnboardingStatus();
+      fetchSystemConfig();
+      
+      const channel = supabase.channel(`config_sync_${user.id}`);
+      channel
+        .on(
+          'postgres_changes', 
+          { event: 'UPDATE', schema: 'public', table: 'system_config' }, 
+          (payload) => {
+            if (payload.new) setConfig(payload.new);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
-  }, [user?.id]);
+  }, [user, authLoading, router]);
+
+  const fetchSystemConfig = async () => {
+    try {
+      const { data } = await supabase.from("system_config").select("*").single();
+      if (data) setConfig(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
 
   const fetchOnboardingStatus = async () => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("user_onboarding")
         .select("*")
         .eq("user_id", user?.id)
@@ -53,18 +84,15 @@ export default function OnboardingPage() {
 
       if (data) {
         if (data.status === "completed") {
-          router.push("/dashboard");
+          router.push("/dashboard"); 
           return;
         }
         setOnboardingData(data);
+        if (data.nda_signed_at) setNdaAccepted(true);
       } else {
-        // Create initial record
         const { data: newData } = await supabase
           .from("user_onboarding")
-          .insert({ 
-            user_id: user?.id, 
-            status: "not_started" 
-          })
+          .insert({ user_id: user?.id, status: "not_started" })
           .select()
           .single();
         setOnboardingData(newData);
@@ -73,27 +101,6 @@ export default function OnboardingPage() {
       console.error(e);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleNext = async () => {
-    if (currentStep === 1) {
-      // NDA Step - Sign it
-      setSaving(true);
-      await supabase
-        .from("user_onboarding")
-        .update({ 
-          nda_signed_at: new Date().toISOString(),
-          status: "in_progress"
-        })
-        .eq("user_id", user?.id);
-      setSaving(false);
-    }
-
-    if (currentStep < STEPS.length - 1) {
-      setCurrentStep(s => s + 1);
-    } else {
-      completeOnboarding();
     }
   };
 
@@ -107,201 +114,273 @@ export default function OnboardingPage() {
     
     await supabase
       .from("user_onboarding")
-      .update({ completed_steps: newTasks })
+      .update({ completed_steps: newTasks, status: "in_progress" })
       .eq("user_id", user?.id);
   };
 
   const completeOnboarding = async () => {
+    if (!ndaAccepted || onboardingData?.completed_steps?.length < TASKS.length) {
+      showToast("Please complete all steps and sign the NDA.", "error");
+      return;
+    }
+    
     setSaving(true);
     try {
-      await supabase
+      const now = new Date().toISOString();
+      
+      // 1. Update Onboarding Status
+      const { error: onboardErr } = await supabase
         .from("user_onboarding")
         .update({ 
           status: "completed", 
-          completed_at: new Date().toISOString() 
+          completed_at: now,
+          nda_signed_at: now
         })
         .eq("user_id", user?.id);
+
+      if (onboardErr) throw onboardErr;
+
+      // 2. Update Employee Profile
+      const { error: empErr } = await supabase
+        .from("employees")
+        .update({ 
+          status: "active",
+          updated_at: now 
+        })
+        .eq("id", user?.id);
       
-      router.push("/dashboard");
-    } catch (e) {
+      if (empErr) console.warn("Could not update employee status, but continuing...", empErr);
+
+      // 3. Audit Log
+      await supabase.from("audit_logs").insert({
+        actor_id: user?.id,
+        action: "CONSULTANT_ONBOARDING_COMPLETED",
+        table_name: "employees",
+        record_id: user?.id,
+        new_values: { 
+          status: "onboarded", 
+          agreement: "Neural Signed" 
+        }
+      });
+
+      // 4. Force Redirect
+      showToast("Onboarding Complete! Re-synchronizing session...", "success");
+      
+      setTimeout(async () => {
+        await supabase.auth.signOut();
+        window.location.href = "/login?onboarded=true";
+      }, 1500);
+
+    } catch (e: any) {
+      console.error("Onboarding Completion Error:", e);
+      showToast(e.message || "Synchronization failed. Please try again.", "error");
       setSaving(false);
     }
   };
 
   if (loading) return (
-    <div className="h-screen w-full bg-zinc-950 flex flex-col items-center justify-center gap-4">
-      <Loader2 className="animate-spin text-emerald-500" size={40} />
-      <p className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Preparing your workspace...</p>
+    <div className="h-screen w-full bg-theme-page flex flex-col items-center justify-center gap-4">
+      <Loader2 className="animate-spin text-theme-primary" size={40} />
+      <p className="text-theme-muted font-black text-xs uppercase tracking-[0.2em]">Preparing your workspace...</p>
     </div>
   );
 
-  const StepIcon = STEPS[currentStep].icon;
+  const completedCount = onboardingData?.completed_steps?.length || 0;
+  const progressPercent = Math.round((completedCount / TASKS.length) * 100);
+  const canSubmit = ndaAccepted && completedCount === TASKS.length;
 
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-emerald-500/30 overflow-hidden relative">
-      {/* Background Orbs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
-
-      <div className="max-w-4xl mx-auto px-6 py-12 h-screen flex flex-col relative z-10">
+    <div className="min-h-screen bg-theme-page text-theme-fg selection:bg-theme-primary/10 relative overflow-y-auto pb-20 font-sans">
+      
+      <div className="max-w-5xl mx-auto px-6 py-12 relative z-10">
         
         {/* Header */}
         <div className="flex items-center justify-between mb-12">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Rocket size={20} className="text-black" fill="currentColor" />
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 bg-theme-primary text-theme-surface rounded-2xl flex items-center justify-center shadow-xl shadow-theme-primary/20">
+              <Rocket size={24} fill="currentColor" />
             </div>
             <div>
-              <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest leading-none mb-1">Namaah Nexus</p>
-              <h2 className="text-lg font-bold leading-none">Onboarding Phase</h2>
+              <p className="text-[10px] font-black text-theme-primary uppercase tracking-[0.2em] leading-none mb-1.5">Namaah Nexus</p>
+              <h2 className="text-xl font-black leading-none tracking-tight">Onboarding Phase</h2>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            {STEPS.map((step, idx) => (
-              <div 
-                key={step.id}
-                className={`h-1.5 rounded-full transition-all duration-500 ${
-                  idx === currentStep ? "w-8 bg-emerald-500" : 
-                  idx < currentStep ? "w-4 bg-emerald-500/40" : "w-4 bg-white/10"
-                }`}
-              />
-            ))}
+          <div className="hidden sm:flex items-center gap-2 bg-theme-surface border border-theme-border px-4 py-2 rounded-xl shadow-sm">
+            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Secure initialization</span>
           </div>
         </div>
 
-        {/* Main content area */}
-        <div className="flex-1 flex items-center justify-center">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentStep}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              className="w-full max-w-2xl"
-            >
-              <div className="flex flex-col items-center text-center mb-10">
-                <div className="h-20 w-20 rounded-3xl bg-zinc-900 border border-white/5 flex items-center justify-center text-emerald-500 mb-6 shadow-2xl">
-                  <StepIcon size={40} />
+        <div className="mb-16">
+          <h1 className="text-6xl font-black mb-6 tracking-tighter text-theme-fg leading-[0.9]">Welcome to the <span className="text-theme-primary">Command Center.</span></h1>
+          <p className="text-theme-muted text-xl max-w-2xl leading-relaxed font-medium">
+            Let's get your professional profile synchronized. Complete the required forms to activate your workspace and begin your journey.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* Left Column: NDA & Agreements */}
+          <div className="lg:col-span-7 space-y-8">
+            <section className="page-card shadow-xl shadow-theme-primary/5">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="h-10 w-10 rounded-xl bg-theme-primary/10 flex items-center justify-center text-theme-primary">
+                  <ShieldCheck size={20} />
                 </div>
-                <h1 className="text-4xl font-black mb-4">{STEPS[currentStep].title}</h1>
-                <p className="text-zinc-400 text-lg leading-relaxed">
-                  {currentStep === 0 && "Welcome to the team! Let's get your workspace set up and secure. This will only take 2 minutes."}
-                  {currentStep === 1 && "We take security seriously. Please review and sign the Non-Disclosure Agreement to proceed."}
-                  {currentStep === 2 && "Almost there! Complete these initial tasks to gain full access to the dashboard."}
-                  {currentStep === 3 && "You're all set! Your credentials are ready and your department workspace is initialized."}
-                </p>
+                <div>
+                  <h3 className="text-lg font-black tracking-tight">Consultant Agreement</h3>
+                  <p className="text-xs text-theme-muted font-bold uppercase tracking-widest mt-0.5">Required compliance document</p>
+                </div>
               </div>
-
-              {/* Step Specific Content */}
-              <div className="bg-zinc-900/50 backdrop-blur-md border border-white/5 rounded-3xl p-8 mb-10">
-                {currentStep === 0 && (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                      <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                        <CheckCircle2 size={20} />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-bold">Account Verified</p>
-                        <p className="text-[10px] text-zinc-500 uppercase font-black">Identity check complete</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 opacity-50">
-                      <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500">
-                        <Clock size={20} />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-bold">Training Modules</p>
-                        <p className="text-[10px] text-zinc-500 uppercase font-black">Waiting for NDA</p>
-                      </div>
-                    </div>
+              
+              <div className="h-80 overflow-y-auto p-8 bg-[#F1F3F6] rounded-2xl border border-theme-border flex flex-col mb-8 custom-scrollbar">
+                {config?.consultant_agreement_text ? (
+                  <div className="whitespace-pre-wrap text-[13px] text-theme-muted font-medium leading-relaxed">
+                    {config.consultant_agreement_text}
                   </div>
-                )}
-
-                {currentStep === 1 && (
-                  <div className="space-y-6">
-                    <div className="h-64 overflow-y-auto p-6 bg-black rounded-2xl border border-white/5 text-xs text-zinc-400 leading-relaxed font-mono">
-                      <p className="mb-4 text-white font-bold underline">CONFIDENTIALITY AND NON-DISCLOSURE AGREEMENT</p>
-                      <p className="mb-4">This Agreement is made between Namaah Tech ("Company") and the undersigned Employee. The Employee acknowledges that in the course of employment, they will have access to trade secrets, client lists, financial data, and proprietary algorithms...</p>
-                      <p className="mb-4">1. DEFINITION OF CONFIDENTIAL INFORMATION: Any data relating to the business of the Company not generally known to the public...</p>
-                      <p className="mb-4">2. NON-COMPETE: The employee agrees not to engage in any business activity that competes directly with the Company for a period of 12 months...</p>
-                      <p>By clicking "Accept & Sign", you legally agree to the terms above.</p>
+                ) : config?.consultant_agreement_url ? (
+                  <iframe 
+                    src={`${config.consultant_agreement_url}#toolbar=0&navpanes=0`} 
+                    className="w-full h-full border-none"
+                    title="Consultant Agreement"
+                  />
+                ) : (
+                  <div className="text-[13px] text-theme-muted leading-relaxed font-medium">
+                    <p className="mb-6 text-theme-fg font-black underline text-sm tracking-tight">CONFIDENTIALITY AND NON-DISCLOSURE AGREEMENT</p>
+                    <p className="mb-4">This Agreement is made between Namaah Tech ("Company") and the undersigned Consultant. The Consultant acknowledges that they will have access to trade secrets, client lists, financial data, and proprietary algorithms...</p>
+                    <p className="mb-4 font-bold text-theme-fg">1. DEFINITION OF CONFIDENTIAL INFORMATION</p>
+                    <p className="mb-4">Any data relating to the business of the Company not generally known to the public, including codebase, financial projections, and strategic roadmaps.</p>
+                    <p className="mb-4 font-bold text-theme-fg">2. INTELLECTUAL PROPERTY</p>
+                    <p className="mb-4">All work products created during the term of engagement are the sole property of Namaah Tech. This includes all designs, code, and documentation produced.</p>
+                    <div className="p-4 bg-white border border-theme-border rounded-xl mt-8">
+                      <p className="text-xs font-bold text-theme-fg">CRYPTOGRAPHIC SIGNATURE REQUIRED</p>
+                      <p className="text-[11px] mt-1">Unique Identifier: {user?.id?.toUpperCase()}</p>
                     </div>
-                    <div className="flex items-center gap-3 px-4 py-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
-                      <ShieldCheck className="text-emerald-500" size={18} />
-                      <p className="text-[11px] text-emerald-500 font-bold">This document is legally binding and e-signed via your unique user hash.</p>
-                    </div>
-                  </div>
-                )}
-
-                {currentStep === 2 && (
-                  <div className="space-y-3">
-                    {[
-                      "Join the Department Slack/Discord",
-                      "Setup your Profile Avatar",
-                      "Complete 'Culture & Ethics' Video",
-                      "Sync your Google Calendar"
-                    ].map((task, i) => {
-                      const isDone = onboardingData?.completed_steps?.includes(task);
-                      return (
-                        <div 
-                          key={i} 
-                          onClick={() => toggleTask(task)}
-                          className={`flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer group ${
-                            isDone ? "bg-emerald-500/10 border-emerald-500/30" : "bg-white/5 border-white/5 hover:bg-white/10"
-                          }`}
-                        >
-                          <div className={`h-6 w-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                            isDone ? "border-emerald-500 bg-emerald-500 text-black" : "border-emerald-500/30 group-hover:border-emerald-500"
-                          }`}>
-                            {isDone ? <CheckCircle2 size={14} strokeWidth={3} /> : <div className="h-2 w-2 rounded-sm bg-emerald-500 scale-0 group-hover:scale-100 transition-all" />}
-                          </div>
-                          <span className={`text-sm font-medium transition-all ${isDone ? "text-emerald-500" : "text-zinc-300"}`}>{task}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {currentStep === 3 && (
-                  <div className="flex flex-col items-center py-10">
-                    <div className="relative mb-6">
-                      <div className="absolute inset-0 bg-emerald-500 rounded-full blur-2xl opacity-20 animate-pulse" />
-                      <div className="relative h-24 w-24 rounded-full bg-emerald-500 flex items-center justify-center text-black shadow-2xl">
-                        <CheckCircle2 size={48} strokeWidth={3} />
-                      </div>
-                    </div>
-                    <p className="text-xl font-bold mb-2">Systems Online</p>
-                    <p className="text-sm text-zinc-500">Redirecting to your command center...</p>
                   </div>
                 )}
               </div>
 
-              {/* Action Button */}
-              <div className="flex justify-center">
-                <button 
-                  onClick={handleNext}
-                  disabled={saving}
-                  className="group relative px-10 py-5 bg-white text-black font-black text-sm uppercase tracking-[0.2em] rounded-2xl hover:bg-zinc-200 transition-all shadow-xl shadow-white/5 flex items-center gap-3 overflow-hidden"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <span className="relative z-10">{saving ? "Finalizing..." : currentStep === STEPS.length - 1 ? "Start Working" : "Continue"}</span>
-                  {!saving && <ArrowRight size={18} className="relative z-10 group-hover:translate-x-1 transition-transform" />}
-                </button>
+              <div 
+                onClick={() => setNdaAccepted(!ndaAccepted)}
+                className={cn(
+                  "flex items-center gap-5 p-6 rounded-2xl border-2 transition-all cursor-pointer",
+                  ndaAccepted 
+                    ? "bg-theme-primary/5 border-theme-primary" 
+                    : "bg-theme-surface border-theme-border hover:border-theme-primary/50"
+                )}
+              >
+                <div className={cn(
+                  "h-7 w-7 rounded-lg border-2 flex items-center justify-center transition-all",
+                  ndaAccepted ? "border-theme-primary bg-theme-primary text-theme-surface" : "border-theme-border"
+                )}>
+                  {ndaAccepted && <CheckCircle2 size={16} strokeWidth={3} />}
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-black tracking-tight">I Accept & Sign the Consultant NDA</p>
+                  <p className="text-[10px] text-theme-muted font-bold uppercase tracking-widest mt-0.5">Legally binding electronic signature</p>
+                </div>
               </div>
-            </motion.div>
-          </AnimatePresence>
+            </section>
+          </div>
+
+          {/* Right Column: Tasks & Progress */}
+          <div className="lg:col-span-5 space-y-8">
+            <section className="page-card shadow-xl shadow-theme-primary/5">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="h-10 w-10 rounded-xl bg-theme-primary/10 flex items-center justify-center text-theme-primary">
+                  <FileCheck size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black tracking-tight">Initialization Tasklist</h3>
+                  <p className="text-xs text-theme-muted font-bold uppercase tracking-widest mt-0.5">Department Prerequisites</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {TASKS.map((task, i) => {
+                  const isDone = onboardingData?.completed_steps?.includes(task);
+                  return (
+                    <div 
+                      key={i} 
+                      onClick={() => toggleTask(task)}
+                      className={cn(
+                        "flex items-center gap-4 p-5 rounded-2xl border transition-all cursor-pointer group",
+                        isDone ? "bg-theme-raised border-theme-primary/30" : "bg-theme-surface border-theme-border hover:bg-theme-raised"
+                      )}
+                    >
+                      <div className={cn(
+                        "h-6 w-6 rounded-lg border-2 flex items-center justify-center transition-all",
+                        isDone ? "border-theme-primary bg-theme-primary text-theme-surface" : "border-theme-border group-hover:border-theme-primary"
+                      )}>
+                        {isDone ? <CheckCircle2 size={14} strokeWidth={3} /> : <div className="h-2 w-2 rounded-sm bg-theme-primary scale-0 group-hover:scale-100 transition-all" />}
+                      </div>
+                      <span className={cn(
+                        "text-sm font-bold transition-all",
+                        isDone ? "text-theme-fg" : "text-theme-muted group-hover:text-theme-fg"
+                      )}>{task}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-10 pt-8 border-t border-theme-border">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] font-black text-theme-muted uppercase tracking-widest">Initialization Progress</span>
+                  <span className="text-sm font-black text-theme-primary">{progressPercent}%</span>
+                </div>
+                <div className="h-3 w-full bg-theme-raised rounded-full overflow-hidden p-0.5">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressPercent}%` }}
+                    className="h-full bg-theme-primary rounded-full shadow-[0_0_15px_rgba(var(--primary),0.3)]"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Submission Section */}
+            <div className="bg-theme-primary rounded-[2.5rem] p-10 text-theme-surface shadow-2xl shadow-theme-primary/30">
+               <h4 className="text-xl font-black mb-2 tracking-tight">Ready to activate?</h4>
+               <p className="text-sm opacity-80 mb-8 font-medium leading-relaxed">
+                 Once the agreement is signed and the checklist is finished, you can finalize your account activation.
+               </p>
+               <Button 
+                 onClick={completeOnboarding}
+                 disabled={!canSubmit || saving}
+                 className={cn(
+                   "w-full py-7 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3",
+                   canSubmit 
+                     ? "bg-theme-surface text-theme-fg hover:scale-[1.02] active:scale-[0.98]" 
+                     : "bg-theme-surface/20 text-theme-surface/40 border-none cursor-not-allowed shadow-none"
+                 )}
+               >
+                 {saving ? (
+                   <>
+                     <Loader2 size={18} className="animate-spin" />
+                     Synchronizing Profile...
+                   </>
+                 ) : (
+                   <>
+                     Activate My Workspace
+                     <ArrowRight size={18} />
+                   </>
+                 )}
+               </Button>
+            </div>
+          </div>
         </div>
 
         {/* Footer info */}
-        <div className="py-8 flex justify-center border-t border-white/5 mt-12">
-          <p className="text-[10px] text-zinc-600 font-black uppercase tracking-widest flex items-center gap-4">
-            <span>Secure Handshake: TLS 1.3</span>
-            <span className="h-1 w-1 rounded-full bg-zinc-800" />
-            <span>AES-256 GCM</span>
-            <span className="h-1 w-1 rounded-full bg-zinc-800" />
-            <span>ID: {user?.id?.slice(0, 8)}</span>
+        <div className="py-16 flex flex-col items-center gap-8 border-t border-theme-border mt-16">
+          <div className="flex flex-wrap justify-center items-center gap-6 text-[10px] text-theme-muted font-black uppercase tracking-widest">
+            <span className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> TLS 1.3 Encryption</span>
+            <span className="h-1 w-1 rounded-full bg-theme-border hidden sm:block" />
+            <span>AES-256 GCM Secure Storage</span>
+            <span className="h-1 w-1 rounded-full bg-theme-border hidden sm:block" />
+            <span>Profile ID: {user?.id?.slice(0, 12).toUpperCase()}</span>
+          </div>
+          <p className="text-[10px] text-theme-subtle text-center max-w-xl leading-relaxed font-medium">
+            Namaah Tech (LMS) Onboarding Module v2.4. All actions are logged for audit purposes. By proceeding, you acknowledge the terms of the engagement and internal governance protocols.
           </p>
         </div>
       </div>

@@ -10,7 +10,8 @@ import {
   MessageSquare, CalendarClock, IndianRupee,
   Shield, RefreshCw, Mail, ChevronDown, Check,
   Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder, User,
-  BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award
+  BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award,
+  Inbox, PenLine, Send, Paperclip, Layers, KeyRound,
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
@@ -68,8 +69,16 @@ const superAdminNav: NavSection[] = [
     { href: "/admin/crm/clients", label: "Clients", icon: Handshake },
   ]},
   { title: "Comms", items: [
-    { href: "/admin/messaging", label: "Messages", icon: MessageSquare },
-    { href: "/admin/meetings", label: "Meetings", icon: CalendarClock },
+    { href: "/admin/mail",           label: "Mail Hub",     icon: Mail },
+    { href: "/admin/mail/inbox",     label: "Inbox",        icon: Inbox },
+    { href: "/admin/mail/compose",   label: "Compose",      icon: PenLine },
+    { href: "/admin/mail/sent",      label: "Sent",         icon: Send },
+    { href: "/admin/mail/drafts",    label: "Drafts",       icon: FileText },
+    { href: "/admin/mail/files",     label: "File Share",   icon: Paperclip },
+    { href: "/admin/mail/templates", label: "Templates",    icon: Layers },
+    { href: "/admin/mail/config",    label: "Mail Config",  icon: KeyRound },
+    { href: "/admin/messaging",      label: "Messages",     icon: MessageSquare },
+    { href: "/admin/meetings",       label: "Meetings",     icon: CalendarClock },
   ]},
   { title: "System", items: [
     { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
@@ -96,8 +105,15 @@ const accountsNav: NavSection[] = [
     { href: "/admin/budgets", label: "Budgets", icon: PiggyBank },
   ]},
   { title: "Comms", items: [
-    { href: "/admin/messaging", label: "Messages", icon: MessageSquare },
-    { href: "/admin/meetings", label: "Meetings", icon: CalendarClock },
+    { href: "/admin/mail",           label: "Mail Hub",   icon: Mail },
+    { href: "/admin/mail/inbox",     label: "Inbox",      icon: Inbox },
+    { href: "/admin/mail/compose",   label: "Compose",    icon: PenLine },
+    { href: "/admin/mail/sent",      label: "Sent",       icon: Send },
+    { href: "/admin/mail/drafts",    label: "Drafts",     icon: FileText },
+    { href: "/admin/mail/files",     label: "File Share", icon: Paperclip },
+    { href: "/admin/mail/templates", label: "Templates",  icon: Layers },
+    { href: "/admin/messaging",      label: "Messages",   icon: MessageSquare },
+    { href: "/admin/meetings",       label: "Meetings",   icon: CalendarClock },
   ]},
   { title: "Reports", items: [
     { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
@@ -138,8 +154,15 @@ const hrNav: NavSection[] = [
     { href: "/admin/priority", label: "Priority Payout", icon: Zap },
   ]},
   { title: "Comms", items: [
-    { href: "/admin/messaging", label: "Messages", icon: MessageSquare },
-    { href: "/admin/meetings", label: "Meetings", icon: CalendarClock },
+    { href: "/admin/mail",           label: "Mail Hub",   icon: Mail },
+    { href: "/admin/mail/inbox",     label: "Inbox",      icon: Inbox },
+    { href: "/admin/mail/compose",   label: "Compose",    icon: PenLine },
+    { href: "/admin/mail/sent",      label: "Sent",       icon: Send },
+    { href: "/admin/mail/drafts",    label: "Drafts",     icon: FileText },
+    { href: "/admin/mail/files",     label: "File Share", icon: Paperclip },
+    { href: "/admin/mail/templates", label: "Templates",  icon: Layers },
+    { href: "/admin/messaging",      label: "Messages",   icon: MessageSquare },
+    { href: "/admin/meetings",       label: "Meetings",   icon: CalendarClock },
   ]},
   { title: "System", items: [
     { href: "/admin/report", label: "Feature Report", icon: ClipboardList },
@@ -164,8 +187,13 @@ const leadNav: NavSection[] = [
     { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
   ]},
   { title: "Comms", items: [
-    { href: "/admin/messaging", label: "Messages", icon: MessageSquare },
-    { href: "/admin/meetings", label: "Meetings", icon: CalendarClock },
+    { href: "/admin/mail",         label: "Mail Hub", icon: Mail },
+    { href: "/admin/mail/inbox",   label: "Inbox",    icon: Inbox },
+    { href: "/admin/mail/compose", label: "Compose",  icon: PenLine },
+    { href: "/admin/mail/sent",    label: "Sent",     icon: Send },
+    { href: "/admin/mail/files",   label: "File Share", icon: Paperclip },
+    { href: "/admin/messaging",    label: "Messages", icon: MessageSquare },
+    { href: "/admin/meetings",     label: "Meetings", icon: CalendarClock },
   ]},
 ];
 
@@ -180,8 +208,11 @@ const salesNav: NavSection[] = [
     { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
   ]},
   { title: "Comms", items: [
-    { href: "/admin/messaging", label: "Messages", icon: MessageSquare },
-    { href: "/admin/meetings", label: "Meetings", icon: CalendarClock },
+    { href: "/admin/mail/inbox",   label: "Inbox",    icon: Inbox },
+    { href: "/admin/mail/compose", label: "Compose",  icon: PenLine },
+    { href: "/admin/mail/sent",    label: "Sent",     icon: Send },
+    { href: "/admin/messaging",    label: "Messages", icon: MessageSquare },
+    { href: "/admin/meetings",     label: "Meetings", icon: CalendarClock },
   ]},
 ];
 
@@ -213,6 +244,31 @@ const managerNav: NavSection[] = [
     { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
   ]},
   { title: "Comms", items: [
+    { href: "/admin/mail/inbox",   label: "Inbox",    icon: Inbox },
+    { href: "/admin/mail/compose", label: "Compose",  icon: PenLine },
+    { href: "/admin/mail/sent",    label: "Sent",     icon: Send },
+    { href: "/admin/mail/files",   label: "File Share", icon: Paperclip },
+    { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
+    { href: "/dashboard/meetings", label: "Meetings", icon: CalendarClock },
+  ]},
+];
+
+const internshipNav: NavSection[] = [
+  { title: "Internship", items: [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard/academy", label: "Training Academy", icon: BookOpen },
+    { href: "/dashboard/profile", label: "My Profile", icon: User },
+    { href: "/dashboard/attendance", label: "Attendance", icon: CalendarDays },
+  ]},
+  { title: "Workspace", items: [
+    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
+    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
+    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
+  ]},
+  { title: "Comms", items: [
+    { href: "/admin/mail/inbox",   label: "Inbox",    icon: Inbox },
+    { href: "/admin/mail/compose", label: "Compose",  icon: PenLine },
+    { href: "/admin/mail/sent",    label: "Sent",     icon: Send },
     { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
     { href: "/dashboard/meetings", label: "Meetings", icon: CalendarClock },
   ]},
@@ -240,6 +296,10 @@ const employeeNav: NavSection[] = [
     { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
   ]},
   { title: "Comms", items: [
+    { href: "/admin/mail/inbox",   label: "Inbox",    icon: Inbox },
+    { href: "/admin/mail/compose", label: "Compose",  icon: PenLine },
+    { href: "/admin/mail/sent",    label: "Sent",     icon: Send },
+    { href: "/admin/mail/drafts",  label: "Drafts",   icon: FileText },
     { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
     { href: "/dashboard/meetings", label: "Meetings", icon: CalendarClock },
   ]},
@@ -252,6 +312,7 @@ function getNav(role?: string): NavSection[] {
     case "hr": return hrNav;
     case "lead": return leadNav;
     case "manager": return managerNav;
+    case "internship": return internshipNav;
     case "sales": return salesNav;
     default: return employeeNav;
   }
@@ -261,10 +322,11 @@ const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
   super_admin: { label: "Super Admin", cls: "bg-purple-500/10 text-purple-500" },
   accounts: { label: "Accounts", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
   hr: { label: "HR", cls: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  manager: { label: "Department Lead", cls: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
   lead: { label: "Team Lead", cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
-  manager: { label: "Department Manager", cls: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
   employee: { label: "Employee", cls: "bg-theme-raised text-theme-muted" },
   sales: { label: "Sales", cls: "bg-rose-500/10 text-rose-500" },
+  internship: { label: "Internship", cls: "bg-indigo-500/10 text-indigo-500" },
 };
 
 // ─── Component ───────────────────────────────────────────

@@ -21,6 +21,9 @@ import {
   ArrowLeft,
   DollarSign,
   User,
+  ShieldCheck,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 
 interface Employee {
@@ -47,6 +50,7 @@ export default function EmployeeProfile() {
   const [kpiScore, setKpiScore] = useState<KpiScore | null>(null);
   const [wallet, setWallet]   = useState<WalletData | null>(null);
   const [team, setTeam]       = useState<TeamData | null>(null);
+  const [onboarding, setOnboarding] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
 
@@ -70,6 +74,7 @@ export default function EmployeeProfile() {
         setEmployee(currentEmployee);
         setUsingFallback(true);
       }
+
 
       try {
         const kpiRes = await request<any>({ url: `/api/kpi?employeeId=${user.id}&month=${dayjs().month() + 1}&year=${dayjs().year()}` });
@@ -167,7 +172,7 @@ export default function EmployeeProfile() {
                       <span className={cn("h-1 w-1 rounded-full", employee.is_active ? "bg-emerald-500" : "bg-red-500")} />
                       {employee.is_active ? "Active" : "Inactive"}
                     </span>
-                    <span className="rounded-md bg-theme-raised px-2 py-0.5 text-[11px] font-semibold text-theme-fg">
+                    <span className="rounded-md bg-theme-raised px-2 py-0.5 text-[11px] font-semibold text-theme-muted">
                       {employee.role}
                     </span>
                     {employee.employment_type && (
@@ -452,6 +457,58 @@ export default function EmployeeProfile() {
                 </div>
               </div>
             )}
+
+            {/* Onboarding & Compliance History */}
+            <div className="page-card overflow-hidden p-0">
+              <div className="flex items-center gap-2 border-b border-theme-border px-5 py-4">
+                <ShieldCheck size={15} className="text-theme-muted" />
+                <h3 className="text-sm font-semibold text-theme-fg">Onboarding & Compliance History</h3>
+              </div>
+              <div className="px-5 py-4">
+                {onboarding ? (
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3 p-4 rounded-xl bg-theme-raised/50 border border-theme-border">
+                      <div className="h-8 w-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
+                        <CheckCircle2 size={16} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-theme-fg">Consultant Onboarding Completed</p>
+                        <p className="text-xs text-theme-muted mt-0.5">
+                          Successfully verified all prerequisites and signed the Consultant Agreement.
+                        </p>
+                        <div className="flex items-center gap-4 mt-3 text-[10px] font-bold uppercase tracking-widest text-theme-muted">
+                          <span className="flex items-center gap-1.5">
+                            <Calendar size={10} />
+                            {dayjs(onboarding.completed_at).format("DD MMM YYYY")}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <Clock size={10} />
+                            {dayjs(onboarding.completed_at).format("hh:mm A")}
+                          </span>
+                          <span className="text-emerald-500 flex items-center gap-1">
+                            <ShieldCheck size={10} />
+                            NDA Signed
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                      {onboarding.completed_steps?.map((step: string, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-theme-raised/30 border border-theme-border/50">
+                          <CheckCircle2 size={12} className="text-emerald-500" />
+                          <span className="text-[11px] font-medium text-theme-muted">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-8 text-center bg-theme-raised/30 rounded-xl border border-dashed border-theme-border">
+                    <p className="text-xs text-theme-subtle">No onboarding history found for this profile.</p>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Quick Links */}
             <div className="page-card">

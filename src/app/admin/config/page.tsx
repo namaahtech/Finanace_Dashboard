@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { formatCurrency, cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 import axios from "axios";
 import { useToast } from "@/components/ui/Toast";
-import { Settings, ShieldAlert, Save, TrendingUp, IndianRupee, Layers, Briefcase, Mail, Bell, Lock, AlertCircle, RefreshCw, ChevronDown, Building2, LayoutGrid } from "lucide-react";
+import { 
+  Settings, ShieldAlert, Save, TrendingUp, IndianRupee, Layers, 
+  Briefcase, Mail, Bell, Lock, AlertCircle, RefreshCw, 
+  ChevronDown, Building2, LayoutGrid, FileCheck, CheckCircle2, Rocket 
+} from "lucide-react";
 
 interface Config {
   company_revenue: number;
@@ -30,6 +35,7 @@ interface Config {
   company_name: string;
   founder_name: string;
   founder_designation: string;
+  consultant_agreement_url: string;
 }
 
 const B = "#FBFBFA"; 
@@ -42,6 +48,61 @@ export default function AdminConfigPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [analyzingTask, setAnalyzingTask] = useState<any>(null);
+
+  useEffect(() => {
+    if (!analyzingTask?.id) return;
+
+    const channel = supabase.channel(`analysis_${analyzingTask.id}`);
+    
+    channel
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'onboarding_analysis_queue',
+          filter: `id=eq.${analyzingTask.id}`
+        },
+        (payload) => {
+          setAnalyzingTask(payload.new);
+          if (payload.new.status === 'completed') {
+            showToast("Gemma 4: Legal Neural Analysis Completed.", "success");
+            load();
+          }
+        }
+      )
+      .subscribe();
+
+    // Fallback Polling (Every 3s) in case Realtime websocket is blocked
+    const pollInterval = setInterval(async () => {
+      if (analyzingTask?.status === 'completed' || analyzingTask?.status === 'failed') {
+        clearInterval(pollInterval);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('onboarding_analysis_queue')
+        .select('*')
+        .eq('id', analyzingTask.id)
+        .single();
+      
+      if (data) {
+        setAnalyzingTask(data);
+        if (data.status === 'completed') {
+          showToast("AI Refinement Synced.", "success");
+          load();
+          clearInterval(pollInterval);
+        }
+      }
+    }, 3000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
+    };
+  }, [analyzingTask?.id]);
 
   const [systemState, setSystemState] = useState({
     maintenanceMode: false,
@@ -105,6 +166,57 @@ export default function AdminConfigPage() {
       setTestingSmtp(false);
       showToast("SMTP Relay Handshake Successful.", "success");
     }, 1500);
+  };
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast("File size must be under 10MB.", "error");
+      return;
+    }
+
+    setUploadingPdf(true);
+    try {
+      // 1. Upload to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `consultant_agreement_${Date.now()}.${fileExt}`;
+      const filePath = `agreements/${fileName}`;
+
+      const { data, error: uploadError } = await supabase.storage
+        .from('legal')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('legal')
+        .getPublicUrl(filePath);
+
+      // 3. Queue AI Analysis (Gemma 4 + OCR)
+      const { data: queueData, error: queueError } = await supabase
+        .from('onboarding_analysis_queue')
+        .insert({
+          pdf_url: publicUrl,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (queueError) throw queueError;
+      setAnalyzingTask(queueData);
+
+      // 4. Update form
+      setForm(prev => ({ ...prev, consultant_agreement_url: publicUrl }));
+      showToast("PDF Uploaded. AI Neural Analysis (Gemma 4) triggered.", "success");
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Failed to upload PDF.", "error");
+    } finally {
+      setUploadingPdf(false);
+    }
   };
 
   const n = (key: keyof Config) => form[key] as number;
@@ -392,9 +504,93 @@ export default function AdminConfigPage() {
               </div>
             </section>
 
-            {/* BLOCK 3: INTEGRATIONS */}
+              {/* BLOCK 3: INTEGRATIONS & LEGAL */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
               
+              {/* Consultant Agreement Upload */}
+              <section className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-black/5 p-8">
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center text-white">
+                    <FileCheck size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-[13px] font-black text-black/80 uppercase tracking-widest">Consultant Agreement (PDF)</h3>
+                    <p className="text-[10px] font-medium text-black/40 mt-0.5">Master NDA for all new consultants.</p>
+                  </div>
+                </div>
+
+                <div className="p-8 border-2 border-dashed border-black/10 rounded-2xl bg-black/[0.01] flex flex-col items-center justify-center text-center">
+                  {analyzingTask?.status === 'pending' || analyzingTask?.status === 'processing' ? (
+                    <div className="w-full max-w-md">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <RefreshCw className="w-5 h-5 text-black animate-spin" />
+                          <span className="text-sm font-bold text-black/80">Gemma 4 Analysis in Progress...</span>
+                        </div>
+                        <span className="text-xs font-medium text-black/40">Neural Compliance Engine Active</span>
+                      </div>
+                      <div className="h-2 w-full bg-black/5 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-black transition-all duration-1000 ease-in-out" 
+                          style={{ width: analyzingTask.status === 'pending' ? '30%' : '75%' }} 
+                        />
+                      </div>
+                      <p className="mt-4 text-[11px] text-black/40 uppercase tracking-widest font-bold">OCR + NLP Processing on Mac Mini</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className={cn(
+                        "w-full py-4 rounded-xl border flex items-center justify-center gap-3 mb-6 transition-all",
+                        config?.consultant_agreement_url ? "bg-emerald-50 border-emerald-100 text-emerald-700" : "bg-black/[0.01] border-black/5 text-black/40"
+                      )}>
+                        {config?.consultant_agreement_url ? (
+                          <>
+                            <CheckCircle2 className="w-5 h-5" />
+                            <span className="text-sm font-bold uppercase tracking-widest">Current Agreement Active</span>
+                          </>
+                        ) : (
+                          <span className="text-sm font-medium uppercase tracking-widest">No active agreement found</span>
+                        )}
+                      </div>
+
+                      {config?.consultant_agreement_url && (
+                        <a 
+                          href={config.consultant_agreement_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs font-bold text-black hover:underline mb-8"
+                        >
+                          View Current PDF
+                        </a>
+                      )}
+
+                      <label className="cursor-pointer w-full">
+                        <input 
+                          type="file" 
+                          accept=".pdf" 
+                          onChange={handlePdfUpload}
+                          disabled={uploadingPdf}
+                          className="hidden" 
+                        />
+                        <div className={cn(
+                          "w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center",
+                          uploadingPdf ? "bg-black/5 text-black/20" : "bg-black text-white hover:bg-black/80 shadow-md"
+                        )}>
+                          {uploadingPdf ? "Uploading Master PDF..." : "Upload New Agreement (MAX 10MB)"}
+                        </div>
+                      </label>
+
+                      {analyzingTask?.status === 'completed' && (
+                        <div className="mt-6 flex items-center gap-2 text-[#0D652D]">
+                          <FileCheck className="w-4 h-4" />
+                          <span className="text-xs font-bold">AI ANALYSIS UPDATED SUCCESSFULLY</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </section>
+
               {/* SMTP configuration */}
               <section className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-black/5 p-8">
                 <div className="flex items-center justify-between mb-8">

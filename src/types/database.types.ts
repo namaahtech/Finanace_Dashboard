@@ -3,7 +3,7 @@
 //
 // Manual type definitions below — replace with generated types after Supabase project is set up
 
-export type Role = "super_admin" | "accounts" | "hr" | "lead" | "employee" | "sales";
+export type Role = "super_admin" | "accounts" | "hr" | "manager" | "lead" | "employee" | "sales" | "internship";
 
 export type Database = {
   public: {

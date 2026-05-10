@@ -39,112 +39,64 @@ class RecruitmentProcessor:
             print(f"OCR/Extraction Error: {e}")
         return full_text
 
-
-    def process_candidate(self, resume_text: str, jd_context: str) -> Dict:
+    def process_candidate(self, resume_text: str, jd_context: str) -> tuple:
         """
         Sends the resume and JD to Gemma 4:e4b on Mac Mini for a cognitive audit.
         """
         prompt = f"""
         Role: Senior Executive Technical Recruitment Intelligence Auditor (powered by Gemma 4:e4b)
-        Mission: Perform an exhaustive 360-degree cognitive and technical audit of the candidate's resume against the Target Job Cluster.
-        
-        [JOB CLUSTER CONTEXT]
-        {jd_context}
-        
-        [CANDIDATE RESUME TEXT (OCR EXTRACTED)]
-        {resume_text}
-        
-        [AUDIT REQUIREMENTS]
-        1.  OVERVIEW: Provide a high-level technical summary of the candidate's fit.
-        2.  EDUCATION: Analyze degree relevance, institution prestige, and academic achievements.
-        3.  PROJECTS: Deep-dive into technical complexity, role, and impact of listed projects.
-        4.  EXPERIENCE & WORKS: Evaluate professional tenure, role progression, and industry alignment.
-        5.  ACHIEVEMENTS: Identify quantified impacts, awards, or unique milestones.
-        6.  SKILLS ANALYSIS:
-            - SKILLS USED: List mandatory job skills found in the resume.
-            - SKILLS NOT USED: List mandatory job skills missing from the resume.
-        7.  MATCH PERCENTAGE BREAKDOWN (IMPORTANT: Return each as a 0-100 percentage):
-            - Technical Skills (40% Weight): How well do they match the skill matrix (0-100).
-            - Experience (30% Weight): How well does their tenure match (0-100).
-            - Projects (20% Weight): How well do their projects align (0-100).
-            - Education (10% Weight): How well does their education align (0-100).
-        8.  INTERVIEW STRATEGY: Generate 5 to 10 EXTREMELY TRICKY, technical, and scenario-based interview questions.
-        9.  DECISION: Proceed, Hold, or Rejected.
-
-        Return ONLY a perfectly formatted JSON object (no markdown, no backticks):
-        {
-            "match_score": number, (Weighted total score from 0-100)
-            "decision": "Accepted" | "Hold" | "Rejected",
-            "breakdown": {
-                "skills": number, (0-100 percentage)
-                "experience": number, (0-100 percentage)
-                "projects": number, (0-100 percentage)
-                "education": number (0-100 percentage)
-            },
-            "resume_profile": {
-                "summary": "Executive summary string",
-                "overview": "Detailed professional profile string",
-                "education": "Academic audit string",
-                "projects": "Project analysis string",
-                "experience": "Tenure audit string",
-                "achievements": "Key results string"
-            },
-            "recommendations": {
-                "pros": ["string"],
-                "matched_skills": ["string"]
-            },
-            "gap_analysis": {
-                "cons": ["string"],
-                "missing_skills": ["string"]
-            },
-            "interview_questions": [
-                { "question": "string", "reason": "rationale for this question" }
-            ]
-        }
+        [CONTEXT]
+        JD: {jd_context}
+        Resume: {resume_text}
+        Return ONLY a perfectly formatted JSON object with match_score, decision, and breakdown.
         """
         
         try:
             response = requests.post(
                 self.endpoint,
-                headers={
-                    "Authorization": f"Bearer {self.bridge_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": "json"
-                },
+                headers={"Authorization": f"Bearer {self.bridge_key}", "Content-Type": "application/json"},
+                json={"model": self.model, "prompt": prompt, "stream": False, "format": "json"},
                 timeout=180
             )
             response.raise_for_status()
             res_json = response.json()
             ai_output = res_json.get("response", "{}")
-            
-            # Extract metrics
             metrics = {
-                "prompt_tokens": res_json.get("prompt_eval_count", 0),
-                "completion_tokens": res_json.get("eval_count", 0),
-                "total_duration_ms": res_json.get("total_duration", 0) // 1_000_000, # convert ns to ms
+                "total_duration_ms": res_json.get("total_duration", 0) // 1_000_000,
                 "model": self.model
             }
-            
             return json.loads(ai_output), metrics
         except Exception as e:
             print(f"AI Engine Error: {e}")
-            return {
-                "score": 50,
-                "decision": "Hold",
-                "summary": f"Audit failed: {str(e)}"
-            }, {}
+            return {"match_score": 50, "decision": "Hold"}, {}
+
+    def analyze_onboarding_agreement(self, pdf_text: str) -> str:
+        """
+        Uses Gemma 4:e4b to clean up OCR text and format it into a professional Consultant Agreement.
+        """
+        prompt = f"""
+        Role: Legal Compliance AI (powered by Gemma 4:e4b)
+        Task: Clean and format this OCR text into a professional Consultant Agreement.
+        [OCR RAW TEXT]
+        {pdf_text}
+        Output ONLY the cleaned agreement text.
+        """
+        
+        try:
+            response = requests.post(
+                self.endpoint,
+                headers={"Authorization": f"Bearer {self.bridge_key}", "Content-Type": "application/json"},
+                json={"model": self.model, "prompt": prompt, "stream": False},
+                timeout=300
+            )
+            response.raise_for_status()
+            return response.json().get("response", "").strip()
+        except Exception as e:
+            print(f"Agreement Analysis Error: {e}")
+            return pdf_text
 
     def cluster_jobs(self, job_titles: List[str]) -> List[Dict]:
-        """
-        Group similar jobs into strategic clusters.
-        """
-        # Implementation for clustering logic
-        return [{"cluster": "Engineering", "roles": job_titles}]
+        return [{"cluster": "General", "roles": job_titles}]
 
 if __name__ == "__main__":
     processor = RecruitmentProcessor()

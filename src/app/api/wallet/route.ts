@@ -1,20 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
-import { authenticate } from "@/middleware/auth";
+import { withAuth, apiError, apiSuccess } from "@/middleware/auth";
 import { getWalletSummary } from "@/services/walletService";
 
 // GET /api/wallet — employee sees own wallet
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req, authUser) => {
+  const { searchParams } = new URL(req.url);
+  const employeeId = authUser.role === "employee" ? authUser.userId : (searchParams.get("employeeId") ?? authUser.userId);
+
   try {
-    const authUser = await authenticate();
-
-    const { searchParams } = new URL(req.url);
-    const employeeId =
-      authUser.role === "employee" ? authUser.userId : (searchParams.get("employeeId") ?? authUser.userId);
-
     const data = await getWalletSummary(employeeId);
-    return NextResponse.json(data);
+    return apiSuccess(data);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Error";
-    return NextResponse.json({ error: msg }, { status: 401 });
+    return apiError(err instanceof Error ? err.message : "Error fetching wallet");
   }
-}
+});

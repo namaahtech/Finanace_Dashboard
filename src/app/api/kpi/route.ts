@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { withAuth, apiError, apiSuccess } from "@/middleware/auth";
 
 // GET /api/kpi — fetch KPI metrics (real-time)
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req, authUser) => {
   try {
     const { searchParams } = new URL(req.url);
     const employeeId = searchParams.get("employeeId");
     const month = searchParams.get("month");
     const year = searchParams.get("year");
     const allEmployees = searchParams.get("allEmployees") === "true";
+
+    const { createClient } = await import("@/lib/supabaseServer");
+    const supabase = await createClient();
 
     // Use explicit relationship names to disambiguate foreign keys
     let query = supabase
@@ -51,22 +54,19 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({
+    return apiSuccess({
       success: true,
       data: data || [],
       count: data?.length || 0
     });
   } catch (err: any) {
     console.error("KPI fetch error:", err);
-    return NextResponse.json(
-      { success: false, error: err.message || "Failed to fetch KPI" },
-      { status: 500 }
-    );
+    return apiError(err.message || "Failed to fetch KPI");
   }
-}
+});
 
 // POST /api/kpi — create/update KPI score (HR/Lead/Admin)
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req) => {
   try {
     const body = await req.json();
     const {
@@ -86,11 +86,11 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!employee_id || month === undefined || !year) {
-      return NextResponse.json(
-        { success: false, error: "Missing required fields: employee_id, month, year" },
-        { status: 400 }
-      );
+      return apiError("Missing required fields: employee_id, month, year", 400);
     }
+
+    const { createClient } = await import("@/lib/supabaseServer");
+    const supabase = await createClient();
 
     // Insert or update KPI with explicit relationship select
     const { data, error } = await supabase
@@ -135,59 +135,25 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json(
-      { success: true, data: data?.[0] },
-      { status: id ? 200 : 201 }
-    );
+    return apiSuccess({ success: true, data: data?.[0] }, id ? 200 : 201);
   } catch (err: any) {
     console.error("KPI save error:", err);
-    return NextResponse.json(
-      { success: false, error: err.message || "Failed to save KPI" },
-      { status: 500 }
-    );
+    return apiError(err.message || "Failed to save KPI");
   }
-}
-
-// GET_SUMMARY — fetch performance summaries (internal, not a route handler)
-async function getSummary(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const employeeId = searchParams.get("employeeId");
-
-    let query = supabase
-      .from("kpi_summary")
-      .select("*, employee:employees(id, name, employeeId, department)");
-
-    if (employeeId) {
-      query = query.eq("employee_id", employeeId);
-    }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-
-    return NextResponse.json({ success: true, data });
-  } catch (err: any) {
-    console.error("KPI summary error:", err);
-    return NextResponse.json(
-      { success: false, error: err.message },
-      { status: 500 }
-    );
-  }
-}
+}, "hr", "lead", "super_admin");
 
 // DELETE /api/kpi — delete KPI record (Admin only)
-export async function DELETE(req: NextRequest) {
+export const DELETE = withAuth(async (req) => {
   try {
     const { searchParams } = new URL(req.url);
     const kpiId = searchParams.get("id");
 
     if (!kpiId) {
-      return NextResponse.json(
-        { success: false, error: "Missing KPI ID" },
-        { status: 400 }
-      );
+      return apiError("Missing KPI ID", 400);
     }
+
+    const { createClient } = await import("@/lib/supabaseServer");
+    const supabase = await createClient();
 
     const { error } = await supabase
       .from("kpi_metrics")
@@ -196,12 +162,9 @@ export async function DELETE(req: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, message: "KPI deleted" });
+    return apiSuccess({ success: true, message: "KPI deleted" });
   } catch (err: any) {
     console.error("KPI delete error:", err);
-    return NextResponse.json(
-      { success: false, error: err.message },
-      { status: 500 }
-    );
+    return apiError(err.message || "Failed to delete KPI");
   }
-}
+}, "super_admin");

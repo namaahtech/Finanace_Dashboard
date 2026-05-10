@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { motion } from "framer-motion";
 import { 
@@ -13,54 +13,105 @@ import {
   TrendingUp,
   Star,
   CheckCircle2,
-  Lock
+  Lock,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/layout/AuthProvider";
 
-const MOCK_COURSES = [
-  {
-    id: "1",
-    title: "Engineering Excellence: Code Standards",
-    description: "Learn the high-performance coding standards at Namaah Tech.",
-    thumbnail: "https://images.unsplash.com/photo-1516116216624-53e697fedbea?q=80&w=2128&auto=format&fit=crop",
-    category: "Engineering",
-    duration: "45m",
-    lessons: 12,
-    progress: 65,
-    instructor: "Aryan K."
-  },
-  {
-    id: "2",
-    title: "Sales Mastery: The Namaah Pitch",
-    description: "Master the art of high-ticket sales and client acquisition.",
-    thumbnail: "https://images.unsplash.com/photo-1552581234-26160f608093?q=80&w=2070&auto=format&fit=crop",
-    category: "Sales",
-    duration: "1h 20m",
-    lessons: 8,
-    progress: 0,
-    instructor: "Priya S."
-  },
-  {
-    id: "3",
-    title: "Cybersecurity & Data Privacy",
-    description: "Essential training on protecting company and client data.",
-    thumbnail: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2070&auto=format&fit=crop",
-    category: "Compliance",
-    duration: "30m",
-    lessons: 5,
-    progress: 100,
-    instructor: "Security Team"
-  }
-];
-
 export default function TrainingAcademyPage() {
   const { user } = useAuth();
-  const [courses, setCourses] = useState(MOCK_COURSES);
-  const [loading, setLoading] = useState(false);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [stats, setStats] = useState([
+    { label: "Active Courses", value: "0", icon: BookOpen, color: "text-blue-500", bg: "bg-blue-500/10" },
+    { label: "Hours Learned", value: "0", icon: Clock, color: "text-purple-500", bg: "bg-purple-500/10" },
+    { label: "Certificates", value: "0", icon: Award, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+    { label: "Academy Rank", value: "-", icon: TrendingUp, color: "text-amber-500", bg: "bg-amber-500/10" },
+  ]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const fetchAcademyData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    if (!user?.id) return;
+
+    try {
+      // 1. Fetch Published Courses with User Enrollments
+      const { data: courseData, error: courseErr } = await supabase
+        .from('lms_courses')
+        .select(`
+          *,
+          lms_enrollments (
+            progress_percent,
+            completed_at
+          ),
+          lms_modules (
+            id,
+            lms_lessons (id)
+          )
+        `)
+        .eq('status', 'published')
+        .order('created_at', { ascending: false });
+
+      if (courseErr) throw courseErr;
+
+      // 2. Fetch User Certifications
+      const { count: certCount } = await supabase
+        .from('lms_certifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('employee_id', user.id);
+
+      if (courseData) {
+        const formatted = courseData.map(c => {
+          const enrollment = c.lms_enrollments?.find((e: any) => true) || null; // Filtering should happen in query if possible
+          const totalLessons = c.lms_modules?.reduce((acc: number, mod: any) => acc + (mod.lms_lessons?.length || 0), 0) || 0;
+
+          return {
+            id: c.id,
+            title: c.title,
+            description: c.description || 'No description available.',
+            thumbnail: c.thumbnail_url || 'https://images.unsplash.com/photo-1516116216624-53e697fedbea?q=80&w=2128&auto=format&fit=crop',
+            category: c.category || 'General',
+            duration: 'Flexible',
+            lessons: totalLessons,
+            progress: enrollment?.progress_percent || 0,
+            instructor: 'Namaah Academy'
+          };
+        });
+        setCourses(formatted);
+
+        // Update Stats
+        const activeCount = formatted.filter(f => f.progress > 0 && f.progress < 100).length;
+        setStats([
+          { label: "Active Courses", value: String(activeCount), icon: BookOpen, color: "text-blue-500", bg: "bg-blue-500/10" },
+          { label: "Hours Learned", value: "0", icon: Clock, color: "text-purple-500", bg: "bg-purple-500/10" },
+          { label: "Certificates", value: String(certCount || 0), icon: Award, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+          { label: "Academy Rank", value: "-", icon: TrendingUp, color: "text-amber-500", bg: "bg-amber-500/10" },
+        ]);
+      }
+    } catch (err) {
+      console.error("Academy Fetch Error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchAcademyData();
+
+    // Real-time for employee view
+    const channel = supabase.channel('academy_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lms_courses', filter: 'status=eq.published' }, () => fetchAcademyData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lms_enrollments', filter: `employee_id=eq.${user?.id}` }, () => fetchAcademyData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lms_certifications', filter: `employee_id=eq.${user?.id}` }, () => fetchAcademyData(true))
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchAcademyData, user?.id]);
 
   const filteredCourses = courses.filter(c => 
     c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -83,7 +134,7 @@ export default function TrainingAcademyPage() {
               className="bg-theme-surface border border-theme-border rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-theme-primary/20 w-64 transition-all"
             />
           </div>
-          <Button variant="secondary" size="sm">
+          <Button variant="secondary" size="sm" onClick={() => window.location.href = '/dashboard/academy/certificates'}>
             <Award size={14} className="mr-2" /> My Certificates
           </Button>
         </div>
@@ -116,12 +167,7 @@ export default function TrainingAcademyPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {[
-            { label: "Active Courses", value: "3", icon: BookOpen, color: "text-blue-500", bg: "bg-blue-500/10" },
-            { label: "Hours Learned", value: "12.5", icon: Clock, color: "text-purple-500", bg: "bg-purple-500/10" },
-            { label: "Certificates", value: "5", icon: Award, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-            { label: "Academy Rank", value: "#14", icon: TrendingUp, color: "text-amber-500", bg: "bg-amber-500/10" },
-          ].map((stat, i) => (
+          {stats.map((stat, i) => (
             <div key={i} className="page-card flex items-center gap-4">
               <div className={`h-12 w-12 rounded-2xl ${stat.bg} flex items-center justify-center ${stat.color}`}>
                 <stat.icon size={20} />
@@ -152,65 +198,76 @@ export default function TrainingAcademyPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {filteredCourses.map((course) => (
-              <motion.div 
-                key={course.id}
-                whileHover={{ y: -5 }}
-                className="group cursor-pointer"
-              >
-                <div className="bg-theme-surface border border-theme-border rounded-[2rem] overflow-hidden shadow-xl shadow-black/5 flex flex-col h-full">
-                  <div className="relative aspect-video overflow-hidden">
-                    <img 
-                      src={course.thumbnail} 
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      alt={course.title}
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
-                      <div className="h-12 w-12 rounded-full bg-emerald-500 flex items-center justify-center text-black shadow-lg">
-                        <Play size={20} fill="currentColor" />
+          {loading ? (
+            <div className="py-20 text-center text-theme-muted font-black uppercase tracking-widest text-sm">
+              <Loader2 className="animate-spin inline mr-2" size={20} /> Loading your curriculum...
+            </div>
+          ) : filteredCourses.length === 0 ? (
+            <div className="py-20 text-center text-theme-muted font-black uppercase tracking-widest text-sm">
+              No courses available at the moment.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {filteredCourses.map((course) => (
+                <motion.div 
+                  key={course.id}
+                  whileHover={{ y: -5 }}
+                  className="group cursor-pointer"
+                  onClick={() => window.location.href = `/dashboard/academy/${course.id}`}
+                >
+                  <div className="bg-theme-surface border border-theme-border rounded-[2rem] overflow-hidden shadow-xl shadow-black/5 flex flex-col h-full">
+                    <div className="relative aspect-video overflow-hidden">
+                      <img 
+                        src={course.thumbnail} 
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        alt={course.title}
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
+                        <div className="h-12 w-12 rounded-full bg-emerald-500 flex items-center justify-center text-black shadow-lg">
+                          <Play size={20} fill="currentColor" />
+                        </div>
                       </div>
-                    </div>
-                    <div className="absolute top-3 left-3">
-                      <Badge className="bg-black/60 backdrop-blur-md border-white/10 text-white text-[10px]">{course.category}</Badge>
-                    </div>
-                    {course.progress > 0 && (
-                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
-                        <div 
-                          className="h-full bg-emerald-500 transition-all duration-1000" 
-                          style={{ width: `${course.progress}%` }} 
-                        />
+                      <div className="absolute top-3 left-3">
+                        <Badge className="bg-black/60 backdrop-blur-md border-white/10 text-white text-[10px]">{course.category}</Badge>
                       </div>
-                    )}
-                  </div>
+                      {course.progress > 0 && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+                          <div 
+                            className="h-full bg-emerald-500 transition-all duration-1000" 
+                            style={{ width: `${course.progress}%` }} 
+                          />
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="p-6 flex-1 flex flex-col">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">{course.instructor}</p>
-                      <div className="flex items-center gap-1.5 text-theme-muted text-[10px] font-bold">
-                        <Clock size={10} /> {course.duration}
+                    <div className="p-6 flex-1 flex flex-col">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest">{course.instructor}</p>
+                        <div className="flex items-center gap-1.5 text-theme-muted text-[10px] font-bold">
+                          <Clock size={10} /> {course.duration}
+                        </div>
                       </div>
-                    </div>
-                    <h4 className="text-lg font-bold mb-2 group-hover:text-theme-primary transition-colors">{course.title}</h4>
-                    <p className="text-xs text-theme-muted line-clamp-2 mb-6 flex-1">{course.description}</p>
-                    
-                    <div className="flex items-center justify-between mt-auto pt-4 border-t border-theme-border">
-                      <div className="flex items-center gap-1.5 text-theme-muted text-[10px] font-black">
-                        <BookOpen size={12} /> {course.lessons} LESSONS
-                      </div>
-                      <div className="flex items-center gap-1 text-emerald-500 text-xs font-bold">
-                        {course.progress === 100 ? (
-                          <span className="flex items-center gap-1"><CheckCircle2 size={14} /> Completed</span>
-                        ) : (
-                          <span className="text-theme-muted">Start Course <ChevronRight size={14} className="inline" /></span>
-                        )}
+                      <h4 className="text-lg font-bold mb-2 group-hover:text-theme-primary transition-colors">{course.title}</h4>
+                      <p className="text-xs text-theme-muted line-clamp-2 mb-6 flex-1">{course.description}</p>
+                      
+                      <div className="flex items-center justify-between mt-auto pt-4 border-t border-theme-border">
+                        <div className="flex items-center gap-1.5 text-theme-muted text-[10px] font-black">
+                          <BookOpen size={12} /> {course.lessons} LESSONS
+                        </div>
+                        <div className="flex items-center gap-1 text-emerald-500 text-xs font-bold">
+                          {course.progress === 100 ? (
+                            <span className="flex items-center gap-1"><CheckCircle2 size={14} /> Completed</span>
+                          ) : (
+                            <span className="text-theme-muted">Start Course <ChevronRight size={14} className="inline" /></span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>
