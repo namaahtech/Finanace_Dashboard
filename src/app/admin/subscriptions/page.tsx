@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
@@ -522,6 +522,7 @@ export default function SubscriptionsPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <DashboardShell
+      moduleKey="subscriptions"
       title="Subscriptions"
       subtitle="Manage SaaS tools, licenses, access credentials and team assignments."
       actions={

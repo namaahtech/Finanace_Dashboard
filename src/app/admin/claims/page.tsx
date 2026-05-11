@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import axios from "axios";
 import { useToast } from "@/components/ui/Toast";
+import { usePermission } from "@/hooks/usePermission";
 import {
   FileText,
   Clock,
@@ -42,6 +43,7 @@ function monthLabel(m: number, y: number) {
 
 export default function AdminClaimsPage() {
   const { showToast } = useToast();
+  const { canEdit, canCreate } = usePermission("claims");
   const [claims, setClaims] = useState<Claim[]>(MOCK_CLAIMS);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -99,12 +101,15 @@ export default function AdminClaimsPage() {
 
   return (
     <DashboardShell
+      moduleKey="claims"
       title="Claims"
       subtitle="Review and process employee incentive claim requests."
       actions={
-        <Button variant="secondary" size="sm" onClick={() => setCycleConfirm(true)}>
-          <RefreshCw size={13} className="mr-1.5" /> Advance Cycle
-        </Button>
+        canEdit ? (
+          <Button variant="secondary" size="sm" onClick={() => setCycleConfirm(true)}>
+            <RefreshCw size={13} className="mr-1.5" /> Advance Cycle
+          </Button>
+        ) : null
       }
     >
       <div className="space-y-5">
@@ -225,7 +230,7 @@ export default function AdminClaimsPage() {
                     </td>
                     <td className="px-5 py-3 text-xs text-theme-muted">{formatDate(c.requested_at)}</td>
                     <td className="px-5 py-3 text-right">
-                      {c.status === "approved" && (
+                      {canEdit && c.status === "approved" && (
                         <Button
                           size="sm"
                           variant="success"

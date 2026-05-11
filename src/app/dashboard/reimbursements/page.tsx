@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -94,6 +94,7 @@ export default function ReimbursementsPage() {
 
   return (
     <DashboardShell
+      moduleKey="my_reimbursements"
       title="Reimbursements"
       subtitle="Submit and track expense reimbursement requests."
       actions={

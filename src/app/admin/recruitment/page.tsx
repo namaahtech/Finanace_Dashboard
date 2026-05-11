@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { SlideOver } from "@/components/ui/SlideOver";
+import { usePermission } from "@/hooks/usePermission";
 import { supabase } from "@/lib/supabase";
 
 interface Candidate {
@@ -193,6 +194,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 /* ─── Main Page ───────────────────────────────────────────────────────────── */
 export default function RecruitmentHubPage() {
+  const { canCreate } = usePermission("recruitment");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -300,15 +302,18 @@ export default function RecruitmentHubPage() {
 
   return (
     <DashboardShell
+      moduleKey="recruitment"
       title="Recruitment Hub"
       subtitle="Candidate pipeline and hiring decisions"
       actions={
-        <button
-          onClick={() => { setJobForm(defaultJobForm); setPostJobOpen(true); }}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity"
-        >
-          <Plus size={13} /> Post New Job
-        </button>
+        canCreate ? (
+          <button
+            onClick={() => { setJobForm(defaultJobForm); setPostJobOpen(true); }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity"
+          >
+            <Plus size={13} /> Post New Job
+          </button>
+        ) : null
       }
     >
       <div className="space-y-5">

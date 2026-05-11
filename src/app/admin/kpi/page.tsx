@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
@@ -6,6 +6,7 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/components/layout/AuthProvider";
+import { usePermission } from "@/hooks/usePermission";
 import { getYearRange } from "@/lib/utils";
 import {
   calculateBehavioralScore,
@@ -229,7 +230,7 @@ export default function AdminKpiPage() {
     createDefaultForm(today.getMonth() + 1, today.getFullYear())
   );
 
-  const canEdit = user?.role === "super_admin" || user?.role === "hr" || user?.role === "lead";
+  const { canEdit, canExport } = usePermission("kpi_kra");
 
   // Load real users with safe field mapping
   useEffect(() => {
@@ -417,6 +418,7 @@ export default function AdminKpiPage() {
 
   return (
     <DashboardShell
+      moduleKey="kpi_kra"
       title="KPI & KRA"
       subtitle="Track, score, and review employee performance each month."
       actions={

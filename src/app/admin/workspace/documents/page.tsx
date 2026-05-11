@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -254,6 +254,7 @@ export default function DocumentsPage() {
 
   return (
     <DashboardShell
+      moduleKey="workspace_documents"
       title="Documents"
       subtitle="Rich text docs, reports and wikis"
       actions={

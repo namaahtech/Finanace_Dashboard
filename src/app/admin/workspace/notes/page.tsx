@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -276,6 +276,7 @@ export default function NotesPage() {
 
   return (
     <DashboardShell
+      moduleKey="workspace_notes"
       title="Notes"
       subtitle="Quick notes, ideas and checklists"
       actions={

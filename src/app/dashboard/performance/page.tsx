@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -73,6 +73,7 @@ export default function PerformancePage() {
 
   return (
     <DashboardShell
+      moduleKey="my_performance"
       title="Performance"
       subtitle="Monthly KPI / KRA scores and trend analysis."
     >

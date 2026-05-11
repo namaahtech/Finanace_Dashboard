@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -232,6 +232,7 @@ export default function InboxPage() {
 
   return (
     <DashboardShell
+      moduleKey="mail_inbox"
       title="Inbox"
       subtitle="Your emails, AI-classified and organized."
       actions={

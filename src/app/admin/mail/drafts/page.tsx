@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -46,6 +46,7 @@ export default function DraftsPage() {
 
   return (
     <DashboardShell
+      moduleKey="mail_drafts"
       title="Drafts"
       subtitle="Your saved draft emails."
       actions={

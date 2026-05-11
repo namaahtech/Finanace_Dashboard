@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -6,6 +6,7 @@ import { Badge, statusBadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import axios from "axios";
+import { usePermission } from "@/hooks/usePermission";
 import {
   FileText,
   Clock,
@@ -44,6 +45,7 @@ function getInitials(name: string) {
 }
 
 export default function AdminReimbursementsPage() {
+  const { canEdit } = usePermission("reimbursements");
   const [items, setItems] = useState<Reimbursement[]>(MOCK_REIMBURSEMENTS);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -94,6 +96,7 @@ export default function AdminReimbursementsPage() {
 
   return (
     <DashboardShell
+      moduleKey="reimbursements"
       title="Reimbursements"
       subtitle="Review and process employee expense reimbursement requests."
     >
@@ -214,7 +217,7 @@ export default function AdminReimbursementsPage() {
                     <td className="px-5 py-3 text-xs text-theme-muted">{formatDate(r.createdAt)}</td>
                     <td className="px-5 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {r.status === "pending" && (
+                        {canEdit && r.status === "pending" && (
                           <>
                             <Button size="sm" variant="success" loading={processing === r._id} onClick={() => handleAction(r._id, "approve")}>
                               Approve
@@ -224,7 +227,7 @@ export default function AdminReimbursementsPage() {
                             </Button>
                           </>
                         )}
-                        {r.status === "approved" && (
+                        {canEdit && r.status === "approved" && (
                           <Button size="sm" variant="primary" loading={processing === r._id} onClick={() => handleAction(r._id, "pay")}>
                             <Banknote size={12} className="mr-1" /> Mark Paid
                           </Button>

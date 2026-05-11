@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import {
@@ -685,6 +685,7 @@ export default function InterviewsPage() {
 
   return (
     <DashboardShell
+      moduleKey="interviews"
       title="Recruitment Interviews"
       subtitle="Autonomous Talent Assessment & Live Audits"
       actions={

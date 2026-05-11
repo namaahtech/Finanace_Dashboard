@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
@@ -302,6 +302,7 @@ export default function AdminOverview() {
 
   return (
     <DashboardShell
+      moduleKey="admin_dashboard"
       title="Dashboard"
       subtitle="Company performance, payouts, and key metrics at a glance."
       actions={

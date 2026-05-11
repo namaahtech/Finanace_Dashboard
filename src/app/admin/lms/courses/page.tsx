@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -450,6 +450,7 @@ export default function ManageCoursesPage() {
 
   return (
     <DashboardShell
+      moduleKey="lms_courses"
       title="Manage Courses"
       subtitle={
         view === "builder" && selectedCourse

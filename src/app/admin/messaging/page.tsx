@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { useChannels, useMessaging, usePresence, type Channel, type Message } from "@/hooks/useMessaging";
 import { useAuth } from "@/components/layout/AuthProvider";
+import { usePermission } from "@/hooks/usePermission";
+import { useRouter } from "next/navigation";
 import { useNotifications } from "@/components/layout/NotificationProvider";
 import { supabase } from "@/lib/supabase";
 
@@ -119,6 +121,19 @@ function MessageItem({
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function AdminMessagingPage() {
   const { user } = useAuth();
+  const { canView } = usePermission("messages");
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && user.role !== "super_admin" && canView === false) {
+      router.replace(
+        user.role === "lead" ? "/lead/dashboard"
+        : user.role === "manager" ? "/manager/dashboard"
+        : user.role === "employee" || user.role === "internship" || user.role === "sales" ? "/dashboard"
+        : "/admin"
+      );
+    }
+  }, [canView, user, router]);
   const { channels, loading: chLoading, refetch: refetchChannels } = useChannels(true);
 
   const [activeId, setActiveId]       = useState<string | null>(null);

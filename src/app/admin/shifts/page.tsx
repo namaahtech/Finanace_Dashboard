@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useRef } from "react";
 import { 
@@ -270,6 +270,7 @@ export default function ShiftManagementPage() {
 
   return (
     <DashboardShell
+      moduleKey="shift_management"
       title="Shift Management"
       subtitle="Define precisely targeted operational temporal cycles."
       actions={

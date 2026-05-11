@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
@@ -376,6 +376,7 @@ export default function ManagerOrgChartPage() {
       `}</style>
 
       <DashboardShell
+      moduleKey="manager_org_chart"
         title="Department Hierarchy"
         subtitle="Visual map of your department structure, teams, and personnel."
         actions={

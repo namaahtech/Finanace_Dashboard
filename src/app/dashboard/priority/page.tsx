@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -79,6 +79,7 @@ export default function PriorityPage() {
 
   return (
     <DashboardShell
+      moduleKey="my_priority_payout"
       title="Priority Payout"
       subtitle="Request an urgent payout that bypasses the normal processing queue."
       actions={

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
@@ -182,7 +182,8 @@ export default function AttendancePage() {
   const absentDays  = Object.values(logs).filter((l) => l.status === "absent").length;
 
   return (
-    <DashboardShell title="Attendance" subtitle="Track and manage your daily attendance logs.">
+    <DashboardShell
+      moduleKey="my_attendance" title="Attendance" subtitle="Track and manage your daily attendance logs.">
       <div className="space-y-5">
 
         {/* Stat Cards */}

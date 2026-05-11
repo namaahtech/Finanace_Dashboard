@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useCRMStore } from "@/store/crmStore";
@@ -644,7 +644,8 @@ export default function CRMPipelinePage() {
   if (!isReady) return null;
 
   return (
-    <DashboardShell title="Sales Pipeline Tracking" subtitle="Enterprise Administration: Synchronized attribution with dynamic stage management">
+    <DashboardShell
+      moduleKey="sales_pipeline" title="Sales Pipeline Tracking" subtitle="Enterprise Administration: Synchronized attribution with dynamic stage management">
       <div className="flex flex-col h-full font-sans bg-[#fbfbfa] -m-8 p-8 relative">
         
         {/* Custom Confirmation Dialog */}

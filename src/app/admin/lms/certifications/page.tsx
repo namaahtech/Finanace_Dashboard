@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -316,6 +316,7 @@ export default function CertificationsManagerPage() {
   return (
     <>
       <DashboardShell
+      moduleKey="lms_certifications"
         title="Certification Manager"
         subtitle="Issue, track, and verify employee credentials in real time."
         actions={

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import {
@@ -878,6 +878,7 @@ export default function ATSScannerPage() {
 
   return (
     <DashboardShell
+      moduleKey="ats_scanner"
       title="ATS Scanner"
       subtitle="Resume ingestion and candidate scoring"
       actions={

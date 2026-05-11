@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/Badge";
 import { TimePicker } from "@/components/ui/TimePicker";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/Toast";
+import { usePermission } from "@/hooks/usePermission";
 import dayjs from "dayjs";
 
 // ─── Types ───────────────────────────────────────────────
@@ -147,6 +148,7 @@ function DigitalClock({ clockIn, clockOut }: { clockIn?: string | null, clockOut
 // ─── Component ───────────────────────────────────────────
 export default function AdminAttendancePage() {
   const { showToast } = useToast();
+  const { canEdit, canDelete, canExport } = usePermission("attendance");
   const [tab, setTab] = useState<ViewTab>("daily");
   const [selectedDate, setSelectedDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [search, setSearch] = useState("");
@@ -531,13 +533,16 @@ export default function AdminAttendancePage() {
   return (
     <>
       <DashboardShell
+      moduleKey="attendance"
         title="Attendance Dashboard"
         subtitle="View and manage employee attendance records."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" className="h-10 px-4 rounded-xl font-bold">
-              <Download size={14} className="mr-2" /> Export
-            </Button>
+            {canExport && (
+              <Button variant="secondary" size="sm" className="h-10 px-4 rounded-xl font-bold">
+                <Download size={14} className="mr-2" /> Export
+              </Button>
+            )}
           </div>
         }
       >
@@ -661,24 +666,26 @@ export default function AdminAttendancePage() {
                                     <span className="text-xs font-medium text-amber-600 mt-1 opacity-80">Modified by {log.modified_by_name}</span>
                                   )}
                                 </div>
-                                {isAdmin && (
+                                {isAdmin && (canEdit || canDelete) && (
                                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      onClick={() => {
-                                        setTargetEmp(emp);
-                                        setOverrideForm({
-                                          clock_in: log?.clock_in || "09:00:00",
-                                          clock_out: log?.clock_out || "18:00:00",
-                                          status: log?.status || "present",
-                                          reason: ""
-                                        });
-                                        setShowOverride(true);
-                                      }}
-                                      className="p-1.5 rounded-lg bg-theme-raised text-theme-muted hover:text-theme-fg transition-all"
-                                    >
-                                      <Edit2 size={13} />
-                                    </button>
-                                    {log && (
+                                    {canEdit && (
+                                      <button
+                                        onClick={() => {
+                                          setTargetEmp(emp);
+                                          setOverrideForm({
+                                            clock_in: log?.clock_in || "09:00:00",
+                                            clock_out: log?.clock_out || "18:00:00",
+                                            status: log?.status || "present",
+                                            reason: ""
+                                          });
+                                          setShowOverride(true);
+                                        }}
+                                        className="p-1.5 rounded-lg bg-theme-raised text-theme-muted hover:text-theme-fg transition-all"
+                                      >
+                                        <Edit2 size={13} />
+                                      </button>
+                                    )}
+                                    {canDelete && log && (
                                       <button
                                         onClick={() => handleAdminDelete(emp.id)}
                                         className="p-1.5 rounded-lg bg-rose-50 text-rose-400 hover:text-rose-600 transition-all"

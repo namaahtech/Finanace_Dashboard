@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -164,6 +164,7 @@ export default function ComposePage() {
 
   return (
     <DashboardShell
+      moduleKey="mail_compose"
       title="Compose Email"
       subtitle="Write and send emails with AI assist."
       actions={

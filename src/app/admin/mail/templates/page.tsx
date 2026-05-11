@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -124,6 +124,7 @@ export default function TemplatesPage() {
 
   return (
     <DashboardShell
+      moduleKey="mail_templates"
       title="Email Templates"
       subtitle="Reusable email templates with variable support."
       actions={

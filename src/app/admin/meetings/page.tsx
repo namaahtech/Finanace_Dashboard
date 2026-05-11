@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -207,6 +207,7 @@ export default function AdminMeetingsPage() {
 
   return (
     <DashboardShell
+      moduleKey="meetings"
       title="Meetings"
       subtitle="Schedule, join, and manage video and audio calls"
       actions={

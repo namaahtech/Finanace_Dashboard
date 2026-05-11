@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
@@ -542,6 +542,7 @@ export default function PurchasesPage() {
 
   return (
     <DashboardShell
+      moduleKey="vendors"
       title="Purchases & Vendors"
       subtitle="Record purchases, track payments, and manage your vendor directory."
       actions={

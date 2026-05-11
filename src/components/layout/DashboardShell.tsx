@@ -12,17 +12,38 @@ interface DashboardShellProps {
   title?: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  moduleKey?: string; // when provided, redirects user away if can_view is revoked
 }
 
-export function DashboardShell({ children, title, subtitle, actions }: DashboardShellProps) {
-  const { user, loading } = useAuth();
+function getDashboardForRole(role: string): string {
+  if (role === "lead")    return "/lead/dashboard";
+  if (role === "manager") return "/manager/dashboard";
+  if (role === "employee" || role === "internship" || role === "sales") return "/dashboard";
+  return "/admin";
+}
+
+export function DashboardShell({ children, title, subtitle, actions, moduleKey }: DashboardShellProps) {
+  const { user, permissions, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
+  // Redirect away when not authenticated
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [user, loading, router]);
+
+  // Real-time permission guard: if admin revokes can_view for this page's module,
+  // redirect the user to their home dashboard immediately — no refresh needed.
+  useEffect(() => {
+    if (!moduleKey || !user || !permissions) return;
+    if (user.role === "super_admin") return;
+
+    const perm = permissions[moduleKey];
+    if (perm && !perm.can_view) {
+      router.replace(getDashboardForRole(user.role));
+    }
+  }, [permissions, moduleKey, user, router]);
 
   if (loading || !user) {
     return (
@@ -45,7 +66,7 @@ export function DashboardShell({ children, title, subtitle, actions }: Dashboard
             {title && <h1 className="text-2xl font-black text-theme-fg tracking-tight leading-none">{title}</h1>}
             {subtitle && <p className="text-sm text-theme-muted mt-1.5 leading-snug">{subtitle}</p>}
           </div>
-          
+
           <div className="flex items-center gap-4 flex-shrink-0">
             {actions && (
               <div className="flex items-center gap-2">

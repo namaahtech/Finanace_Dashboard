@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -198,6 +198,7 @@ export default function AdminIncentivesPage() {
 
   return (
     <DashboardShell
+      moduleKey="incentives"
       title="Incentives"
       subtitle="Manage employee incentive grants and company performance parameters."
       actions={

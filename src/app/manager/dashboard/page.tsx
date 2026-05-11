@@ -1,4 +1,4 @@
-"use client"; 
+﻿"use client"; 
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -121,7 +121,8 @@ export default function ManagerDashboard() {
   ], []);
 
   return (
-    <DashboardShell title="Manager Dashboard" subtitle={`Overview for ${user?.department || 'Department'}.`}>
+    <DashboardShell
+      moduleKey="manager_dashboard" title="Manager Dashboard" subtitle={`Overview for ${user?.department || 'Department'}.`}>
       <div className="space-y-8">
         {/* TOP METRICS GRID */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

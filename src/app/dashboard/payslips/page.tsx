@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -34,6 +34,7 @@ export default function EmployeePayslipsPage() {
 
   return (
     <DashboardShell
+      moduleKey="my_payslips"
       title="Payslips"
       subtitle="Your monthly salary distribution and net-pay history."
     >

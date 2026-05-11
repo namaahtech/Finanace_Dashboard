@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -85,6 +85,7 @@ export default function PresentationsPage() {
 
   return (
     <DashboardShell
+      moduleKey="workspace_presentations"
       title="Presentations"
       subtitle="Slide decks and visual stories"
       actions={

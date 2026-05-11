@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -60,6 +60,7 @@ export default function EmployeeMeetingsPage() {
 
   return (
     <DashboardShell
+      moduleKey="my_meetings"
       title="Meetings"
       subtitle="Your scheduled and active meetings."
     >

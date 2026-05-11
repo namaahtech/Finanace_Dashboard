@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -164,6 +164,7 @@ export default function MailHubPage() {
 
   return (
     <DashboardShell
+      moduleKey="mail_hub"
       title="Mail Hub"
       subtitle="AI-powered email overview — powered by Gemma 4 & Zoho Mail."
       actions={

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -88,6 +88,7 @@ export default function AdminPriorityPage() {
 
   return (
     <DashboardShell
+      moduleKey="priority_payout"
       title="Priority Payout"
       subtitle="Review and action urgent incentive payout requests from employees."
     >

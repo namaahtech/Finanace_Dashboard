@@ -8,7 +8,7 @@ import {
   Settings, LogOut, Sun, Moon, ChevronRight, Building2,
   GitBranch, Receipt, CreditCard, Tag, PiggyBank, Handshake,
   MessageSquare, CalendarClock, IndianRupee,
-  Shield, RefreshCw, Mail, ChevronDown, Check,
+  Shield, RefreshCw, Mail,
   Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder, User,
   BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award,
   Inbox, PenLine, Send, Paperclip, Layers, KeyRound,
@@ -17,319 +17,148 @@ import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 
-type NavItem = { href: string; label: string; icon: React.ElementType };
+// ─── Types ───────────────────────────────────────────────────
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  moduleKey: string; // must match role_permissions.module_key in DB
+};
 type NavSection = { title: string; items: NavItem[] };
 
-// ─── Nav definitions per role ────────────────────────────
+// ─── MASTER NAV ───────────────────────────────────────────────
+// Single source of truth for ALL possible routes in the app.
+// The DB (role_permissions) controls which items are visible per role.
+// Admin enables/disables any module for any role from /admin/permissions.
+// When a module is enabled, the FULL existing page renders — no code changes needed.
 
-const superAdminNav: NavSection[] = [
-  { title: "Organization", items: [
-    { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/admin/projects", label: "Projects", icon: Folder },
-    { href: "/admin/users", label: "Employees", icon: Users },
-    { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
-    { href: "/admin/teams", label: "Teams", icon: Building2 },
-    { href: "/admin/org-chart", label: "Org Chart", icon: Network },
-  ]},
-  { title: "Workspace", items: [
-    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
-    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
-    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
-    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
-    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
-  ]},
-  { title: "HR", items: [
-    { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
-    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
-    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
-    { href: "/admin/interviews", label: "Interviews", icon: MessageSquare },
-  ]},
-  { title: "LMS Academy", items: [
-    { href: "/admin/lms", label: "Academy Manager", icon: BookOpen },
-    { href: "/admin/lms/courses", label: "Manage Courses", icon: ClipboardList },
-    { href: "/admin/lms/certifications", label: "Certifications", icon: Award },
-  ]},
-  { title: "Operations", items: [
-    { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
-    { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
-    { href: "/admin/payroll", label: "Payroll", icon: IndianRupee },
-    { href: "/admin/incentives", label: "Incentives", icon: Wallet },
-    { href: "/admin/claims", label: "Claims", icon: FileText },
-    { href: "/admin/reimbursements", label: "Reimbursements", icon: Receipt },
-    { href: "/admin/priority", label: "Priority Payout", icon: Zap },
-  ]},
-  { title: "Finance", items: [
-    { href: "/admin/invoicing", label: "Invoicing", icon: CreditCard },
-    { href: "/admin/vendors", label: "Vendors", icon: Briefcase },
-    { href: "/admin/subscriptions", label: "Subscriptions", icon: Tag },
-    { href: "/admin/budgets", label: "Budgets", icon: PiggyBank },
-  ]},
-  { title: "CRM", items: [
-    { href: "/admin/crm", label: "Sales Pipeline", icon: GitBranch },
-    { href: "/admin/crm/clients", label: "Clients", icon: Handshake },
-  ]},
-  { title: "Comms", items: [
-    { href: "/admin/mail",           label: "Mail Hub",     icon: Mail },
-    { href: "/admin/mail/inbox",     label: "Inbox",        icon: Inbox },
-    { href: "/admin/mail/compose",   label: "Compose",      icon: PenLine },
-    { href: "/admin/mail/sent",      label: "Sent",         icon: Send },
-    { href: "/admin/mail/drafts",    label: "Drafts",       icon: FileText },
-    { href: "/admin/mail/files",     label: "File Share",   icon: Paperclip },
-    { href: "/admin/mail/templates", label: "Templates",    icon: Layers },
-    { href: "/admin/mail/config",    label: "Mail Config",  icon: KeyRound },
-    { href: "/admin/messaging",      label: "Messages",     icon: MessageSquare },
-    { href: "/admin/meetings",       label: "Meetings",     icon: CalendarClock },
-  ]},
-  { title: "System", items: [
-    { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-    { href: "/admin/permissions", label: "Permissions", icon: Shield },
-    { href: "/admin/report", label: "Feature Report", icon: ClipboardList },
-    { href: "/admin/config", label: "System Config", icon: Settings },
-  ]},
+const MASTER_NAV: NavSection[] = [
+  {
+    title: "Organization",
+    items: [
+      { href: "/admin",             label: "Dashboard",        icon: LayoutDashboard, moduleKey: "admin_dashboard" },
+      { href: "/manager/dashboard", label: "Dashboard",        icon: LayoutDashboard, moduleKey: "manager_dashboard" },
+      { href: "/dashboard",         label: "Dashboard",        icon: LayoutDashboard, moduleKey: "my_dashboard" },
+      { href: "/admin/projects",    label: "Projects",         icon: Folder,          moduleKey: "projects" },
+      { href: "/admin/users",       label: "Employees",        icon: Users,           moduleKey: "employees" },
+      { href: "/admin/shifts",      label: "Shift Management", icon: CalendarClock,   moduleKey: "shift_management" },
+      { href: "/admin/teams",       label: "Teams",            icon: Building2,       moduleKey: "teams" },
+      { href: "/admin/org-chart",   label: "Org Chart",        icon: Network,         moduleKey: "org_chart" },
+      { href: "/manager/teams",     label: "My Teams",         icon: Building2,       moduleKey: "manager_teams" },
+      { href: "/manager/org-chart", label: "My Org Chart",     icon: Network,         moduleKey: "manager_org_chart" },
+    ],
+  },
+  {
+    title: "Workspace",
+    items: [
+      { href: "/admin/workspace",               label: "Workspace Hub",  icon: LayoutTemplate, moduleKey: "workspace_hub" },
+      { href: "/admin/workspace/documents",     label: "Documents",      icon: BookOpen,       moduleKey: "workspace_documents" },
+      { href: "/admin/workspace/spreadsheets",  label: "Spreadsheets",   icon: Table2,         moduleKey: "workspace_spreadsheets" },
+      { href: "/admin/workspace/presentations", label: "Presentations",  icon: Presentation,   moduleKey: "workspace_presentations" },
+      { href: "/admin/workspace/notes",         label: "Notes",          icon: StickyNote,     moduleKey: "workspace_notes" },
+    ],
+  },
+  {
+    title: "HR & Hiring",
+    items: [
+      { href: "/admin/hr/job-clusters", label: "Job Clusters",    icon: Network,       moduleKey: "job_clusters" },
+      { href: "/admin/recruitment",     label: "Recruitment Hub", icon: Briefcase,     moduleKey: "recruitment" },
+      { href: "/admin/ats",             label: "ATS Scanner",     icon: RefreshCw,     moduleKey: "ats_scanner" },
+      { href: "/admin/interviews",      label: "Interviews",      icon: MessageSquare, moduleKey: "interviews" },
+    ],
+  },
+  {
+    title: "Learning & Development",
+    items: [
+      { href: "/admin/lms",                label: "Academy Manager",  icon: BookOpen,     moduleKey: "lms_academy" },
+      { href: "/admin/lms/courses",        label: "Manage Courses",   icon: ClipboardList,moduleKey: "lms_courses" },
+      { href: "/admin/lms/certifications", label: "Certifications",   icon: Award,        moduleKey: "lms_certifications" },
+      { href: "/dashboard/academy",        label: "Training Academy", icon: BookOpen,     moduleKey: "training_academy" },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      { href: "/admin/attendance",     label: "Attendance",      icon: CalendarDays,  moduleKey: "attendance" },
+      { href: "/admin/kpi",            label: "KPI / KRA",       icon: TrendingUp,    moduleKey: "kpi_kra" },
+      { href: "/admin/payroll",        label: "Payroll",         icon: IndianRupee,   moduleKey: "payroll" },
+      { href: "/admin/incentives",     label: "Incentives",      icon: Wallet,        moduleKey: "incentives" },
+      { href: "/admin/claims",         label: "Claims",          icon: FileText,      moduleKey: "claims" },
+      { href: "/admin/reimbursements", label: "Reimbursements",  icon: Receipt,       moduleKey: "reimbursements" },
+      { href: "/admin/priority",       label: "Priority Payout", icon: Zap,           moduleKey: "priority_payout" },
+    ],
+  },
+  {
+    title: "Finance",
+    items: [
+      { href: "/admin/invoicing",     label: "Invoicing",    icon: CreditCard, moduleKey: "invoicing" },
+      { href: "/admin/vendors",       label: "Vendors",      icon: Briefcase,  moduleKey: "vendors" },
+      { href: "/admin/subscriptions", label: "Subscriptions",icon: Tag,        moduleKey: "subscriptions" },
+      { href: "/admin/budgets",       label: "Budgets",      icon: PiggyBank,  moduleKey: "budgets" },
+    ],
+  },
+  {
+    title: "CRM",
+    items: [
+      { href: "/admin/crm",         label: "Sales Pipeline", icon: GitBranch, moduleKey: "sales_pipeline" },
+      { href: "/admin/crm/clients", label: "Clients",        icon: Handshake, moduleKey: "crm_clients" },
+    ],
+  },
+  {
+    title: "Communications",
+    items: [
+      { href: "/admin/mail",           label: "Mail Hub",    icon: Mail,         moduleKey: "mail_hub" },
+      { href: "/admin/mail/inbox",     label: "Inbox",       icon: Inbox,        moduleKey: "mail_inbox" },
+      { href: "/admin/mail/compose",   label: "Compose",     icon: PenLine,      moduleKey: "mail_compose" },
+      { href: "/admin/mail/sent",      label: "Sent",        icon: Send,         moduleKey: "mail_sent" },
+      { href: "/admin/mail/drafts",    label: "Drafts",      icon: FileText,     moduleKey: "mail_drafts" },
+      { href: "/admin/mail/files",     label: "File Share",  icon: Paperclip,    moduleKey: "mail_files" },
+      { href: "/admin/mail/templates", label: "Templates",   icon: Layers,       moduleKey: "mail_templates" },
+      { href: "/admin/mail/config",    label: "Mail Config", icon: KeyRound,     moduleKey: "mail_config" },
+      { href: "/admin/messaging",      label: "Messages",    icon: MessageSquare,moduleKey: "messages" },
+      { href: "/admin/meetings",       label: "Meetings",    icon: CalendarClock,moduleKey: "meetings" },
+    ],
+  },
+  {
+    title: "My Account",
+    items: [
+      { href: "/dashboard/profile",        label: "My Profile",      icon: User,         moduleKey: "my_profile" },
+      { href: "/dashboard/attendance",     label: "My Attendance",   icon: CalendarDays, moduleKey: "my_attendance" },
+      { href: "/dashboard/performance",    label: "Performance",     icon: TrendingUp,   moduleKey: "my_performance" },
+      { href: "/dashboard/incentives",     label: "My Incentives",   icon: Wallet,       moduleKey: "my_incentives" },
+      { href: "/dashboard/payslips",       label: "My Payslips",     icon: IndianRupee,  moduleKey: "my_payslips" },
+      { href: "/dashboard/reimbursements", label: "Reimbursements",  icon: Receipt,      moduleKey: "my_reimbursements" },
+      { href: "/dashboard/priority",       label: "Priority Payout", icon: Zap,          moduleKey: "my_priority_payout" },
+      { href: "/dashboard/messages",       label: "Messages",        icon: MessageSquare,moduleKey: "my_messages" },
+      { href: "/dashboard/meetings",       label: "Meetings",        icon: CalendarClock,moduleKey: "my_meetings" },
+    ],
+  },
+  {
+    title: "System",
+    items: [
+      { href: "/admin/analytics",   label: "Analytics",     icon: BarChart3,    moduleKey: "analytics" },
+      { href: "/admin/permissions", label: "Permissions",   icon: Shield,       moduleKey: "permissions_control" },
+      { href: "/admin/report",      label: "Feature Report",icon: ClipboardList,moduleKey: "feature_report" },
+      { href: "/admin/config",      label: "System Config", icon: Settings,     moduleKey: "system_config" },
+    ],
+  },
 ];
 
-const accountsNav: NavSection[] = [
-  { title: "Overview", items: [
-    { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  ]},
-  { title: "People", items: [
-    { href: "/admin/payroll", label: "Payroll", icon: IndianRupee },
-    { href: "/admin/incentives", label: "Incentives", icon: Wallet },
-    { href: "/admin/claims", label: "Claims", icon: FileText },
-    { href: "/admin/reimbursements", label: "Reimbursements", icon: Receipt },
-  ]},
-  { title: "Finance", items: [
-    { href: "/admin/invoicing", label: "Invoicing", icon: CreditCard },
-    { href: "/admin/vendors", label: "Vendors", icon: Briefcase },
-    { href: "/admin/subscriptions", label: "Subscriptions", icon: Tag },
-    { href: "/admin/budgets", label: "Budgets", icon: PiggyBank },
-  ]},
-  { title: "Comms", items: [
-    { href: "/admin/mail",           label: "Mail Hub",   icon: Mail },
-    { href: "/admin/mail/inbox",     label: "Inbox",      icon: Inbox },
-    { href: "/admin/mail/compose",   label: "Compose",    icon: PenLine },
-    { href: "/admin/mail/sent",      label: "Sent",       icon: Send },
-    { href: "/admin/mail/drafts",    label: "Drafts",     icon: FileText },
-    { href: "/admin/mail/files",     label: "File Share", icon: Paperclip },
-    { href: "/admin/mail/templates", label: "Templates",  icon: Layers },
-    { href: "/admin/messaging",      label: "Messages",   icon: MessageSquare },
-    { href: "/admin/meetings",       label: "Meetings",   icon: CalendarClock },
-  ]},
-  { title: "Reports", items: [
-    { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-  ]},
-];
-
-const hrNav: NavSection[] = [
-  { title: "Organization", items: [
-    { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/admin/projects", label: "Projects", icon: Folder },
-    { href: "/admin/users", label: "Employees", icon: Users },
-    { href: "/admin/shifts", label: "Shift Management", icon: CalendarClock },
-    { href: "/admin/teams", label: "Teams", icon: Building2 },
-  ]},
-  { title: "Workspace", items: [
-    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
-    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
-    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
-    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
-    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
-  ]},
-  { title: "HR", items: [
-    { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
-    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
-    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
-    { href: "/admin/interviews", label: "Interviews", icon: MessageSquare },
-  ]},
-  { title: "LMS Academy", items: [
-    { href: "/admin/lms", label: "Academy Manager", icon: BookOpen },
-    { href: "/admin/lms/certifications", label: "Certifications", icon: Award },
-  ]},
-  { title: "People", items: [
-    { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
-    { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
-    { href: "/admin/incentives", label: "Incentives", icon: Wallet },
-    { href: "/admin/claims", label: "Claims", icon: FileText },
-    { href: "/admin/reimbursements", label: "Reimbursements", icon: Receipt },
-    { href: "/admin/priority", label: "Priority Payout", icon: Zap },
-  ]},
-  { title: "Comms", items: [
-    { href: "/admin/mail",           label: "Mail Hub",   icon: Mail },
-    { href: "/admin/mail/inbox",     label: "Inbox",      icon: Inbox },
-    { href: "/admin/mail/compose",   label: "Compose",    icon: PenLine },
-    { href: "/admin/mail/sent",      label: "Sent",       icon: Send },
-    { href: "/admin/mail/drafts",    label: "Drafts",     icon: FileText },
-    { href: "/admin/mail/files",     label: "File Share", icon: Paperclip },
-    { href: "/admin/mail/templates", label: "Templates",  icon: Layers },
-    { href: "/admin/messaging",      label: "Messages",   icon: MessageSquare },
-    { href: "/admin/meetings",       label: "Meetings",   icon: CalendarClock },
-  ]},
-  { title: "System", items: [
-    { href: "/admin/report", label: "Feature Report", icon: ClipboardList },
-  ]},
-];
-
-const leadNav: NavSection[] = [
-  { title: "Team", items: [
-    { href: "/admin/projects", label: "Projects", icon: Folder },
-    { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
-    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
-    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
-    { href: "/admin/attendance", label: "Attendance", icon: CalendarDays },
-    { href: "/admin/budgets", label: "Team Budget", icon: PiggyBank },
-    { href: "/admin/subscriptions", label: "Subscriptions", icon: Tag },
-  ]},
-  { title: "Workspace", items: [
-    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
-    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
-    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
-    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
-    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
-  ]},
-  { title: "Comms", items: [
-    { href: "/admin/mail",         label: "Mail Hub", icon: Mail },
-    { href: "/admin/mail/inbox",   label: "Inbox",    icon: Inbox },
-    { href: "/admin/mail/compose", label: "Compose",  icon: PenLine },
-    { href: "/admin/mail/sent",    label: "Sent",     icon: Send },
-    { href: "/admin/mail/files",   label: "File Share", icon: Paperclip },
-    { href: "/admin/messaging",    label: "Messages", icon: MessageSquare },
-    { href: "/admin/meetings",     label: "Meetings", icon: CalendarClock },
-  ]},
-];
-
-const salesNav: NavSection[] = [
-  { title: "CRM", items: [
-    { href: "/admin/crm", label: "Sales Pipeline", icon: GitBranch },
-    { href: "/admin/crm/clients", label: "Clients", icon: Handshake },
-  ]},
-  { title: "My Info", items: [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/dashboard/profile", label: "My Profile", icon: User },
-    { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
-  ]},
-  { title: "Comms", items: [
-    { href: "/admin/mail/inbox",   label: "Inbox",    icon: Inbox },
-    { href: "/admin/mail/compose", label: "Compose",  icon: PenLine },
-    { href: "/admin/mail/sent",    label: "Sent",     icon: Send },
-    { href: "/admin/messaging",    label: "Messages", icon: MessageSquare },
-    { href: "/admin/meetings",     label: "Meetings", icon: CalendarClock },
-  ]},
-];
-
-const managerNav: NavSection[] = [
-  { title: "Department", items: [
-    { href: "/manager/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/admin/projects", label: "Projects", icon: Folder },
-    { href: "/manager/teams", label: "Teams", icon: Building2 },
-    { href: "/manager/org-chart", label: "Org Chart", icon: Network },
-    { href: "/admin/hr/job-clusters", label: "Job Clusters", icon: Network },
-    { href: "/admin/recruitment", label: "Recruitment Hub", icon: Briefcase },
-    { href: "/admin/ats", label: "ATS Scanner", icon: RefreshCw },
-    { href: "/admin/kpi", label: "KPI / KRA", icon: TrendingUp },
-  ]},
-  { title: "LMS Academy", items: [
-    { href: "/admin/lms", label: "Academy Manager", icon: BookOpen },
-  ]},
-  { title: "My Workspace", items: [
-    { href: "/dashboard/profile", label: "My Profile", icon: User },
-    { href: "/dashboard/attendance", label: "Attendance", icon: CalendarDays },
-    { href: "/dashboard/incentives", label: "Incentives", icon: Wallet },
-    { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
-  ]},
-  { title: "Workspace", items: [
-    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
-    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
-    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
-    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
-    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
-  ]},
-  { title: "Comms", items: [
-    { href: "/admin/mail/inbox",   label: "Inbox",    icon: Inbox },
-    { href: "/admin/mail/compose", label: "Compose",  icon: PenLine },
-    { href: "/admin/mail/sent",    label: "Sent",     icon: Send },
-    { href: "/admin/mail/files",   label: "File Share", icon: Paperclip },
-    { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
-    { href: "/dashboard/meetings", label: "Meetings", icon: CalendarClock },
-  ]},
-];
-
-const internshipNav: NavSection[] = [
-  { title: "Internship", items: [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/dashboard/academy", label: "Training Academy", icon: BookOpen },
-    { href: "/dashboard/profile", label: "My Profile", icon: User },
-    { href: "/dashboard/attendance", label: "Attendance", icon: CalendarDays },
-  ]},
-  { title: "Workspace", items: [
-    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
-    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
-    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
-  ]},
-  { title: "Comms", items: [
-    { href: "/admin/mail/inbox",   label: "Inbox",    icon: Inbox },
-    { href: "/admin/mail/compose", label: "Compose",  icon: PenLine },
-    { href: "/admin/mail/sent",    label: "Sent",     icon: Send },
-    { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
-    { href: "/dashboard/meetings", label: "Meetings", icon: CalendarClock },
-  ]},
-];
-
-const employeeNav: NavSection[] = [
-  { title: "My Workspace", items: [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/dashboard/profile", label: "My Profile", icon: User },
-    { href: "/dashboard/attendance", label: "Attendance", icon: CalendarDays },
-    { href: "/dashboard/performance", label: "Performance", icon: TrendingUp },
-    { href: "/dashboard/incentives", label: "Incentives", icon: Wallet },
-    { href: "/dashboard/payslips", label: "Payslips", icon: IndianRupee },
-    { href: "/dashboard/reimbursements", label: "Reimbursements", icon: Receipt },
-    { href: "/dashboard/priority", label: "Priority Payout", icon: Zap },
-  ]},
-  { title: "LMS Academy", items: [
-    { href: "/dashboard/academy", label: "Training Academy", icon: BookOpen },
-  ]},
-  { title: "Workspace", items: [
-    { href: "/admin/workspace", label: "Workspace Hub", icon: LayoutTemplate },
-    { href: "/admin/workspace/documents", label: "Documents", icon: BookOpen },
-    { href: "/admin/workspace/spreadsheets", label: "Spreadsheets", icon: Table2 },
-    { href: "/admin/workspace/presentations", label: "Presentations", icon: Presentation },
-    { href: "/admin/workspace/notes", label: "Notes", icon: StickyNote },
-  ]},
-  { title: "Comms", items: [
-    { href: "/admin/mail/inbox",   label: "Inbox",    icon: Inbox },
-    { href: "/admin/mail/compose", label: "Compose",  icon: PenLine },
-    { href: "/admin/mail/sent",    label: "Sent",     icon: Send },
-    { href: "/admin/mail/drafts",  label: "Drafts",   icon: FileText },
-    { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
-    { href: "/dashboard/meetings", label: "Meetings", icon: CalendarClock },
-  ]},
-];
-
-function getNav(role?: string): NavSection[] {
-  switch (role) {
-    case "super_admin": return superAdminNav;
-    case "accounts": return accountsNav;
-    case "hr": return hrNav;
-    case "lead": return leadNav;
-    case "manager": return managerNav;
-    case "internship": return internshipNav;
-    case "sales": return salesNav;
-    default: return employeeNav;
-  }
-}
+// ─── Role badge styles ────────────────────────────────────────
 
 const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
-  super_admin: { label: "Super Admin", cls: "bg-purple-500/10 text-purple-500" },
-  accounts: { label: "Accounts", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
-  hr: { label: "HR", cls: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
-  manager: { label: "Department Lead", cls: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
-  lead: { label: "Team Lead", cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
-  employee: { label: "Employee", cls: "bg-theme-raised text-theme-muted" },
-  sales: { label: "Sales", cls: "bg-rose-500/10 text-rose-500" },
-  internship: { label: "Internship", cls: "bg-indigo-500/10 text-indigo-500" },
+  super_admin: { label: "Super Admin",    cls: "bg-purple-500/10 text-purple-500" },
+  accounts:    { label: "Accounts",       cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  hr:          { label: "HR",             cls: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  manager:     { label: "Department Lead",cls: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
+  lead:        { label: "Team Lead",      cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  employee:    { label: "Employee",       cls: "bg-theme-raised text-theme-muted" },
+  sales:       { label: "Sales",          cls: "bg-rose-500/10 text-rose-500" },
+  internship:  { label: "Internship",     cls: "bg-indigo-500/10 text-indigo-500" },
 };
 
-// ─── Component ───────────────────────────────────────────
+// ─── Sidebar component ────────────────────────────────────────
 
 interface SidebarProps {
   collapsed?: boolean;
@@ -337,14 +166,32 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
-  const { user, logout } = useAuth();
-  const pathname = usePathname();
+  const { user, permissions, logout } = useAuth();
+  const pathname  = usePathname();
   const { theme, setTheme } = useTheme();
+  const navRef    = useRef<HTMLElement>(null);
 
-  const sections = getNav(user?.role);
   const roleInfo = ROLE_BADGE[user?.role ?? "employee"] ?? ROLE_BADGE.employee;
 
-  const navRef = useRef<HTMLElement>(null);
+  // ── Permission filtering ──────────────────────────────────
+  // Uses MASTER_NAV so ANY module enabled in DB will show up, regardless of role.
+  // - permissions null  → permissions still loading (AuthProvider ensures this is very brief)
+  //                       show all items as safe fallback (DashboardShell loading state hides the flash)
+  // - perm not found    → module not in DB for this role → hidden
+  // - perm.can_view     → respect the DB value
+  const sections: NavSection[] = MASTER_NAV
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => {
+        // While permissions are loading, show all (DashboardShell blocks render anyway)
+        if (!permissions) return true;
+        const perm = permissions[item.moduleKey];
+        // No DB row for this module/role = not enabled = hidden
+        if (!perm) return false;
+        return perm.can_view;
+      }),
+    }))
+    .filter((section) => section.items.length > 0);
 
   // Restore scroll position
   useEffect(() => {
@@ -358,32 +205,28 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
     sessionStorage.setItem("sidebar-scroll", e.currentTarget.scrollTop.toString());
   };
 
-  const allHrefs = sections.flatMap(s => s.items.map(i => i.href));
+  const allHrefs = sections.flatMap((s) => s.items.map((i) => i.href));
 
   const isActive = (href: string) => {
     if (pathname === href) return true;
-    if (href === "/admin" || href === "/dashboard") return pathname === href;
-    
+    if (href === "/admin" || href === "/dashboard" || href === "/manager/dashboard") {
+      return pathname === href;
+    }
     if (pathname.startsWith(href + "/")) {
-      // Check if there is a more specific (longer) match in the sidebar
-      const hasMoreSpecificMatch = allHrefs.some(otherHref => 
-        otherHref !== href && 
-        pathname.startsWith(otherHref) && 
-        otherHref.length > href.length
+      const hasMoreSpecific = allHrefs.some(
+        (h) => h !== href && pathname.startsWith(h) && h.length > href.length
       );
-      return !hasMoreSpecificMatch;
+      return !hasMoreSpecific;
     }
     return false;
   };
 
   return (
-    <aside
-      className={cn(
-        "relative flex h-screen flex-col flex-shrink-0 transition-all duration-300 ease-in-out",
-        "bg-sidebar border-r border-sidebar",
-        collapsed ? "w-[68px]" : "w-64"
-      )}
-    >
+    <aside className={cn(
+      "relative flex h-screen flex-col flex-shrink-0 transition-all duration-300 ease-in-out",
+      "bg-sidebar border-r border-sidebar",
+      collapsed ? "w-[68px]" : "w-64"
+    )}>
       {/* Header */}
       <div className={cn(
         "flex h-[60px] items-center border-b border-sidebar transition-all duration-300",
@@ -420,7 +263,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       )}
 
       {/* Nav */}
-      <nav 
+      <nav
         ref={navRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5 scrollbar-hide"
@@ -447,11 +290,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
                           : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg"
                       )}
                     >
-                      <Icon
-                        size={15}
-                        strokeWidth={active ? 2.5 : 2}
-                        className="flex-shrink-0"
-                      />
+                      <Icon size={15} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
                       {!collapsed && (
                         <span className="truncate text-sm font-medium">{label}</span>
                       )}
@@ -470,7 +309,10 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
           <div className="rounded-lg bg-theme-raised/60 px-3 py-2.5">
             <div className="flex items-center justify-between gap-2 mb-1">
               <p className="text-xs font-semibold text-theme-fg truncate">{user?.name ?? "—"}</p>
-              <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0", roleInfo.cls)}>
+              <span className={cn(
+                "text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0",
+                roleInfo.cls
+              )}>
                 {roleInfo.label}
               </span>
             </div>

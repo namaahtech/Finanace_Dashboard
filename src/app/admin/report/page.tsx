@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
@@ -155,7 +155,8 @@ export default function ReportPage() {
   const securityScore = Math.floor(100 - ((totalEnabled / totalPossible) * 100)); // fewer permissions = higher security score theoretically
   
   return (
-    <DashboardShell 
+    <DashboardShell
+      moduleKey="feature_report" 
       title="Access Control & Feature Registry" 
       subtitle="Enterprise-grade Role-Based Access Control (RBAC) across 14 operational modules"
     >

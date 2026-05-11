@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
@@ -362,6 +362,7 @@ export default function OrgChartPage() {
       `}</style>
 
       <DashboardShell
+      moduleKey="org_chart"
         title="Dynamic Org Chart"
         subtitle="Live enterprise hierarchy automatically mapped from PostgreSQL."
         actions={

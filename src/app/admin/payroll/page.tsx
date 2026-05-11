@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
@@ -18,6 +18,7 @@ import { useState, useEffect } from "react";
 
 import { useApi } from "@/hooks/useApi";
 import { useToast } from "@/components/ui/Toast";
+import { usePermission } from "@/hooks/usePermission";
 
 interface PayrollRecord {
   id: string;
@@ -56,6 +57,7 @@ const YEARS = [2026, 2025];
 export default function PayrollPage() {
   const { request } = useApi();
   const { showToast } = useToast();
+  const { canCreate, canEdit, canExport } = usePermission("payroll");
   
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -129,6 +131,7 @@ export default function PayrollPage() {
 
   return (
     <DashboardShell
+      moduleKey="payroll"
       title="Payroll"
       subtitle={`Salary disbursement for ${MONTHS[month - 1]} ${year}`}
       actions={
@@ -155,12 +158,16 @@ export default function PayrollPage() {
             </select>
             <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted" />
           </div>
-          <Button variant="secondary" size="sm">
-            <Download size={13} className="mr-1.5" /> Export
-          </Button>
-          <Button variant="primary" size="sm" onClick={handleRunPayroll} loading={acting} disabled={draft === 0}>
-            <Play size={12} className="mr-1.5" /> Run Payroll
-          </Button>
+          {canExport && (
+            <Button variant="secondary" size="sm">
+              <Download size={13} className="mr-1.5" /> Export
+            </Button>
+          )}
+          {canCreate && (
+            <Button variant="primary" size="sm" onClick={handleRunPayroll} loading={acting} disabled={draft === 0}>
+              <Play size={12} className="mr-1.5" /> Run Payroll
+            </Button>
+          )}
         </div>
       }
     >
@@ -269,12 +276,12 @@ export default function PayrollPage() {
                           <button className="flex items-center gap-1 rounded-lg border border-theme-border bg-theme-raised px-2.5 py-1 text-[11px] font-semibold text-theme-muted hover:text-theme-fg transition-colors">
                             <FileText size={11} /> Payslip
                           </button>
-                          {row.status === "draft" && (
+                          {canEdit && row.status === "draft" && (
                             <Button size="sm" variant="secondary" onClick={() => setEditingRecord(row)}>
                               Edit
                             </Button>
                           )}
-                          {row.status === "processed" && (
+                          {canEdit && row.status === "processed" && (
                             <Button size="sm" variant="success" onClick={() => handleDisburse(row.id)}>
                               Disburse
                             </Button>

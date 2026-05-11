@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -470,6 +470,7 @@ export default function AdminLMSPage() {
 
   return (
     <DashboardShell
+      moduleKey="lms_academy"
       title="Academy Manager"
       subtitle="Track employee learning progress, manage curriculum, and issue certifications in real-time."
       actions={

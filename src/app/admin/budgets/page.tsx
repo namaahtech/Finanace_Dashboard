@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
@@ -406,6 +406,7 @@ export default function BudgetsPage() {
   /* ─── Render ─────────────────────────────────────────────────────────── */
   return (
     <DashboardShell
+      moduleKey="budgets"
       title="Budgets"
       subtitle="Plan and monitor spend across departments, teams, and the company."
       actions={

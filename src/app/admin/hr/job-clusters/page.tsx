@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -216,6 +216,7 @@ export default function JobClustersPage() {
 
   return (
     <DashboardShell
+      moduleKey="job_clusters"
       title="Job Clusters"
       subtitle="Define job profiles and matching criteria for candidate screening"
       actions={

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useChannels, useMessaging, usePresence, Channel, Message } from "@/hooks/useMessaging";
@@ -181,7 +181,8 @@ export default function EmployeeMessagesPage() {
   }, [activeId, sendMessage]);
 
   return (
-    <DashboardShell title="Messages" subtitle="Team channels and real-time communication">
+    <DashboardShell
+      moduleKey="my_messages" title="Messages" subtitle="Team channels and real-time communication">
       <div className="flex h-[calc(100vh-140px)] min-h-[600px] gap-4">
         {/* Sidebar */}
         <div className="w-72 flex flex-col bg-theme-surface border border-theme-border rounded-2xl overflow-hidden">

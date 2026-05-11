@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -118,9 +118,12 @@ export default function AdminConfigPage() {
     fcmSender: "1092837465"
   });
 
+  useEffect(() => { load(); }, []);
+
   if (user && user.role !== "super_admin") {
     return (
-      <DashboardShell title="System Configuration">
+      <DashboardShell
+      moduleKey="system_config" title="System Configuration">
         <div className="flex h-[60vh] items-center justify-center">
           <div className="text-center space-y-4">
             <ShieldAlert size={48} className="mx-auto text-red-500 opacity-50" />
@@ -143,7 +146,6 @@ export default function AdminConfigPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -228,7 +230,8 @@ export default function AdminConfigPage() {
   const LabelCls = "text-[10px] font-black text-black/50 uppercase tracking-widest mb-2 block";
 
   return (
-    <DashboardShell 
+    <DashboardShell
+      moduleKey="system_config" 
       title="System Configuration" 
       subtitle="Master control panel for organizational architecture and logic deployment."
       actions={

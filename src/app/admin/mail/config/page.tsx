@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -105,6 +105,7 @@ export default function MailConfigPage() {
 
   return (
     <DashboardShell
+      moduleKey="mail_config"
       title="Mail Config"
       subtitle="Connect and configure Zoho Mail for your organization."
       actions={

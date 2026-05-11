@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -13,6 +13,7 @@ import {
   RefreshCw, Mail, ChevronDown, ChevronRight, Check, Clock, LayoutGrid, Coffee
 } from "lucide-react";
 import { useAuth } from "@/components/layout/AuthProvider";
+import { usePermission } from "@/hooks/usePermission";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
@@ -129,12 +130,14 @@ function CustomSelect({ value, options, onChange, placeholder, icon, label }: {
 }
 
 // ── 3-Dot Context Menu ──────────────────────────────────
-function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm }: { 
-  user: User; 
-  onRefresh: () => void; 
+function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, canDelete }: {
+  user: User;
+  onRefresh: () => void;
   onEdit: () => void;
-  isLast?: boolean; 
+  isLast?: boolean;
   setDeleteConfirm: (u: User) => void;
+  canEdit: boolean;
+  canDelete: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [showCustomMail, setShowCustomMail] = useState(false);
@@ -182,10 +185,12 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm }: {
         <div className={cn("absolute z-[1000] w-52 rounded-2xl border border-theme-border bg-theme-surface shadow-2xl p-1.5 animate-in zoom-in-95 duration-150", 
           "right-full mr-2", isLast ? "bottom-0" : "top-0"
         )}>
-          <button onClick={() => { onEdit(); setOpen(false); }}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
-            <Edit2 size={13} className="text-theme-muted group-hover:text-theme-primary transition-colors" /> Edit Employee
-          </button>
+          {canEdit && (
+            <button onClick={() => { onEdit(); setOpen(false); }}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
+              <Edit2 size={13} className="text-theme-muted group-hover:text-theme-primary transition-colors" /> Edit Employee
+            </button>
+          )}
           <button onClick={() => doAction("resend_credentials")}
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
             <RefreshCw size={13} className="text-sky-500 group-hover:rotate-45 transition-transform" /> Resend Login Info
@@ -194,11 +199,15 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm }: {
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
             <Mail size={13} className="text-emerald-500" /> Send Custom Mail
           </button>
-          <div className="my-1.5 h-px bg-theme-border/50" />
-          <button onClick={() => { setDeleteConfirm(user); setOpen(false); }}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-black text-rose-500 hover:bg-rose-500/10 transition-all">
-            <Trash2 size={13} /> Delete Account
-          </button>
+          {canDelete && (
+            <>
+              <div className="my-1.5 h-px bg-theme-border/50" />
+              <button onClick={() => { setDeleteConfirm(user); setOpen(false); }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-black text-rose-500 hover:bg-rose-500/10 transition-all">
+                <Trash2 size={13} /> Delete Account
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -242,6 +251,7 @@ export default function AdminUsersPage() {
   const { showToast } = useToast();
   const { request } = useApi();
   const { user, loading: authLoading } = useAuth();
+  const { canCreate, canEdit, canDelete, canExport } = usePermission("employees");
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -266,6 +276,7 @@ export default function AdminUsersPage() {
   });
   const [zohoConnected, setZohoConnected] = useState(false);
   const [zohoEmailPreview, setZohoEmailPreview] = useState("");
+  const [assignableRoles, setAssignableRoles] = useState<string[]>([]);
 
   async function load(q?: string) {
     setLoading(true);
@@ -298,6 +309,15 @@ export default function AdminUsersPage() {
       fetch("/api/mail/auth/connect").then(r => r.json()).then(d => {
         setZohoConnected(d.config?.is_connected === true);
       }).catch(() => {});
+      // Fetch which roles this user is allowed to assign
+      if (user.role === "super_admin") {
+        setAssignableRoles(Object.keys(ROLE_LABEL));
+      } else {
+        fetch(`/api/permissions/assignable-roles?role=${user.role}`)
+          .then(r => r.json())
+          .then(d => { if (d.assignableRoles) setAssignableRoles(d.assignableRoles); })
+          .catch(() => {});
+      }
     }
   }, [authLoading, user]);
 
@@ -314,8 +334,25 @@ export default function AdminUsersPage() {
     }
   }, [form.name, zohoConnected]);
 
+  // Re-fetch assignable roles if admin updates permissions while this user is active
   useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => { 
+    if (!user?.role || user.role === "super_admin") return;
+    const ch = supabase
+      .channel("permissions_sync")
+      .on("broadcast", { event: "permissions_updated" }, (payload) => {
+        if (payload.payload?.role === user.role) {
+          fetch(`/api/permissions/assignable-roles?role=${user.role}`)
+            .then(r => r.json())
+            .then(d => { if (d.assignableRoles) setAssignableRoles(d.assignableRoles); })
+            .catch(() => {});
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.role]);
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setShowForm(false);
         setDeleteConfirm(null);
@@ -509,12 +546,15 @@ export default function AdminUsersPage() {
 
   return (
     <DashboardShell
+      moduleKey="employees"
       title="Employees"
       subtitle="Architect your workforce and manage enterprise system access."
       actions={
-        <Button variant="primary" size="sm" onClick={handleAdd}>
-          <UserPlus size={14} className="mr-1.5" /> Add Employee
-        </Button>
+        canCreate ? (
+          <Button variant="primary" size="sm" onClick={handleAdd}>
+            <UserPlus size={14} className="mr-1.5" /> Add Employee
+          </Button>
+        ) : null
       }
     >
       <div className="space-y-6">
@@ -617,7 +657,7 @@ export default function AdminUsersPage() {
                         </button>
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <RowMenu user={u} onRefresh={() => load(search || undefined)} onEdit={() => handleEdit(u)} isLast={idx >= filteredUsers.length - 2} setDeleteConfirm={setDeleteConfirm} />
+                        <RowMenu user={u} onRefresh={() => load(search || undefined)} onEdit={() => handleEdit(u)} isLast={idx >= filteredUsers.length - 2} setDeleteConfirm={setDeleteConfirm} canEdit={canEdit} canDelete={canDelete} />
                       </td>
                     </tr>
                   ))}
@@ -701,12 +741,14 @@ export default function AdminUsersPage() {
 
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Access Level</label>
-                    <CustomSelect 
+                    <CustomSelect
                       icon={<ShieldCheck size={14} className="text-theme-primary" />}
                       placeholder="Select Role"
-                      value={form.role} 
-                      onChange={(v) => setForm({...form, role: v})} 
-                      options={Object.entries(ROLE_LABEL).map(([v, l]) => ({ label: l, value: v }))}
+                      value={form.role}
+                      onChange={(v) => setForm({...form, role: v})}
+                      options={Object.entries(ROLE_LABEL)
+                        .filter(([v]) => assignableRoles.length === 0 || assignableRoles.includes(v))
+                        .map(([v, l]) => ({ label: l, value: v }))}
                     />
                   </div>
 

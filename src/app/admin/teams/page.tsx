@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
@@ -19,6 +19,7 @@ import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
+import { usePermission } from "@/hooks/usePermission";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 
@@ -26,6 +27,7 @@ type ViewMode = "grid" | "table";
 
 export default function TeamsPage() {
   const { showToast } = useToast();
+  const { canCreate, canEdit, canDelete } = usePermission("teams");
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -200,6 +202,7 @@ export default function TeamsPage() {
 
   return (
     <DashboardShell
+      moduleKey="teams"
       title="Architecture Matrix"
       subtitle="Administrative management of the enterprise-grade organizational tree."
       actions={
@@ -207,9 +210,11 @@ export default function TeamsPage() {
           <Button variant="outline" size="sm" onClick={() => setShowConfigForm(true)}>
             <Settings2 size={14} className="mr-1.5" /> Root Node
           </Button>
-          <Button variant="primary" size="sm" onClick={() => { setEditingItem(null); setForm({ id: "", type: 'department', name: "", head_designation: "", parent_id: "none" }); setShowForm(true); }}>
-            <Plus size={14} className="mr-1" /> Add
-          </Button>
+          {canCreate && (
+            <Button variant="primary" size="sm" onClick={() => { setEditingItem(null); setForm({ id: "", type: 'department', name: "", head_designation: "", parent_id: "none" }); setShowForm(true); }}>
+              <Plus size={14} className="mr-1" /> Add
+            </Button>
+          )}
         </div>
       }
     >
@@ -317,18 +322,22 @@ export default function TeamsPage() {
                     </div>
                     
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => { setEditingItem(item); setForm({ ...item, head_designation: item.head_designation || "", parent_id: item.parent_id || "none" }); setShowForm(true); }}
-                        className="p-1.5 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-colors"
-                      >
-                         <Edit2 size={13} />
-                      </button>
-                      <button 
-                        onClick={() => setDeleteConfirm({ id: item.id, name: item.name })}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-theme-muted hover:text-red-500 transition-colors"
-                      >
-                         <Trash2 size={13} />
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => { setEditingItem(item); setForm({ ...item, head_designation: item.head_designation || "", parent_id: item.parent_id || "none" }); setShowForm(true); }}
+                          className="p-1.5 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-colors"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => setDeleteConfirm({ id: item.id, name: item.name })}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-theme-muted hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
                   </div>
 

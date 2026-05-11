@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -105,6 +105,7 @@ export default function FilesPage() {
 
   return (
     <DashboardShell
+      moduleKey="mail_files"
       title="File Share"
       subtitle="Securely share files across your organization."
       actions={

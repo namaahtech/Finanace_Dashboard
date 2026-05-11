@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useState, useEffect, useCallback } from "react";
@@ -606,6 +606,7 @@ export default function AnalyticsPage() {
 
   return (
     <DashboardShell
+      moduleKey="analytics"
       title="Analytics Command Center"
       subtitle="Enterprise-grade visualization for company and employee performance intelligence"
     >

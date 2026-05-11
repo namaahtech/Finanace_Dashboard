@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -120,6 +120,7 @@ export default function TrainingAcademyPage() {
 
   return (
     <DashboardShell
+      moduleKey="training_academy"
       title="Training Academy"
       subtitle="Expand your skills and earn certifications to boost your performance score."
       actions={

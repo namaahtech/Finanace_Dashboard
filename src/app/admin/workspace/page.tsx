@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -176,7 +176,8 @@ export default function WorkspaceHubPage() {
     `/admin/workspace/${item.type}s/${item.id}`;
 
   return (
-    <DashboardShell title="Workspace Hub" subtitle={getGreeting(user?.name ?? "")}>
+    <DashboardShell
+      moduleKey="workspace_hub" title="Workspace Hub" subtitle={getGreeting(user?.name ?? "")}>
       <div className="space-y-8">
 
         {/* 4 type cards */}

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -165,6 +165,7 @@ export default function LeadDashboard() {
 
   return (
     <DashboardShell
+      moduleKey="lead_dashboard"
       title="Tactical Operations Command"
       subtitle="Operationalize assigned projects and monitor team execution."
     >

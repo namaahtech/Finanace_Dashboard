@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -188,6 +188,7 @@ export default function SpreadsheetsPage() {
 
   return (
     <DashboardShell
+      moduleKey="workspace_spreadsheets"
       title="Spreadsheets"
       subtitle="Tables, trackers and data grids"
       actions={

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -50,6 +50,7 @@ export default function SentPage() {
 
   return (
     <DashboardShell
+      moduleKey="mail_sent"
       title="Sent"
       subtitle="Emails you've sent."
       actions={

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
@@ -212,6 +212,7 @@ export default function EmployeeDashboard() {
 
   return (
     <DashboardShell
+      moduleKey="my_dashboard"
       title="Dashboard"
       subtitle="Your performance, earnings, and assigned projects at a glance."
       actions={

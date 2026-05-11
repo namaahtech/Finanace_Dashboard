@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import {
@@ -150,6 +150,7 @@ export default function ManagerTeamsPage() {
 
   return (
     <DashboardShell
+      moduleKey="manager_teams"
       title="Workforce Architecture"
       subtitle={activeDept ? `Comprehensive personnel management for the ${activeDept.name} Division.` : "Department personnel and organizational hierarchy overview."}
     >

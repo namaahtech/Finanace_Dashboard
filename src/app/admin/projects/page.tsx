@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -20,6 +20,7 @@ import { supabase } from "@/lib/supabase";
 import axios from "axios";
 import dayjs from "dayjs";
 import { useAuth } from "@/components/layout/AuthProvider";
+import { usePermission } from "@/hooks/usePermission";
 import { DelegationModal } from "@/components/projects/DelegationModal";
 
 type ProjectPhase = "SCOPING" | "IMPLEMENTATION" | "REVIEW" | "COMPLETED";
@@ -275,12 +276,14 @@ function MultiSelect({ value, options, onChange, placeholder, icon, label }: {
   }
 
 // ── Card Context Menu ────────────────────────────────────
-function CardMenu({ project, onRefresh, onEdit, setDeleteConfirm, onOversight }: {
+function CardMenu({ project, onRefresh, onEdit, setDeleteConfirm, onOversight, canEdit, canDelete }: {
   project: Project;
   onRefresh: () => void;
   onEdit: () => void;
   setDeleteConfirm: (p: Project) => void;
   onOversight: (p: Project) => void;
+  canEdit: boolean;
+  canDelete: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [acting, setActing] = useState(false);
@@ -310,10 +313,12 @@ function CardMenu({ project, onRefresh, onEdit, setDeleteConfirm, onOversight }:
       </button>
       {open && (
         <div className="absolute z-[9999] right-0 top-8 w-48 rounded-xl border border-theme-border bg-theme-surface shadow-2xl p-1.5 animate-in zoom-in-95 duration-150">
-          <button onClick={() => { onEdit(); setOpen(false); }}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-theme-fg hover:bg-theme-raised transition-all">
-            <Edit2 size={12} className="text-amber-500" /> Edit
-          </button>
+          {canEdit && (
+            <button onClick={() => { onEdit(); setOpen(false); }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-theme-fg hover:bg-theme-raised transition-all">
+              <Edit2 size={12} className="text-amber-500" /> Edit
+            </button>
+          )}
           <button onClick={toggleStatus}
             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-theme-fg hover:bg-theme-raised transition-all">
             <Clock size={12} className="text-sky-500" /> {project.is_active ? "Archive" : "Activate"}
@@ -322,11 +327,15 @@ function CardMenu({ project, onRefresh, onEdit, setDeleteConfirm, onOversight }:
             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-theme-fg hover:bg-theme-raised transition-all">
             <ShieldCheck size={12} className="text-emerald-500" /> Tracking Matrix
           </button>
-          <div className="my-1 h-px bg-theme-border/50" />
-          <button onClick={() => { setDeleteConfirm(project); setOpen(false); }}
-            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-500/10 transition-all">
-            <Trash2 size={12} /> Delete
-          </button>
+          {canDelete && (
+            <>
+              <div className="my-1 h-px bg-theme-border/50" />
+              <button onClick={() => { setDeleteConfirm(project); setOpen(false); }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-500/10 transition-all">
+                <Trash2 size={12} /> Delete
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -404,6 +413,7 @@ function RowMenu({ project, onRefresh, onEdit, isLast, setDeleteConfirm, onOvers
 export default function AdminProjectsPage() {
   const { showToast } = useToast();
   const { request } = useApi();
+  const { canCreate, canEdit, canDelete } = usePermission("projects");
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -590,16 +600,19 @@ export default function AdminProjectsPage() {
 
   return (
     <DashboardShell
+      moduleKey="projects"
       title="Projects"
       subtitle="Track and deliver client work across your teams."
       actions={
-        <button
-          onClick={handleAdd}
-          className="inline-flex items-center gap-2 rounded-xl bg-theme-primary px-4 py-2 text-sm font-semibold text-theme-surface shadow-sm hover:opacity-90 transition-all"
-        >
-          <Plus size={15} />
-          New Project
-        </button>
+        canCreate ? (
+          <button
+            onClick={handleAdd}
+            className="inline-flex items-center gap-2 rounded-xl bg-theme-primary px-4 py-2 text-sm font-semibold text-theme-surface shadow-sm hover:opacity-90 transition-all"
+          >
+            <Plus size={15} />
+            New Project
+          </button>
+        ) : null
       }
     >
       <div className="space-y-5">
@@ -713,6 +726,8 @@ export default function AdminProjectsPage() {
                       onEdit={() => handleEdit(p)}
                       onOversight={() => setOversightProject(p)}
                       setDeleteConfirm={setDeleteConfirm}
+                      canEdit={canEdit}
+                      canDelete={canDelete}
                     />
                   </div>
                 </div>

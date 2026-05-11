@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import { usePermission } from "@/hooks/usePermission";
 import { useEffect, useState, useRef, useCallback, useContext, createContext } from "react";
 import {
   FileText, Plus, Search, Download, IndianRupee, Clock,
@@ -2083,6 +2084,7 @@ function PreviewModal({ invoice, onClose, settings }: {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function InvoicingPage() {
   const { showToast } = useToast();
+  const { canCreate, canDelete, canExport } = usePermission("invoicing");
   const [filter, setFilter]   = useState("all");
   const [search, setSearch]   = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -2185,6 +2187,7 @@ export default function InvoicingPage() {
 
   return (
     <DashboardShell
+      moduleKey="invoicing"
       title="Invoicing"
       subtitle="Manage GST invoices, track payments, and monitor receivables."
       actions={
@@ -2194,9 +2197,11 @@ export default function InvoicingPage() {
             title="Invoice Settings">
             <Settings size={15} />
           </button>
-          <Button variant="primary" size="sm" onClick={() => setShowForm(true)}>
-            <Plus size={14} className="mr-1.5" /> Create Invoice
-          </Button>
+          {canCreate && (
+            <Button variant="primary" size="sm" onClick={() => setShowForm(true)}>
+              <Plus size={14} className="mr-1.5" /> Create Invoice
+            </Button>
+          )}
         </div>
       }
     >
@@ -2293,16 +2298,20 @@ export default function InvoicingPage() {
                           title="Preview Invoice">
                           <Eye size={12} />
                         </button>
-                        <button onClick={() => handleDownload(inv)}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-theme-fg transition-colors"
-                          title="Download PDF">
-                          <Download size={12} />
-                        </button>
-                        <button onClick={() => setDeleteConfirm(inv)}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-red-600 hover:border-red-300 transition-colors"
-                          title="Delete Invoice">
-                          <Trash2 size={12} />
-                        </button>
+                        {canExport && (
+                          <button onClick={() => handleDownload(inv)}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-theme-fg transition-colors"
+                            title="Download PDF">
+                            <Download size={12} />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button onClick={() => setDeleteConfirm(inv)}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-red-600 hover:border-red-300 transition-colors"
+                            title="Delete Invoice">
+                            <Trash2 size={12} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

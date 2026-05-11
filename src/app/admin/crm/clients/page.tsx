@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useCRMStore, ConvertedClient } from "@/store/crmStore";
@@ -236,6 +236,7 @@ export default function CRMClientsPage() {
 
   return (
     <DashboardShell
+      moduleKey="crm_clients"
       title="Client Registry"
       subtitle="Live enterprise client manifest — synchronized with the Sales Pipeline"
     >
