@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const Select = SelectPrimitive.Root;
@@ -10,22 +10,27 @@ const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
 const SelectTrigger = React.forwardRef<
- React.ElementRef<typeof SelectPrimitive.Trigger>,
- React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
- <SelectPrimitive.Trigger
- ref={ref}
- className={cn(
- "flex h-10 w-full items-center justify-between rounded-lg border border-theme-border bg-theme-input px-4 py-2 text-xs font-bold text-theme-fg outline-none transition-all focus:bg-theme-surface focus:border-theme-strong focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
- className
- )}
- {...props}
- >
- {children}
- <SelectPrimitive.Icon asChild>
- <ChevronDown className="h-4 w-4 opacity-30 group-focus:opacity-100 transition-opacity" />
- </SelectPrimitive.Icon>
- </SelectPrimitive.Trigger>
+  React.ElementRef<typeof SelectPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & { loading?: boolean }
+>(({ className, children, loading, ...props }, ref) => (
+  <SelectPrimitive.Trigger
+    ref={ref}
+    className={cn(
+      "flex h-10 w-full items-center justify-between rounded-lg border border-theme-border bg-theme-input px-4 py-2 text-xs font-bold text-theme-fg outline-none transition-all focus:bg-theme-surface focus:border-theme-strong focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      className
+    )}
+    disabled={loading || props.disabled}
+    {...props}
+  >
+    {children}
+    <SelectPrimitive.Icon asChild>
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin opacity-50" />
+      ) : (
+        <ChevronDown className="h-4 w-4 opacity-30 group-focus:opacity-100 transition-opacity" />
+      )}
+    </SelectPrimitive.Icon>
+  </SelectPrimitive.Trigger>
 ));
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 

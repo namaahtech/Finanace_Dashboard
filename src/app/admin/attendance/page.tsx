@@ -1,11 +1,11 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useRef } from "react";
 import {
   Users, Clock, CalendarDays, Search, Download, UserCheck, UserX,
   TrendingUp, ChevronLeft, ChevronRight, Edit2, X, CheckCircle2,
   AlarmClock, Palmtree, LayoutGrid, List, CalendarRange, Play, Square, Timer,
-  RotateCcw, Target, Coffee, ChevronDown
+  RotateCcw, Target, Coffee, ChevronDown, Settings, Check, Landmark, Building2, ShieldAlert
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -206,6 +206,10 @@ export default function AdminAttendancePage() {
     start_time: "09:00:00",
     end_time: "13:00:00"
   });
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [attSettings, setAttSettings] = useState({ id: 1, holiday_is_paid_leave: false });
 
   // Initial Auth & Data
   async function init() {
@@ -222,6 +226,7 @@ export default function AdminAttendancePage() {
       setEmployees(empRes.employees || []);
 
       await loadLogsForDate(selectedDate);
+      await loadSettings();
     } finally {
       setLoading(false);
     }
@@ -275,6 +280,22 @@ export default function AdminAttendancePage() {
     setProtocols(data || []);
   }
 
+  async function loadSettings() {
+    const { data } = await supabase.from("attendance_settings").select("*").eq("id", 1).maybeSingle();
+    if (data) setAttSettings(data);
+  }
+
+  async function updateSettings(holidayIsPaid: boolean) {
+    const { error } = await supabase.from("attendance_settings").upsert({
+      id: 1,
+      holiday_is_paid_leave: holidayIsPaid,
+      updated_at: new Date().toISOString(),
+      updated_by: userId
+    }, { onConflict: 'id' });
+    if (error) showToast(error.message, "error");
+    else showToast("Protocol Updated: Government Holidays = Paid Leave", "success");
+  }
+
   useEffect(() => { init(); }, []); // Run once on mount
   useEffect(() => { loadLogsForDate(selectedDate); }, [selectedDate]); // Refetch on date change
   useEffect(() => {
@@ -292,7 +313,14 @@ export default function AdminAttendancePage() {
     const chan2 = supabase.channel("holidays_updates").on('postgres_changes', { event: '*', schema: 'public', table: 'system_holidays' }, () => {
       loadHolidays();
     }).subscribe();
-    return () => { supabase.removeChannel(chan); supabase.removeChannel(chan2); };
+    const chan3 = supabase.channel("settings_updates").on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_settings' }, () => {
+      loadSettings();
+    }).subscribe();
+    return () => { 
+      supabase.removeChannel(chan); 
+      supabase.removeChannel(chan2); 
+      supabase.removeChannel(chan3); 
+    };
   }, [tab, selectedDate]);
 
   useEffect(() => {
@@ -538,6 +566,9 @@ export default function AdminAttendancePage() {
         subtitle="View and manage employee attendance records."
         actions={
           <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setShowSettingsModal(true)} className="h-10 w-10 p-0 rounded-xl hover:bg-theme-primary/10 hover:text-theme-primary transition-all">
+              <Settings size={16} />
+            </Button>
             {canExport && (
               <Button variant="secondary" size="sm" className="h-10 px-4 rounded-xl font-bold">
                 <Download size={14} className="mr-2" /> Export
@@ -1156,15 +1187,83 @@ export default function AdminAttendancePage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Category</label>
-                  <select
+                  <div className="hidden">
+                    <select
                     value={holidayForm.type}
                     onChange={e => setHolidayForm({ ...holidayForm, type: e.target.value })}
                     className="w-full h-12 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm cursor-pointer"
                   >
+                    <option value="government">Government Holiday</option>
                     <option value="public">Public Holiday</option>
                     <option value="company">Company Holiday</option>
                     <option value="restricted">Restricted Holiday</option>
-                  </select>
+                    </select>
+                  </div>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                      className="w-full h-12 bg-theme-page border border-theme-border rounded-xl px-4 flex items-center justify-between group hover:border-theme-primary transition-all shadow-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const cat = [
+                            { id: 'government', label: 'Government Holiday', icon: Landmark, color: 'text-amber-500' },
+                            { id: 'public', label: 'Public Holiday', icon: Users, color: 'text-blue-500' },
+                            { id: 'company', label: 'Company Holiday', icon: Building2, color: 'text-emerald-500' },
+                            { id: 'restricted', label: 'Restricted Holiday', icon: ShieldAlert, color: 'text-rose-500' },
+                          ].find(c => c.id === holidayForm.type) || { label: 'Select Category', icon: List, color: 'text-theme-muted' };
+                          const Icon = cat.icon;
+                          return (
+                            <>
+                              <div className={cn("p-1.5 rounded-lg bg-theme-surface border border-theme-border group-hover:border-theme-primary/30 transition-colors", cat.color)}>
+                                <Icon size={14} />
+                              </div>
+                              <span className="text-sm font-bold text-theme-fg">{cat.label}</span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                      <ChevronDown size={14} className={cn("text-theme-muted transition-transform duration-300", showCategoryDropdown ? "rotate-180" : "")} />
+                    </button>
+
+                    {showCategoryDropdown && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowCategoryDropdown(false)} />
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-theme-surface border border-theme-border rounded-2xl shadow-2xl z-50 p-2 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                          {[
+                            { id: 'government', label: 'Government Holiday', icon: Landmark, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                            { id: 'public', label: 'Public Holiday', icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                            { id: 'company', label: 'Company Holiday', icon: Building2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                            { id: 'restricted', label: 'Restricted Holiday', icon: ShieldAlert, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+                          ].map(cat => {
+                            const Icon = cat.icon;
+                            const isSelected = holidayForm.type === cat.id;
+                            return (
+                              <button
+                                key={cat.id}
+                                onClick={() => {
+                                  setHolidayForm({ ...holidayForm, type: cat.id });
+                                  setShowCategoryDropdown(false);
+                                }}
+                                className={cn(
+                                  "w-full flex items-center justify-between p-2.5 rounded-xl transition-all group/opt",
+                                  isSelected ? "bg-theme-primary text-white shadow-lg shadow-theme-primary/20" : "hover:bg-theme-page text-theme-fg"
+                                )}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className={cn("p-2 rounded-lg transition-colors", isSelected ? "bg-white/20" : cn("bg-theme-surface border border-theme-border group-hover/opt:border-theme-primary/30", cat.color))}>
+                                    <Icon size={16} />
+                                  </div>
+                                  <span className={cn("text-xs font-bold", isSelected ? "text-white" : "text-theme-fg")}>{cat.label}</span>
+                                </div>
+                                {isSelected && <Check size={14} />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">UI Accent</label>
@@ -1477,6 +1576,54 @@ export default function AdminAttendancePage() {
               >
                 {checking ? "Applying..." : "Confirm Override"}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-theme-surface w-full max-w-md rounded-[2rem] shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-8 border-b border-theme-border bg-gradient-to-br from-theme-surface to-theme-page/30">
+              <div className="flex items-center justify-between mb-6">
+                <div className="h-12 w-12 flex items-center justify-center bg-theme-primary/10 text-theme-primary rounded-2xl">
+                  <Settings size={24} />
+                </div>
+                <button onClick={() => setShowSettingsModal(false)} className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-theme-raised transition-colors text-theme-muted hover:text-theme-fg">
+                  <X size={20} />
+                </button>
+              </div>
+              <h3 className="text-2xl font-black text-theme-fg tracking-tight">Attendance Controls</h3>
+              <p className="text-sm text-theme-muted font-medium mt-1">Configure global attendance rules and protocols.</p>
+            </div>
+
+            <div className="p-8 space-y-6">
+              <div className="group flex items-center justify-between p-4 rounded-2xl border border-theme-border bg-theme-page hover:border-theme-primary/30 transition-all cursor-pointer" onClick={() => updateSettings(!attSettings.holiday_is_paid_leave)}>
+                <div className="flex gap-4 items-center">
+                  <div className={cn("h-10 w-10 flex items-center justify-center rounded-xl transition-all", attSettings.holiday_is_paid_leave ? "bg-emerald-500/10 text-emerald-500" : "bg-theme-raised text-theme-muted")}>
+                    <Palmtree size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-theme-fg">Holidays as Paid Leave</h4>
+                    <p className="text-[11px] text-theme-muted font-medium mt-0.5">Government holidays are automatically paid.</p>
+                  </div>
+                </div>
+                <div className={cn("w-12 h-6 rounded-full relative transition-all duration-300", attSettings.holiday_is_paid_leave ? "bg-emerald-500" : "bg-theme-border")}>
+                   <div className={cn("absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 shadow-sm", attSettings.holiday_is_paid_leave ? "left-7" : "left-1")}></div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20">
+                <div className="flex gap-3">
+                  <Target size={16} className="text-amber-600 mt-0.5" />
+                  <p className="text-xs font-medium text-amber-700/80 leading-relaxed">
+                    Changes to these protocols are synced in real-time across all employee and lead dashboards.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 bg-theme-page border-t border-theme-border flex items-center justify-end">
+              <Button onClick={() => setShowSettingsModal(false)} className="px-8 rounded-xl font-bold">Done</Button>
             </div>
           </div>
         </div>

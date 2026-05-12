@@ -10,7 +10,8 @@ import {
   Receipt, CreditCard, Briefcase, Tag, PiggyBank,
   GitBranch, Handshake, Inbox, Send, Paperclip, Layers, KeyRound,
   UserPlus, RefreshCw, Award, StickyNote, Table2, Presentation,
-  LayoutTemplate, CalendarDays, Circle, Crown, Building, Calendar
+  LayoutTemplate, CalendarDays, Circle, Crown, Building, Calendar,
+  Ticket,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
@@ -135,6 +136,7 @@ const SECTIONS = [
       { key: "claims",          label: "Claims & Expenses",       desc: "Approve/reject employee expense claims" },
       { key: "reimbursements",  label: "Reimbursements",          desc: "Process and approve reimbursement requests" },
       { key: "priority_payout", label: "Priority Payout (Bonus)", desc: "Ad-hoc bonus payout separate from salary" },
+      { key: "support_admin",   label: "Support Command Center",  desc: "Admin view — monitor all tickets across the organization" },
     ],
   },
   {
@@ -192,6 +194,7 @@ const SECTIONS = [
       { key: "my_priority_payout",  label: "My Priority Payout",   desc: "View ad-hoc bonus payouts" },
       { key: "my_messages",         label: "My Messages",          desc: "/dashboard/messages — employee messaging" },
       { key: "my_meetings",         label: "My Meetings",          desc: "/dashboard/meetings — employee meeting list" },
+      { key: "support_user",        label: "Support & Help",       desc: "Raise tickets to other roles, resolve assigned tickets" },
     ],
   },
   {
@@ -289,7 +292,6 @@ function ModuleRow({
           <Toggle
             checked={node.can_view}
             onChange={() => onToggle(item.key, "can_view")}
-            disabled={isSuperAdmin}
           />
           <span className={cn(
             "text-[10px] font-bold w-14",
@@ -337,7 +339,7 @@ function ModuleRow({
 // ─── Main Page ────────────────────────────────────────────────
 export default function PermissionsPage() {
   const { showToast } = useToast();
-  const { user } = useAuth();
+  const { user, refreshPermissions } = useAuth();
 
   const [activeRole, setActiveRole]           = useState("super_admin");
   const [activeTab, setActiveTab]             = useState<"modules" | "assign" | "members">("modules");
@@ -357,28 +359,44 @@ export default function PermissionsPage() {
 
   // Fetch counts for all roles
   const fetchRoleCounts = useCallback(async () => {
-    const { data } = await supabase
-      .from("employees")
-      .select("role");
-    if (!data) return;
-    const counts: Record<string, number> = {};
-    for (const row of data) {
-      counts[row.role] = (counts[row.role] ?? 0) + 1;
+    try {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("role");
+      
+      if (error) throw error;
+      if (!data) return;
+
+      const counts: Record<string, number> = {};
+      for (const row of data) {
+        counts[row.role] = (counts[row.role] ?? 0) + 1;
+      }
+      setRoleCounts(counts);
+    } catch (err) {
+      console.error("[fetchRoleCounts]", err);
+      // Don't toast here to avoid spamming on realtime updates
     }
-    setRoleCounts(counts);
   }, []);
 
   // Fetch full employee list for a specific role
   const fetchRoleMembers = useCallback(async (role: string) => {
     setMembersLoading(true);
-    const { data } = await supabase
-      .from("employees")
-      .select("id, name, email, role, department, designation, employee_id, is_active, joining_date, team_id")
-      .eq("role", role)
-      .order("name");
-    setRoleMembers((data as RoleMember[]) ?? []);
-    setMembersLoading(false);
-  }, []);
+    try {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("id, name, email, role, department, designation, employee_id, is_active, joining_date, team_id")
+        .eq("role", role)
+        .order("name");
+      
+      if (error) throw error;
+      setRoleMembers((data as RoleMember[]) ?? []);
+    } catch (err) {
+      console.error("[fetchRoleMembers]", err);
+      showToast("Failed to fetch role members. Please check connection.", "error");
+    } finally {
+      setMembersLoading(false);
+    }
+  }, [showToast]);
 
   // On mount: load counts + subscribe to employees table for realtime updates
   useEffect(() => {
@@ -437,8 +455,8 @@ export default function PermissionsPage() {
   useEffect(() => { loadRole(activeRole); }, [activeRole, loadRole]);
 
   function togglePerm(key: string, field: keyof PermNode) {
-    if (activeRole === "super_admin") {
-      showToast("Super Admin always has full access — cannot be restricted.", "warning");
+    if (activeRole === "super_admin" && field !== "can_view") {
+      showToast("Super Admin always has full action access. Only visibility can be toggled.", "info");
       return;
     }
     setPermissions((prev) => {
@@ -497,6 +515,11 @@ export default function PermissionsPage() {
         event: "permissions_updated",
         payload: { role: activeRole },
       });
+      
+      // If we updated our own role, refresh our sidebar immediately
+      if (activeRole === user?.role) {
+        await refreshPermissions();
+      }
 
       const roleName = ROLES.find((r) => r.id === activeRole)?.name;
       showToast(`Permissions saved for ${roleName}. Sidebar updated instantly for all active sessions.`, "success");
@@ -516,13 +539,13 @@ export default function PermissionsPage() {
 
   return (
     <DashboardShell
-      title="Access Control"
-      subtitle="Control exactly which modules each role can see and what they can do."
+      title="Security & Permissions"
+      subtitle="Manage global access control and module visibility across the entire organization."
       actions={
         <Button
           onClick={handleSave}
           loading={saving}
-          disabled={isSuperAdmin}
+          disabled={saving}
           className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full h-10 px-8 font-bold text-xs"
         >
           <Save size={14} className="mr-2" />
@@ -549,29 +572,34 @@ export default function PermissionsPage() {
                 key={role.id}
                 onClick={() => setActiveRole(role.id)}
                 className={cn(
-                  "w-full text-left p-4 rounded-2xl border transition-all duration-200",
+                  "w-full text-left p-5 rounded-2xl border transition-all duration-300 relative group overflow-hidden",
                   isActive
-                    ? "bg-white dark:bg-zinc-900 border-emerald-400 shadow-md scale-[1.01]"
-                    : "bg-theme-surface border-theme-border hover:border-emerald-200 hover:bg-theme-raised/30"
+                    ? "bg-theme-primary/5 border-theme-primary shadow-xl shadow-theme-primary/10 scale-[1.02]"
+                    : "bg-theme-card border-theme-border hover:border-theme-strong hover:bg-theme-raised/50"
                 )}
               >
-                <div className="flex items-center justify-between mb-1">
+                {isActive && (
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-theme-primary" />
+                )}
+                <div className="flex items-center justify-between mb-2">
+                  <div className={cn(
+                    "h-8 w-8 rounded-xl flex items-center justify-center transition-colors",
+                    isActive ? "bg-theme-primary text-white" : "bg-theme-raised text-theme-muted group-hover:text-theme-fg"
+                  )}>
+                    <Users size={14} />
+                  </div>
                   <span className={cn(
-                    "text-[9px] font-black uppercase tracking-widest",
-                    isActive ? "text-emerald-600" : "text-theme-muted"
+                    "text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg",
+                    isActive ? "bg-theme-primary/10 text-theme-primary" : "bg-theme-raised text-theme-muted"
                   )}>
                     {roleCounts[role.id] ?? 0} members
                   </span>
-                  <ChevronRight
-                    size={13}
-                    className={cn(
-                      "transition-transform",
-                      isActive ? "rotate-90 text-emerald-500" : "text-theme-muted"
-                    )}
-                  />
                 </div>
-                <p className="text-sm font-bold text-theme-fg">{role.name}</p>
-                <p className="text-[11px] text-theme-muted mt-0.5 leading-relaxed">
+                <p className={cn(
+                  "text-sm font-black transition-colors",
+                  isActive ? "text-theme-primary" : "text-theme-fg"
+                )}>{role.name}</p>
+                <p className="text-[11px] text-theme-muted mt-1 leading-relaxed italic opacity-80 group-hover:opacity-100 transition-opacity">
                   {role.description}
                 </p>
               </button>
@@ -617,10 +645,10 @@ export default function PermissionsPage() {
 
             {/* Super Admin notice */}
             {isSuperAdmin && (
-              <div className="mt-4 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
-                <AlertCircle size={14} className="text-amber-600 flex-shrink-0" />
-                <p className="text-[11px] text-amber-700 font-medium">
-                  Super Admin always has full access to all modules. You can view but not change these settings.
+              <div className="mt-4 flex items-center gap-2 bg-theme-primary/5 border border-theme-primary/20 rounded-xl px-4 py-2.5">
+                <Shield size={14} className="text-theme-primary flex-shrink-0" />
+                <p className="text-[11px] text-theme-primary font-medium">
+                  You are managing the <span className="font-bold">Super Admin</span> profile. Changes here only affect your sidebar visibility and UI preferences.
                 </p>
               </div>
             )}
@@ -730,9 +758,9 @@ export default function PermissionsPage() {
                     </button>
 
                     {expanded && items.map((item) => {
-                      const node = isSuperAdmin
+                      const node = permissions[item.key] ?? (isSuperAdmin 
                         ? { can_view: true, can_create: true, can_edit: true, can_delete: true, can_export: true }
-                        : (permissions[item.key] ?? DEFAULT_NODE);
+                        : DEFAULT_NODE);
 
                       return (
                         <ModuleRow

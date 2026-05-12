@@ -36,37 +36,105 @@ def poll_applications():
 
             print(f"Processing application: {app_id}")
             
+            # Helper to update progress
+            def update_progress(progress, step):
+                supabase.table("applications").update({
+                    "processing_status": "processing",
+                    "processing_progress": progress,
+                    "processing_step": step
+                }).eq("application_id", app_id).execute()
+
             # Update status to processing
-            supabase.table("applications").update({"processing_status": "processing"}).eq("application_id", app_id).execute()
+            update_progress(10, "Initializing Engine...")
 
             # 2. Fetch Job Cluster details
             cluster_res = supabase.table("job_clusters").select("*").eq("cluster_id", cluster_id).single().execute()
             cluster_data = cluster_res.data
             
             # 3. Real OCR / Text Extraction
+            update_progress(30, "Extracting Resume Text (OCR)...")
             storage_res = supabase.storage.from_("resumes").download(file_path)
             resume_text = processor.extract_text_from_pdf(storage_res)
             
             # 4. Neural Audit via Gemma 4
+            update_progress(60, "Gemma 4 Neural Analysis...")
             jd_summary = f"Title: {cluster_data['job_title_variants'][0]} | Skills: {json.dumps(cluster_data['mandatory_skills'])}"
             start_time = time.time()
             analysis, metrics = processor.process_candidate(resume_text, jd_summary)
             total_process_time = round(time.time() - start_time, 2)
 
-            # 5. Save Analysis Result
+            # 5. Save Analysis Result — robust mapping
+            update_progress(90, "Saving Intelligence Reports...")
+            def get_nested_or_flat(d, nested_key, flat_key, default=None):
+                val = d.get(nested_key)
+                if isinstance(val, dict) and val:
+                    return val
+                # Try flat mapping
+                return d.get(flat_key, default)
+
+            # Extract scoring
+            scoring_raw = analysis.get("scoring")
+            if isinstance(scoring_raw, dict):
+                scoring = scoring_raw
+            else:
+                # Handle flat format
+                scoring = {
+                    "match_score": analysis.get("match_score", analysis.get("score", 50)),
+                    "decision": analysis.get("decision", "Hold"),
+                    "breakdown": analysis.get("breakdown", {
+                        "skills": analysis.get("skills_score", 0),
+                        "experience": analysis.get("experience_score", 0),
+                        "projects": analysis.get("projects_score", 0),
+                        "education": analysis.get("education_score", 0)
+                    }),
+                }
+
+            # Extract Profile & Analysis
+            resume_profile = analysis.get("resume_profile")
+            if not isinstance(resume_profile, dict):
+                resume_profile = {
+                    "summary": analysis.get("summary", "Analysis complete."),
+                    "overview": analysis.get("overview", analysis.get("summary", "")),
+                    "education": analysis.get("education", ""),
+                    "projects": analysis.get("projects", ""),
+                    "experience": analysis.get("experience", ""),
+                    "achievements": analysis.get("achievements", "")
+                }
+            
+            recommendations = analysis.get("recommendations")
+            if not isinstance(recommendations, dict):
+                recommendations = {
+                    "pros": analysis.get("pros", []),
+                    "matched_skills": analysis.get("matched_skills", analysis.get("skills", []))
+                }
+
+            gap_analysis = analysis.get("gap_analysis")
+            if not isinstance(gap_analysis, dict):
+                gap_analysis = {
+                    "cons": analysis.get("cons", []),
+                    "missing_skills": analysis.get("missing_skills", [])
+                }
+
             talent_data = {
                 "application_id": app_id,
                 "cluster_id": cluster_id,
-                "resume_profile": analysis.get("resume_profile", {}),
-                "scoring": {"match_score": analysis.get("match_score", 0)},
+                "scoring": scoring,
+                "resume_profile": resume_profile,
+                "recommendations": recommendations,
+                "gap_analysis": gap_analysis,
+                "interview_questions": analysis.get("interview_questions", []),
                 "gemma_raw_response": analysis,
-                "gemma_processing_time_ms": metrics.get("total_duration_ms", 0)
+                "gemma_processing_time_ms": metrics.get("total_duration_ms", 0),
             }
+            
+            # Use upsert to update if exists
             supabase.table("talent_analysis").upsert(talent_data, on_conflict="application_id").execute()
 
             # 6. Finalize Status
             supabase.table("applications").update({
                 "processing_status": "completed",
+                "processing_progress": 100,
+                "processing_step": "Analysis Verified",
                 "talent_analysis_ready_at": "now()"
             }).eq("application_id", app_id).execute()
 

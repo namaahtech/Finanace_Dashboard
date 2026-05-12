@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -55,13 +55,10 @@ interface User {
 }
 
 const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger" | "indigo"> = {
-  employee: "default", hr: "info", lead: "success",
-  manager: "purple", super_admin: "purple", accounts: "warning", sales: "danger",
-  internship: "indigo",
+  employee: "default", hr: "info", lead: "success", manager: "purple", super_admin: "purple", internship: "indigo",
 };
 const ROLE_LABEL: Record<string, string> = {
-  employee: "Employee", hr: "HR", manager: "Department Lead", lead: "Team Lead",
-  super_admin: "Super Admin", accounts: "Accounts", sales: "Sales", internship: "Internship",
+  employee: "Employee", hr: "HR", manager: "Department Lead", lead: "Team Lead", super_admin: "Super Admin", internship: "Internship",
 };
 
 function getInitials(name: string) {

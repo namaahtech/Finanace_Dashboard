@@ -8,7 +8,7 @@ import {
   Settings, LogOut, Sun, Moon, ChevronRight, Building2,
   GitBranch, Receipt, CreditCard, Tag, PiggyBank, Handshake,
   MessageSquare, CalendarClock, IndianRupee,
-  Shield, RefreshCw, Mail,
+  Shield, RefreshCw, Mail, Ticket,
   Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder, User,
   BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award,
   Inbox, PenLine, Send, Paperclip, Layers, KeyRound,
@@ -37,9 +37,9 @@ const MASTER_NAV: NavSection[] = [
   {
     title: "Organization",
     items: [
-      { href: "/admin",             label: "Dashboard",        icon: LayoutDashboard, moduleKey: "admin_dashboard" },
-      { href: "/manager/dashboard", label: "Dashboard",        icon: LayoutDashboard, moduleKey: "manager_dashboard" },
-      { href: "/dashboard",         label: "Dashboard",        icon: LayoutDashboard, moduleKey: "my_dashboard" },
+      { href: "/admin",             label: "Admin Overview",   icon: LayoutDashboard, moduleKey: "admin_dashboard" },
+      { href: "/manager/dashboard", label: "Manager Hub",      icon: LayoutDashboard, moduleKey: "manager_dashboard" },
+      { href: "/dashboard",         label: "My Dashboard",     icon: LayoutDashboard, moduleKey: "my_dashboard" },
       { href: "/admin/projects",    label: "Projects",         icon: Folder,          moduleKey: "projects" },
       { href: "/admin/users",       label: "Employees",        icon: Users,           moduleKey: "employees" },
       { href: "/admin/shifts",      label: "Shift Management", icon: CalendarClock,   moduleKey: "shift_management" },
@@ -87,6 +87,7 @@ const MASTER_NAV: NavSection[] = [
       { href: "/admin/claims",         label: "Claims",          icon: FileText,      moduleKey: "claims" },
       { href: "/admin/reimbursements", label: "Reimbursements",  icon: Receipt,       moduleKey: "reimbursements" },
       { href: "/admin/priority",       label: "Priority Payout", icon: Zap,           moduleKey: "priority_payout" },
+      { href: "/admin/support",        label: "Support Center",  icon: Ticket,        moduleKey: "support_admin" },
     ],
   },
   {
@@ -132,6 +133,7 @@ const MASTER_NAV: NavSection[] = [
       { href: "/dashboard/priority",       label: "Priority Payout", icon: Zap,          moduleKey: "my_priority_payout" },
       { href: "/dashboard/messages",       label: "Messages",        icon: MessageSquare,moduleKey: "my_messages" },
       { href: "/dashboard/meetings",       label: "Meetings",        icon: CalendarClock,moduleKey: "my_meetings" },
+      { href: "/dashboard/support",        label: "Support & Help",  icon: Ticket,       moduleKey: "support_user" },
     ],
   },
   {
@@ -223,9 +225,9 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
 
   return (
     <aside className={cn(
-      "relative flex h-screen flex-col flex-shrink-0 transition-all duration-300 ease-in-out",
-      "bg-sidebar border-r border-sidebar",
-      collapsed ? "w-[68px]" : "w-64"
+      "relative flex h-screen flex-col flex-shrink-0 transition-all duration-300 ease-in-out z-50",
+      "bg-sidebar/95 backdrop-blur-xl border-r border-sidebar shadow-2xl shadow-black/10",
+      collapsed ? "w-[72px]" : "w-64"
     )}>
       {/* Header */}
       <div className={cn(
@@ -306,17 +308,17 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       {/* Footer */}
       <div className="border-t border-sidebar p-3 space-y-2">
         {!collapsed && (
-          <div className="rounded-lg bg-theme-raised/60 px-3 py-2.5">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <p className="text-xs font-semibold text-theme-fg truncate">{user?.name ?? "—"}</p>
+          <div className="rounded-xl bg-gradient-to-br from-theme-raised/80 to-theme-raised/30 border border-theme-border/50 px-3 py-3 shadow-sm mb-2 group">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <p className="text-xs font-bold text-theme-fg truncate group-hover:text-theme-primary transition-colors">{user?.name ?? "—"}</p>
               <span className={cn(
-                "text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0",
+                "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0 shadow-sm",
                 roleInfo.cls
               )}>
                 {roleInfo.label}
               </span>
             </div>
-            <p className="text-[11px] text-theme-muted truncate">{user?.email ?? "—"}</p>
+            <p className="text-[10px] text-theme-muted truncate font-medium opacity-70 italic">{user?.email ?? "—"}</p>
           </div>
         )}
         <div className={cn("flex gap-2", collapsed && "flex-col items-center")}>

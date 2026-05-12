@@ -122,21 +122,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Real-time permissions sync — listens for broadcasts from the admin permissions page.
-  // When super_admin saves permissions for a role, all logged-in users with that role
-  // receive the broadcast and immediately re-fetch their permissions, updating the sidebar instantly.
+  // Real-time permissions sync — listens for DB changes on the role_permissions table.
+  // When an admin saves permissions for a role, all logged-in users with that role
+  // receive the update and immediately re-fetch their permissions.
   useEffect(() => {
     if (!user?.role) return;
 
     const channel = supabase
-      .channel("permissions_sync")
-      .on("broadcast", { event: "permissions_updated" }, async (payload) => {
-        const updatedRole = payload.payload?.role as string | undefined;
-        if (updatedRole === user.role) {
+      .channel("role_permissions_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "role_permissions", filter: `role=eq.${user.role}` },
+        async () => {
+          // Re-fetch the entire permission map for this role
           const perms = await fetchPermissions(user.role);
           if (perms) setPermissions(perms);
         }
-      })
+      )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };

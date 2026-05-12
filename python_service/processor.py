@@ -44,12 +44,38 @@ class RecruitmentProcessor:
         Sends the resume and JD to Gemma 4:e4b on Mac Mini for a cognitive audit.
         """
         prompt = f"""
-        Role: Senior Executive Technical Recruitment Intelligence Auditor (powered by Gemma 4:e4b)
-        [CONTEXT]
-        JD: {jd_context}
-        Resume: {resume_text}
-        Return ONLY a perfectly formatted JSON object with match_score, decision, and breakdown.
-        """
+You are a talent analyst. Perform a deep analysis for this candidate.
+
+Job Description:
+{jd_context}
+
+Candidate Resume:
+{resume_text}
+
+Return ONLY a JSON object with these exact keys (no markdown, no extra text):
+{{
+  "scoring": {{
+    "match_score": <integer 0-100>,
+    "decision": "<Accepted|Rejected|Hold>",
+    "breakdown": {{ "skills": <integer 0-100>, "experience": <integer 0-100>, "projects": <integer 0-100>, "education": <integer 0-100> }}
+  }},
+  "recommendations": {{ "pros": ["<strength1>", "<strength2>"], "matched_skills": ["<skill1>", "<skill2>"] }},
+  "gap_analysis": {{ "cons": ["<gap1>", "<gap2>"], "missing_skills": ["<missing_skill1>", "<missing_skill2>"] }},
+  "resume_profile": {{
+    "summary": "<2-3 sentence executive summary of the candidate>",
+    "overview": "<detailed professional profile paragraph>",
+    "education": "<audit of academic background and qualifications>",
+    "projects": "<analysis of key projects and technologies used>",
+    "experience": "<work experience and role progression analysis>",
+    "achievements": "<quantifiable results and key accomplishments>"
+  }},
+  "interview_questions": [
+    {{ "question": "<challenging interview question>", "reason": "<why this question probes a key concern>" }},
+    {{ "question": "<challenging interview question>", "reason": "<why this question probes a key concern>" }},
+    {{ "question": "<challenging interview question>", "reason": "<why this question probes a key concern>" }}
+  ]
+}}
+"""
         
         try:
             response = requests.post(
@@ -61,11 +87,31 @@ class RecruitmentProcessor:
             response.raise_for_status()
             res_json = response.json()
             ai_output = res_json.get("response", "{}")
+            
+            # Cleanup: sometimes Gemma wraps JSON in ```json blocks
+            if "```json" in ai_output:
+                ai_output = ai_output.split("```json")[1].split("```")[0].strip()
+            elif "```" in ai_output:
+                ai_output = ai_output.split("```")[1].split("```")[0].strip()
+            
             metrics = {
                 "total_duration_ms": res_json.get("total_duration", 0) // 1_000_000,
                 "model": self.model
             }
-            return json.loads(ai_output), metrics
+            
+            try:
+                parsed = json.loads(ai_output)
+            except json.JSONDecodeError:
+                # If it's still not valid JSON, try to find the first { and last }
+                start = ai_output.find('{')
+                end = ai_output.rfind('}')
+                if start != -1 and end != -1:
+                    ai_output = ai_output[start:end+1]
+                    parsed = json.loads(ai_output)
+                else:
+                    raise
+
+            return parsed, metrics
         except Exception as e:
             print(f"AI Engine Error: {e}")
             return {"match_score": 50, "decision": "Hold"}, {}

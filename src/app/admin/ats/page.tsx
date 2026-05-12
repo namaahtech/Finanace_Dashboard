@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useRef } from "react";
 import {
@@ -141,7 +141,8 @@ function CandidateCard({
   onDelete,
   onRescan,
   onCancelStuck,
-  onDecision
+  onDecision,
+  onViewResume
 }: {
   candidate: any;
   onSelect: (c: any) => void;
@@ -149,6 +150,7 @@ function CandidateCard({
   onRescan: (id: string) => void;
   onCancelStuck: (id: string) => void;
   onDecision: (id: string, decision: 'accepted' | 'rejected') => void;
+  onViewResume: (path: string) => void;
 }) {
   // Extract analysis from array or single object
   const analysisArr = candidate.talent_analysis;
@@ -157,7 +159,8 @@ function CandidateCard({
   const score = analysis?.scoring?.match_score || 0;
   const isComplete = candidate.processing_status === "completed";
   const isScanning = candidate.processing_status === "pending" || candidate.processing_status === "processing";
-  const progressValue = candidate.processing_status === "pending" ? 20 : 75;
+  const progressValue = candidate.processing_progress || (candidate.processing_status === 'pending' ? 10 : 0);
+  const progressStep = candidate.processing_step || (candidate.processing_status === 'pending' ? 'In Queue' : 'Processing...');
 
   return (
     <div className="group bg-theme-card border border-theme-border rounded-xl p-4 hover:border-theme-strong hover:shadow-sm transition-all relative overflow-hidden">
@@ -190,7 +193,7 @@ function CandidateCard({
             </div>
 
             <p className="text-[9px] font-black uppercase tracking-widest text-theme-primary mt-3 animate-pulse">Processing</p>
-            <p className="text-[8px] text-theme-muted mt-1 leading-none">Analysing resume...</p>
+            <p className="text-[8px] text-theme-muted mt-1 leading-none">{progressStep}</p>
             <button
               onClick={(e) => { e.stopPropagation(); onCancelStuck(candidate.application_id); }}
               className="mt-3 flex items-center gap-1 text-[9px] font-bold px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all"
@@ -305,6 +308,13 @@ function CandidateCard({
             <Trash2 size={14} />
           </button>
           <button
+            onClick={() => onViewResume(candidate.resume_file_path)}
+            title="View Resume"
+            className="p-1.5 rounded-lg text-theme-muted hover:text-theme-primary hover:bg-theme-primary/10 transition-colors"
+          >
+            <FileText size={14} />
+          </button>
+          <button
             onClick={() => onSelect(candidate)}
             disabled={!isComplete}
             className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-theme-raised border border-theme-border hover:border-theme-strong hover:text-theme-primary transition-all disabled:opacity-40 disabled:cursor-not-allowed ml-2"
@@ -322,12 +332,14 @@ function AnalysisDrawer({
   candidateId, 
   allCandidates, 
   onClose, 
-  onRescan 
+  onRescan,
+  onViewResume
 }: { 
   candidateId: string | null; 
   allCandidates: any[]; 
   onClose: () => void; 
-  onRescan: (id: string) => void 
+  onRescan: (id: string) => void;
+  onViewResume: (path: string) => void;
 }) {
   const candidate = allCandidates.find(c => c.application_id === candidateId);
   if (!candidate) return null;
@@ -386,9 +398,17 @@ function AnalysisDrawer({
             <p className="font-bold text-base text-theme-fg uppercase tracking-tight">Intelligence Audit Report</p>
             <p className="text-[11px] text-theme-muted mt-0.5 font-mono uppercase tracking-widest">Gemma-4 Cognitive Output</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => onViewResume(candidate.resume_file_path)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-theme-primary text-white text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all"
+            >
+              <FileText size={12} /> View Resume
+            </button>
+            <button onClick={onClose} className="p-2 rounded-xl hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs */}
@@ -569,6 +589,34 @@ function AnalysisDrawer({
   );
 }
 
+/* ─── Resume Preview Overlay ──────────────────────────────────────────────── */
+function ResumePreview({ path, onClose }: { path: string | null; onClose: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (path) {
+      const { data } = supabase.storage.from("resumes").getPublicUrl(path);
+      setUrl(data.publicUrl);
+    }
+  }, [path]);
+
+  if (!path || !url) return null;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-10 bg-black/80 backdrop-blur-md">
+      <div className="relative w-full h-full max-w-5xl bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 bg-theme-card border-b border-theme-border">
+          <p className="text-sm font-bold text-theme-fg uppercase tracking-widest">Resume Document Preview</p>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all">
+            <X size={24} />
+          </button>
+        </div>
+        <iframe src={url} className="w-full flex-1" />
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Page ───────────────────────────────────────────────────────────── */
 export default function ATSScannerPage() {
   const [logs, setLogs] = useState<string[]>([]);
@@ -579,6 +627,7 @@ export default function ATSScannerPage() {
   const [selectedCluster, setSelectedCluster] = useState<string>("");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [resumePath, setResumePath] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { showToast } = useToast();
 
@@ -1042,6 +1091,7 @@ export default function ATSScannerPage() {
                     onRescan={handleRescan}
                     onCancelStuck={handleCancelStuck}
                     onDecision={handleDecision}
+                    onViewResume={(path) => setResumePath(path)}
                   />
                 ))
               )}
@@ -1059,6 +1109,18 @@ export default function ATSScannerPage() {
             allCandidates={candidates}
             onClose={() => setSelectedId(null)} 
             onRescan={handleRescan}
+            onViewResume={(path) => setResumePath(path)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Resume Preview */}
+      <AnimatePresence>
+        {resumePath && (
+          <ResumePreview 
+            key="resume-preview"
+            path={resumePath} 
+            onClose={() => setResumePath(null)} 
           />
         )}
       </AnimatePresence>

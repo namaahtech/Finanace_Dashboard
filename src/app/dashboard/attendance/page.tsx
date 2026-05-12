@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
@@ -56,6 +56,7 @@ export default function AttendancePage() {
   const [takeLeaveType, setTakeLeaveType] = useState<"PTO" | "Weekly Off" | "Request" | null>(null);
   const [leaveDate, setLeaveDate] = useState(dayjs().format("YYYY-MM-DD"));
   const [leaveReason, setLeaveReason] = useState("");
+  const [attSettings, setAttSettings] = useState({ id: 1, holiday_is_paid_leave: false });
 
   useEffect(() => { const t = setInterval(() => setCurrentTime(dayjs()), 1000); return () => clearInterval(t); }, []);
 
@@ -79,6 +80,11 @@ export default function AttendancePage() {
     };
     fetchProtocol();
   }, [user]);
+
+  const fetchSettings = useCallback(async () => {
+    const { data } = await supabase.from("attendance_settings").select("*").eq("id", 1).maybeSingle();
+    if (data) setAttSettings(data);
+  }, []);
 
   const fetchLogs = useCallback(async () => {
     setDataLoading(true);
@@ -106,13 +112,15 @@ export default function AttendancePage() {
 
   useEffect(() => {
     fetchLogs();
+    fetchSettings();
     if (!user) return;
     const empSub  = supabase.channel("emp-leaves").on("postgres_changes", { event: "UPDATE", schema: "public", table: "employees", filter: `id=eq.${user.id}` }, (p) => setEmployeeData({ monthly_leave_quota: p.new.monthly_leave_quota, weekly_off_allotment: p.new.weekly_off_allotment })).subscribe();
     const lrSub   = supabase.channel("lr-sync").on("postgres_changes", { event: "*", schema: "public", table: "leave_requests", filter: `employee_id=eq.${user.id}` }, () => fetchLogs()).subscribe();
     const holiSub = supabase.channel("holi-sync").on("postgres_changes", { event: "*", schema: "public", table: "system_holidays" }, () => fetchLogs()).subscribe();
     const attSub  = supabase.channel("att-sync").on("postgres_changes", { event: "*", schema: "public", table: "attendance_logs", filter: `employee_id=eq.${user.id}` }, () => fetchLogs()).subscribe();
-    return () => { supabase.removeChannel(empSub); supabase.removeChannel(lrSub); supabase.removeChannel(holiSub); supabase.removeChannel(attSub); };
-  }, [fetchLogs, user]);
+    const setSub  = supabase.channel("settings-sync").on("postgres_changes", { event: "*", schema: "public", table: "attendance_settings" }, () => fetchSettings()).subscribe();
+    return () => { supabase.removeChannel(empSub); supabase.removeChannel(lrSub); supabase.removeChannel(holiSub); supabase.removeChannel(attSub); supabase.removeChannel(setSub); };
+  }, [fetchLogs, fetchSettings, user]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -129,18 +137,117 @@ export default function AttendancePage() {
     if (!leaveDate) { showToast("Please select a date", "warning"); return; }
     setActionLoading(true);
     try {
+      let targetId: string | null = null;
+      let targetRole: string = "hr";
       if (takeLeaveType === "PTO" || takeLeaveType === "Weekly Off") {
         const { data, error } = await supabase.rpc("auto_approve_leave", { p_employee_id: user.id, p_type: takeLeaveType, p_start_date: leaveDate, p_end_date: leaveDate, p_reason: leaveReason || `Consumed ${takeLeaveType}` });
         if (error) throw error;
         if (data && !data.success) { showToast(data.error, "error"); return; }
       } else {
-        const { error } = await supabase.from("leave_requests").insert({ employee_id: user.id, type: "Unpaid", start_date: leaveDate, end_date: leaveDate, from_date: leaveDate, to_date: leaveDate, days: 1, reason: leaveReason, status: "Pending" });
+        // 1. Determine hierarchy target roles based on the employee's current role
+        let searchRoles: string[] = [];
+        if (["internship", "employee", "sales", "accounts"].includes(user.role)) {
+          searchRoles = ["lead", "manager"];
+        } else if (user.role === "lead") {
+          searchRoles = ["manager"];
+        }
+
+        targetId = user.id;
+        targetRole = "hr";
+        let foundLead = false;
+
+        // 2. Try to find the immediate superior in their own department
+        if (searchRoles.length > 0) {
+          const { data: leads } = await supabase.from("employees")
+            .select("id, role")
+            .eq("department", user.department)
+            .in("role", searchRoles)
+            .limit(1);
+
+          if (leads && leads.length > 0) {
+            targetId = leads[0].id;
+            targetRole = leads[0].role;
+            foundLead = true;
+          }
+        }
+
+        // 3. Escalation fallback if no direct lead exists, or if user is already a manager/hr
+        if (!foundLead) {
+          const fallbackRole = (user.role === "hr" || user.role === "manager" || user.role === "super_admin") ? "super_admin" : "hr";
+          const { data: admins } = await supabase.from("employees")
+            .select("id, role")
+            .eq("role", fallbackRole)
+            .limit(1);
+
+          if (admins && admins.length > 0) {
+            targetId = admins[0].id;
+            targetRole = admins[0].role;
+          }
+        }
+
+        // 2. Create the Support Ticket
+        const { data: ticket, error: ticketError } = await supabase.from("support_tickets").insert({
+          creator_id: user.id,
+          target_role: targetRole,
+          assignee_id: targetId,
+          subject: `Leave Request: ${leaveDate}`,
+          description: `Employee ${user.name} has requested an unpaid leave extension for ${leaveDate}.\n\nReason: ${leaveReason}\n\nPlease approve or reject this request by resolving or rejecting this ticket.`,
+          category: "Leave Extension",
+          priority: "high"
+        }).select().single();
+
+        if (ticketError) throw ticketError;
+
+        // 3. Create leave request linked to the ticket
+        const { error } = await supabase.from("leave_requests").insert({ 
+          employee_id: user.id, 
+          type: "Unpaid", 
+          start_date: leaveDate, 
+          end_date: leaveDate, 
+          from_date: leaveDate, 
+          to_date: leaveDate, 
+          days: 1, 
+          reason: leaveReason, 
+          status: "Pending",
+          support_ticket_id: ticket.id
+        });
         if (error) throw error;
       }
       try {
         const { data: channel } = await supabase.from("channels").select("id").eq("name", "system-alerts").maybeSingle();
         if (channel) await supabase.from("messages").insert({ channel_id: channel.id, sender_id: user.id, sender_name: user.name, content: `Leave request — ${user.name} · ${takeLeaveType} · ${leaveDate}` });
-        await supabase.from("system_notifications").insert({ user_id: user.id, title: `New Leave Request: ${user.name}`, message: `${user.name} submitted a ${takeLeaveType} request for ${leaveDate}.`, type: takeLeaveType === "Request" ? "warning" : "success", link: "/admin/attendance" });
+        // Notify the specific target (Lead/Manager)
+        if (targetId && targetId !== user.id) {
+          await supabase.from("system_notifications").insert({ 
+            user_id: targetId, 
+            title: `Action Required: Leave Request`, 
+            message: `${user.name || user.email} has requested leave for ${leaveDate}. Please review the support ticket.`, 
+            type: "warning", 
+            link: "/dashboard/support" 
+          });
+        }
+
+        // Notify all HR members
+        const { data: hrUsers } = await supabase.from("employees").select("id").eq("role", "hr");
+        if (hrUsers && hrUsers.length > 0) {
+          const hrNotifs = hrUsers.map(hr => ({
+            user_id: hr.id,
+            title: `New Leave Request: ${user.name || user.email}`,
+            message: `${user.name || user.email} submitted a leave request for ${leaveDate}.`,
+            type: "info",
+            link: "/admin/support"
+          }));
+          await supabase.from("system_notifications").insert(hrNotifs);
+        }
+        
+        // Notify the user themselves
+        await supabase.from("system_notifications").insert({ 
+          user_id: user.id, 
+          title: `Leave Request Submitted`, 
+          message: `Your request for ${leaveDate} has been sent for approval.`, 
+          type: "success", 
+          link: "/dashboard/attendance" 
+        });
       } catch {}
       setTakeLeaveType(null); setLeaveDate(dayjs().format("YYYY-MM-DD")); setLeaveReason("");
       fetchLogs(); showToast(`Leave submitted for ${leaveDate}`, "success");
@@ -318,7 +425,12 @@ export default function AttendancePage() {
                             </div>
                             {holi && (
                               <div className="mt-auto rounded px-1.5 py-1 mb-1" style={{ backgroundColor: `${holi.color}20`, borderLeft: `2px solid ${holi.color}` }}>
-                                <span className="block text-[9px] font-semibold truncate" style={{ color: holi.color }}>{holi.title}</span>
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="block text-[9px] font-semibold truncate" style={{ color: holi.color }}>{holi.title}</span>
+                                  {attSettings.holiday_is_paid_leave && (holi.type === 'government' || holi.type === 'public') && (
+                                    <span className="text-[7px] font-black uppercase px-1 rounded-sm bg-emerald-500 text-white leading-none flex items-center justify-center h-3">Paid</span>
+                                  )}
+                                </div>
                               </div>
                             )}
                             <div className="flex-1 flex flex-col justify-end">
