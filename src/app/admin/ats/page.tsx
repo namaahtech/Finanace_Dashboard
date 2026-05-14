@@ -573,7 +573,13 @@ function AnalysisDrawer({
                       <p className="text-[10px] text-theme-muted italic"><span className="font-bold text-theme-fg uppercase not-italic mr-2">Audit Rationale:</span> {q.reason}</p>
                     </div>
                   </div>
-                )) : (
+                )) : candidate?.processing_status === "completed" ? (
+                  <div className="py-20 text-center space-y-3">
+                    <BrainCircuit size={32} className="mx-auto text-theme-muted opacity-30" />
+                    <p className="text-xs text-theme-muted">No interview questions were generated.</p>
+                    <p className="text-[10px] text-theme-muted/60">Use the Rescan button to regenerate a full analysis.</p>
+                  </div>
+                ) : (
                   <div className="py-20 text-center space-y-3">
                     <Loader2 size={32} className="mx-auto text-theme-muted animate-spin" />
                     <p className="text-xs text-theme-muted">Generating intelligence questions...</p>

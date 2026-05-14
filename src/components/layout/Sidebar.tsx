@@ -116,6 +116,7 @@ const MASTER_NAV: NavSection[] = [
       { href: "/admin/mail/drafts",    label: "Drafts",      icon: FileText,     moduleKey: "mail_drafts" },
       { href: "/admin/mail/files",     label: "File Share",  icon: Paperclip,    moduleKey: "mail_files" },
       { href: "/admin/mail/templates", label: "Templates",   icon: Layers,       moduleKey: "mail_templates" },
+      { href: "/admin/mail/accounts",  label: "Mail Accounts",icon: Users,        moduleKey: "mail_accounts" },
       { href: "/admin/mail/config",    label: "Mail Config", icon: KeyRound,     moduleKey: "mail_config" },
       { href: "/admin/messaging",      label: "Messages",    icon: MessageSquare,moduleKey: "messages" },
       { href: "/admin/meetings",       label: "Meetings",    icon: CalendarClock,moduleKey: "meetings" },

@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import {
   Users, UserPlus, Search, X, CreditCard, Building, UserCheck, UserX,
   ShieldCheck, FileText, Zap, CalendarDays, MoreVertical, Trash2, Edit2,
-  RefreshCw, Mail, ChevronDown, ChevronRight, Check, Clock, LayoutGrid, Coffee
+  RefreshCw, Mail, ChevronDown, ChevronRight, Check, Clock, LayoutGrid, Coffee, Loader2
 } from "lucide-react";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { usePermission } from "@/hooks/usePermission";
@@ -127,7 +127,7 @@ function CustomSelect({ value, options, onChange, placeholder, icon, label }: {
 }
 
 // ── 3-Dot Context Menu ──────────────────────────────────
-function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, canDelete }: {
+function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, canDelete, zohoConnected }: {
   user: User;
   onRefresh: () => void;
   onEdit: () => void;
@@ -135,14 +135,42 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
   setDeleteConfirm: (u: User) => void;
   canEdit: boolean;
   canDelete: boolean;
+  zohoConnected: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [showCustomMail, setShowCustomMail] = useState(false);
   const [mailSubject, setMailSubject] = useState("");
   const [mailBody, setMailBody] = useState("");
   const [acting, setActing] = useState(false);
+  const [provisioningMail, setProvisioningMail] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
+
+  async function createZohoMail() {
+    setProvisioningMail(true);
+    setOpen(false);
+    try {
+      const res = await fetch("/api/mail/accounts/create-employee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employee_id: user.id, name: user.name, domain: "namaah.in" }),
+      });
+      const data = await res.json();
+      if (res.ok && data.email_address) {
+        if (data.already_exists) {
+          showToast(`Mail already exists: ${data.email_address}`, "info");
+        } else {
+          showToast(`Zoho Mail created: ${data.email_address}`, "success");
+        }
+      } else {
+        showToast(data.error || "Failed to create Zoho Mail.", "error");
+      }
+    } catch {
+      showToast("Failed to create Zoho Mail. Check connection.", "error");
+    } finally {
+      setProvisioningMail(false);
+    }
+  }
 
   useEffect(() => {
     const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -157,6 +185,8 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, []);
+
+  const isActing = acting || provisioningMail;
 
   async function doAction(action: string, extra?: Record<string, string>) {
     setActing(true);
@@ -174,8 +204,8 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
 
   return (
     <div ref={ref} className="relative inline-block">
-      <button onClick={() => setOpen((o) => !o)} disabled={acting} className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-colors">
-        <MoreVertical size={14} />
+      <button onClick={() => setOpen((o) => !o)} disabled={isActing} className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-colors">
+        {provisioningMail ? <Loader2 size={14} className="animate-spin" /> : <MoreVertical size={14} />}
       </button>
 
       {open && (
@@ -196,6 +226,12 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
             <Mail size={13} className="text-emerald-500" /> Send Custom Mail
           </button>
+          {zohoConnected && (
+            <button onClick={createZohoMail}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
+              <Zap size={13} className="text-blue-500" /> Create Zoho Mail
+            </button>
+          )}
           {canDelete && (
             <>
               <div className="my-1.5 h-px bg-theme-border/50" />
@@ -654,7 +690,7 @@ export default function AdminUsersPage() {
                         </button>
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <RowMenu user={u} onRefresh={() => load(search || undefined)} onEdit={() => handleEdit(u)} isLast={idx >= filteredUsers.length - 2} setDeleteConfirm={setDeleteConfirm} canEdit={canEdit} canDelete={canDelete} />
+                        <RowMenu user={u} onRefresh={() => load(search || undefined)} onEdit={() => handleEdit(u)} isLast={idx >= filteredUsers.length - 2} setDeleteConfirm={setDeleteConfirm} canEdit={canEdit} canDelete={canDelete} zohoConnected={zohoConnected} />
                       </td>
                     </tr>
                   ))}
