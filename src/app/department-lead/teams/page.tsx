@@ -22,23 +22,19 @@ import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/components/layout/AuthProvider";
 
 const ROLE_LABEL: Record<string, string> = {
-  employee: "EMPLOYEE", 
-  hr: "HR", 
-  lead: "TEAM LEAD", 
-  manager: "DEPARTMENT MANAGER",
-  super_admin: "SUPER ADMIN", 
-  accounts: "ACCOUNTS", 
-  sales: "SALES",
+  employee:  "EMPLOYEE",
+  team_lead: "TEAM LEAD",
+  dept_lead: "DEPARTMENT LEAD",
+  admin:     "ADMIN",
+  intern:    "INTERN",
 };
 
 const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger"> = {
-  employee: "default", 
-  hr: "info", 
-  lead: "success",
-  manager: "purple", 
-  super_admin: "purple", 
-  accounts: "warning", 
-  sales: "danger",
+  employee:  "default",
+  team_lead: "success",
+  dept_lead: "purple",
+  admin:     "purple",
+  intern:    "info",
 };
 
 export default function ManagerTeamsPage() {

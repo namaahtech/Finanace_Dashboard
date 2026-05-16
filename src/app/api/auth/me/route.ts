@@ -14,7 +14,7 @@ export async function GET() {
         name: payload.email.split('@')[0].toUpperCase(),
         employee_id: "EMP-" + payload.userId.slice(0, 4).toUpperCase(),
         department: "Operations",
-        designation: payload.role === "super_admin" ? "Founder" : "Specialist"
+        designation: payload.role === "admin" ? "Founder" : "Specialist"
       }
     });
   } catch {

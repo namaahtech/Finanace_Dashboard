@@ -298,7 +298,7 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
 
                 {/* Quick Action Overlays */}
                 <div className="mt-3 flex flex-col gap-1.5">
-                   {task.task_type === 'strategic' && (user?.role === 'lead' || user?.role === 'manager' || user?.role === 'super_admin') && (
+                   {task.task_type === 'strategic' && (user?.role === 'team_lead' || user?.role === 'dept_lead' || user?.role === 'admin') && (
                       <Button 
                         size="xs" 
                         variant="secondary"
@@ -318,7 +318,7 @@ export function ProjectKanban({ projectId, projectName, progress, onClose }: Kan
                         Submit Review
                       </Button>
                    )}
-                   {task.status === 'SUBMITTED' && (user?.role === 'super_admin' || user?.role === 'manager' || user?.role === 'lead') && (
+                   {task.status === 'SUBMITTED' && (user?.role === 'admin' || user?.role === 'dept_lead' || user?.role === 'team_lead') && (
                       <Button 
                         size="xs" 
                         variant="secondary"

@@ -188,7 +188,7 @@ export default function AdminIncentivesPage() {
   const employeeMultiplier = getEmployeeMultiplier(employeeScore);
   const totalAmount = calculateFinalIncentive(fixedAmount, variableAmount, employeeMultiplier, companyMultiplier);
 
-  const canEditConfig = user?.role === "super_admin";
+  const canEditConfig = user?.role === "admin";
 
   const filtered = statusFilter === "all" ? incentives : incentives.filter((i) => i.status === statusFilter);
 

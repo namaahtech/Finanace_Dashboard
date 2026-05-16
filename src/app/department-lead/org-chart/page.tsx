@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
@@ -37,23 +37,19 @@ function collectIds(node: OrgNode): string[] {
 }
 
 const ROLE_LABEL: Record<string, string> = {
-  employee: "Employee",
-  hr: "HR",
-  lead: "Team Lead",
-  manager: "Dept. Manager",
-  super_admin: "Super Admin",
-  accounts: "Accounts",
-  sales: "Sales",
+  employee:  "Employee",
+  team_lead: "Team Lead",
+  dept_lead: "Dept. Lead",
+  admin:     "Admin",
+  intern:    "Intern",
 };
 
 const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger"> = {
-  employee: "default",
-  hr: "info",
-  lead: "success",
-  manager: "purple",
-  super_admin: "purple",
-  accounts: "warning",
-  sales: "danger",
+  employee:  "default",
+  team_lead: "success",
+  dept_lead: "purple",
+  admin:     "purple",
+  intern:    "info",
 };
 
 // ─── Node Card (Circular Dot Design) ───────────────────────
@@ -218,7 +214,7 @@ export default function ManagerOrgChartPage() {
             .map((t: { id: string; name: string }) => ({
               id: t.id,
               name: t.name,
-              role: "lead",
+              role: "team_lead",
               type: "team" as const,
               children: buildTree(t.id),
             }));

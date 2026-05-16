@@ -16,9 +16,9 @@ interface DashboardShellProps {
 }
 
 function getDashboardForRole(role: string): string {
-  if (role === "lead")    return "/lead/dashboard";
-  if (role === "manager") return "/manager/dashboard";
-  if (role === "employee" || role === "internship" || role === "sales") return "/dashboard";
+  if (role === "team_lead")  return "/team-lead/dashboard";
+  if (role === "dept_lead")  return "/department-lead/dashboard";
+  if (role === "employee" || role === "intern") return "/dashboard";
   return "/admin";
 }
 
@@ -37,7 +37,6 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
   // redirect the user to their home dashboard immediately — no refresh needed.
   useEffect(() => {
     if (!moduleKey || !user || !permissions) return;
-    if (user.role === "super_admin") return;
 
     const perm = permissions[moduleKey];
     if (perm && !perm.can_view) {

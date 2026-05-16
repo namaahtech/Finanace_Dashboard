@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Badge } from "@/components/ui/Badge";
@@ -123,12 +123,11 @@ interface InvoiceSettings {
 }
 
 const ALL_ROLES = [
-  { value: "super_admin", label: "Super Admin",  color: "bg-purple-100 text-purple-700" },
-  { value: "accounts",    label: "Accounts",     color: "bg-blue-100 text-blue-700" },
-  { value: "hr",          label: "HR",           color: "bg-emerald-100 text-emerald-700" },
-  { value: "lead",        label: "Lead",         color: "bg-amber-100 text-amber-700" },
-  { value: "sales",       label: "Sales",        color: "bg-sky-100 text-sky-700" },
-  { value: "employee",    label: "Employee",     color: "bg-gray-100 text-gray-600" },
+  { value: "admin",     label: "Admin",          color: "bg-purple-100 text-purple-700" },
+  { value: "dept_lead", label: "Dept Lead",      color: "bg-amber-100 text-amber-700" },
+  { value: "team_lead", label: "Team Lead",       color: "bg-orange-100 text-orange-700" },
+  { value: "employee",  label: "Employee",        color: "bg-gray-100 text-gray-600" },
+  { value: "intern",    label: "Intern",          color: "bg-indigo-100 text-indigo-700" },
 ];
 
 // Official GST State/UT Codes (01-37) - Indian Government
@@ -179,8 +178,8 @@ const EMPTY_SETTINGS: InvoiceSettings = {
   smtp_host: "", smtp_port: 587, smtp_user: "", smtp_pass: "", smtp_from_name: "Namaah Technologies", smtp_from_email: "", smtp_secure: false,
   invoice_prefix: "INV", default_due_days: 30, invoice_footer: "Thank you for your business.", auto_numbering: true, show_logo: true,
   default_gst_rate: 18, default_place_of_supply: "Karnataka", require_approval: false, send_on_create: false,
-  can_create_roles: ["super_admin","accounts"], can_send_roles: ["super_admin","accounts"],
-  can_mark_paid_roles: ["super_admin","accounts"], can_delete_roles: ["super_admin"], can_edit_roles: ["super_admin","accounts"],
+  can_create_roles: ["admin"], can_send_roles: ["admin"],
+  can_mark_paid_roles: ["admin"], can_delete_roles: ["admin"], can_edit_roles: ["admin"],
 };
 
 const STATUS_BADGE: Record<string, "default" | "info" | "success" | "warning" | "danger"> = {

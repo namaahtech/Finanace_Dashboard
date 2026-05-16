@@ -23,7 +23,7 @@ async function createAdmin() {
     name: "Super Admin",
     email: "admin@namaah.in",
     password: "Admin@123",
-    role: "super_admin",
+    role: "admin",
     employeeId: "SA001",
     department: "Management",
     designation: "Super Administrator",

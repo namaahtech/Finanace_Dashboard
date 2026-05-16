@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "employeeId required" }, { status: 400 });
       }
     } else {
-      await requireRole(req, "hr", "super_admin");
+      await requireRole(req, "admin");
       if (!employeeId) {
         return NextResponse.json({ error: "employeeId required" }, { status: 400 });
       }

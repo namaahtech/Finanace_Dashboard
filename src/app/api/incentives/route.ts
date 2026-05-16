@@ -67,4 +67,4 @@ export const POST = withAuth(async (req) => {
   } catch (err) {
     return apiError(err instanceof Error ? err.message : "Error awarding incentive");
   }
-}, "hr", "super_admin");
+}, "admin");

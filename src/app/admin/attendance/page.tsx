@@ -460,8 +460,8 @@ export default function AdminAttendancePage() {
         end_date: leaveForm.to,
         days: dayCount,
         reason: leaveForm.reason,
-        status: userRole === "super_admin" ? "Approved" : "Pending", // Match capitalized status for safety
-        approved_by: userRole === "super_admin" ? userId : null
+        status: userRole === "admin" ? "Approved" : "Pending",
+        approved_by: userRole === "admin" ? userId : null
       });
       if (error) throw error;
       showToast("Leave induction completed", "success");
@@ -661,7 +661,7 @@ export default function AdminAttendancePage() {
                         <tr><td colSpan={7} className="px-6 py-12 text-center text-xs text-theme-muted">Loading attendance data...</td></tr>
                       ) : filtered.map(emp => {
                         const log: any = dailyLogs[emp.id];
-                        const isAdmin = userRole === "super_admin";
+                        const isAdmin = userRole === "admin";
                         return (
                           <tr key={emp.id} className="group hover:bg-theme-raised/30 transition-colors">
                             <td className="px-5 py-3"><div className="flex items-center gap-3">
@@ -824,7 +824,7 @@ export default function AdminAttendancePage() {
             <div className="space-y-4">
               <div className="flex justify-between items-center mb-2">
                 <h3 className="text-base font-black text-theme-fg tracking-tight">Active Leave Protocols</h3>
-                {userRole === "super_admin" && (
+                {userRole === "admin" && (
                   <Button onClick={() => setShowLeaveModal(true)} size="sm" className="rounded-xl font-bold bg-theme-primary text-white">
                     <Palmtree size={14} className="mr-2" /> Manual Entry
                   </Button>
@@ -945,7 +945,7 @@ export default function AdminAttendancePage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {userRole === "super_admin" && (
+                  {userRole === "admin" && (
                     <button
                       onClick={() => {
                         const today = dayjs().format('YYYY-MM-DD');
@@ -1014,7 +1014,7 @@ export default function AdminAttendancePage() {
                             start_time: holi?.start_time || "09:00:00",
                             end_time: holi?.end_time || "13:00:00"
                           });
-                          if (userRole === "super_admin") setShowHolidayModal(true);
+                          if (userRole === "admin") setShowHolidayModal(true);
                         }}
                         className={cn(
                           "relative border-r border-b border-theme-border p-1.5 transition-all min-h-[80px] flex flex-col group overflow-visible cursor-pointer",
@@ -1064,7 +1064,7 @@ export default function AdminAttendancePage() {
             <div className="space-y-4">
               <div className="flex justify-between items-center mb-2">
                 <h3 className="text-base font-black text-theme-fg tracking-tight">Timing Protocols</h3>
-                {userRole === "super_admin" && (
+                {userRole === "admin" && (
                   <Button onClick={() => setShowProtocolModal(true)} size="sm" className="rounded-xl font-bold bg-theme-primary text-white">
                     <AlarmClock size={14} className="mr-2" /> New Protocol
                   </Button>

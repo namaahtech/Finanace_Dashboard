@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const { data: config } = await supabase
     .from("zoho_config")
     .select("id, client_id, client_secret, redirect_uri")
+    .limit(1)
     .maybeSingle();
 
   if (!config) {
@@ -33,11 +34,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${appUrl}/admin/mail/config?error=token_failed`);
   }
 
-  // Fetch admin account ID from Zoho
+  // Fetch admin account ID + org ID from Zoho
   let adminAccountId: string | null = null;
+  let orgId: string | null = null;
   try {
     const accounts = await zohoGet(tokens.access_token, "/accounts");
     adminAccountId = accounts?.data?.[0]?.accountId ?? null;
+  } catch {}
+  try {
+    const orgs = await zohoGet(tokens.access_token, "/organization");
+    orgId = orgs?.data?.[0]?.orgId
+         ?? orgs?.data?.[0]?.id
+         ?? orgs?.data?.orgId
+         ?? null;
   } catch {}
 
   await supabase.from("zoho_config").update({
@@ -45,6 +54,7 @@ export async function GET(req: NextRequest) {
     refresh_token:    tokens.refresh_token,
     token_expiry:     new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
     admin_account_id: adminAccountId,
+    zoid:             orgId,
     is_connected:     true,
     connected_at:     new Date().toISOString(),
     updated_at:       new Date().toISOString(),

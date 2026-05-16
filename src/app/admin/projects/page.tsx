@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -576,7 +576,7 @@ export default function AdminProjectsPage() {
   
   // Filter managers based on department
   const filteredManagers = employees.filter(emp => {
-    const isManagerRole = emp.role === 'manager' || emp.role === 'super_admin';
+    const isManagerRole = emp.role === 'dept_lead' || emp.role === 'admin';
     if (!isManagerRole) return false;
     
     if (!form.department_id) return true;
@@ -802,7 +802,7 @@ export default function AdminProjectsPage() {
                   >
                     Open Board
                   </button>
-                  {(user?.role === 'manager' || user?.role === 'super_admin') && (
+                  {(user?.role === 'dept_lead' || user?.role === 'admin') && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setDelegationProject(p); }}
                       className="flex-1 rounded-lg border border-theme-border px-3 py-1.5 text-xs font-semibold text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-all text-center"

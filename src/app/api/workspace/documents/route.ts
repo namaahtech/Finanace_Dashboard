@@ -11,7 +11,7 @@ export async function GET(req: Request) {
     const userId = searchParams.get("userId");
     const userRole = searchParams.get("userRole");
     const projectId = searchParams.get("projectId");
-    const isAdmin = ["super_admin", "accounts", "hr", "manager"].includes(userRole || "");
+    const isAdmin = ["admin", "dept_lead"].includes(userRole || "");
 
     if (!userId && !projectId) {
       return NextResponse.json({ documents: [] });

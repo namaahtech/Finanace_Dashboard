@@ -16,7 +16,7 @@ interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: "employee" | "hr" | "lead" | "super_admin" | "accounts" | "sales" | "manager" | "internship";
+  role: "admin" | "dept_lead" | "team_lead" | "employee" | "intern";
   employee_id: string;
   department: string;
   designation: string;
@@ -145,10 +145,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.role]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
+    let loginEmail = email;
+
+    // Try direct sign-in first
+    let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
       password,
     });
+
+    // If failed, check if it's a zoho/professional email and look up personal email
+    if (authError || !authData.user) {
+      try {
+        const res = await fetch(`/api/auth/resolve-email?email=${encodeURIComponent(email)}`);
+        if (res.ok) {
+          const { personal_email } = await res.json();
+          if (personal_email && personal_email !== email) {
+            loginEmail = personal_email;
+            const retry = await supabase.auth.signInWithPassword({ email: loginEmail, password });
+            authData  = retry.data;
+            authError = retry.error;
+          }
+        }
+      } catch (_) {}
+    }
 
     if (authError || !authData.user) {
       throw new Error(authError?.message || "Invalid credentials");
@@ -172,12 +191,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPermissions(perms);
 
     // Route based on role
-    if (emp.role === "employee" || emp.role === "internship" || emp.role === "sales") {
+    if (emp.role === "employee" || emp.role === "intern") {
       router.push("/dashboard");
-    } else if (emp.role === "lead") {
-      router.push("/lead/dashboard");
-    } else if (emp.role === "manager") {
-      router.push("/manager/dashboard");
+    } else if (emp.role === "team_lead") {
+      router.push("/team-lead/dashboard");
+    } else if (emp.role === "dept_lead") {
+      router.push("/department-lead/dashboard");
     } else {
       router.push("/admin");
     }

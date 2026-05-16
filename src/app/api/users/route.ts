@@ -13,6 +13,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing highly critical parameters (Name, Email, Role)" }, { status: 400 });
     }
 
+    const VALID_ROLES = ["admin", "dept_lead", "team_lead", "employee", "intern"];
+    if (!VALID_ROLES.includes(role)) {
+      return NextResponse.json({ error: `Invalid role "${role}". Must be one of: ${VALID_ROLES.join(", ")}` }, { status: 400 });
+    }
+
     // 1. Generate an automated generic password (e.g. Namaah@1234)
     const generatedPassword = `Namaah@1234`;
 
@@ -133,7 +138,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, message: "Employee registered & Auth linked successfully." }, { status: 200 });
+    return NextResponse.json({ success: true, id: user.id, message: "Employee registered & Auth linked successfully." }, { status: 200 });
 
   } catch (error: any) {
     return NextResponse.json({ error: "Internal Relay Fault: " + error.message }, { status: 500 });

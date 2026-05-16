@@ -62,18 +62,25 @@ export async function exchangeCodeForTokens(
   code: string,
   redirectUri: string
 ): Promise<any> {
-  const res = await fetch(`${ZOHO_ACCOUNTS_URL}/oauth/v2/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    }),
-  });
-  return res.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(`${ZOHO_ACCOUNTS_URL}/oauth/v2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      signal: controller.signal,
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export function buildOAuthUrl(clientId: string, redirectUri: string): string {

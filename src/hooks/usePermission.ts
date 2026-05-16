@@ -19,7 +19,7 @@ export interface PermissionState {
 export function usePermission(moduleKey: string): PermissionState {
   const { user, permissions } = useAuth();
 
-  if (user?.role === "super_admin") {
+  if (user?.role === "admin") {
     return { canView: true, canCreate: true, canEdit: true, canDelete: true, canExport: true };
   }
 

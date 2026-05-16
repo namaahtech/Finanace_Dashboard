@@ -120,7 +120,7 @@ export default function AdminConfigPage() {
 
   useEffect(() => { load(); }, []);
 
-  if (user && user.role !== "super_admin") {
+  if (user && user.role !== "admin") {
     return (
       <DashboardShell
       moduleKey="system_config" title="System Configuration">

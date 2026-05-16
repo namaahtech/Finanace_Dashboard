@@ -125,11 +125,11 @@ export default function AdminMessagingPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (user && user.role !== "super_admin" && canView === false) {
+    if (user && user.role !== "admin" && canView === false) {
       router.replace(
-        user.role === "lead" ? "/lead/dashboard"
-        : user.role === "manager" ? "/manager/dashboard"
-        : user.role === "employee" || user.role === "internship" || user.role === "sales" ? "/dashboard"
+        user.role === "team_lead" ? "/team-lead/dashboard"
+        : user.role === "dept_lead" ? "/department-lead/dashboard"
+        : user.role === "employee" || user.role === "intern" ? "/dashboard"
         : "/admin"
       );
     }

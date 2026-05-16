@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
+import { CalendarWidget } from "@/components/calendar/CalendarWidget";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/Button";
@@ -251,6 +252,16 @@ export default function EmployeeDashboard() {
             </div>
           ))}
         </div>
+
+        {/* Calendar Widget */}
+        {user?.id && (
+          <CalendarWidget
+            userId={user.id}
+            department={user.department || ""}
+            maxItems={5}
+            className="w-full"
+          />
+        )}
 
         {/* Business Health Chart + Multiplier */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

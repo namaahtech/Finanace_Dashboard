@@ -38,15 +38,15 @@ const MASTER_NAV: NavSection[] = [
     title: "Organization",
     items: [
       { href: "/admin",             label: "Admin Overview",   icon: LayoutDashboard, moduleKey: "admin_dashboard" },
-      { href: "/manager/dashboard", label: "Manager Hub",      icon: LayoutDashboard, moduleKey: "manager_dashboard" },
+      { href: "/department-lead/dashboard", label: "Manager Hub",      icon: LayoutDashboard, moduleKey: "manager_dashboard" },
       { href: "/dashboard",         label: "My Dashboard",     icon: LayoutDashboard, moduleKey: "my_dashboard" },
       { href: "/admin/projects",    label: "Projects",         icon: Folder,          moduleKey: "projects" },
       { href: "/admin/users",       label: "Employees",        icon: Users,           moduleKey: "employees" },
       { href: "/admin/shifts",      label: "Shift Management", icon: CalendarClock,   moduleKey: "shift_management" },
       { href: "/admin/teams",       label: "Teams",            icon: Building2,       moduleKey: "teams" },
       { href: "/admin/org-chart",   label: "Org Chart",        icon: Network,         moduleKey: "org_chart" },
-      { href: "/manager/teams",     label: "My Teams",         icon: Building2,       moduleKey: "manager_teams" },
-      { href: "/manager/org-chart", label: "My Org Chart",     icon: Network,         moduleKey: "manager_org_chart" },
+      { href: "/department-lead/teams",     label: "My Teams",         icon: Building2,       moduleKey: "manager_teams" },
+      { href: "/department-lead/org-chart", label: "My Org Chart",     icon: Network,         moduleKey: "manager_org_chart" },
     ],
   },
   {
@@ -134,6 +134,7 @@ const MASTER_NAV: NavSection[] = [
       { href: "/dashboard/priority",       label: "Priority Payout", icon: Zap,          moduleKey: "my_priority_payout" },
       { href: "/dashboard/messages",       label: "Messages",        icon: MessageSquare,moduleKey: "my_messages" },
       { href: "/dashboard/meetings",       label: "Meetings",        icon: CalendarClock,moduleKey: "my_meetings" },
+      { href: "/dashboard/calendar",       label: "My Calendar",     icon: CalendarDays, moduleKey: "my_meetings" },
       { href: "/dashboard/support",        label: "Support & Help",  icon: Ticket,       moduleKey: "support_user" },
     ],
   },
@@ -142,6 +143,7 @@ const MASTER_NAV: NavSection[] = [
     items: [
       { href: "/admin/analytics",   label: "Analytics",     icon: BarChart3,    moduleKey: "analytics" },
       { href: "/admin/permissions", label: "Permissions",   icon: Shield,       moduleKey: "permissions_control" },
+      { href: "/admin/audit",       label: "Audit Log",     icon: ClipboardList,moduleKey: "system_config" },
       { href: "/admin/report",      label: "Feature Report",icon: ClipboardList,moduleKey: "feature_report" },
       { href: "/admin/config",      label: "System Config", icon: Settings,     moduleKey: "system_config" },
     ],
@@ -151,14 +153,11 @@ const MASTER_NAV: NavSection[] = [
 // ─── Role badge styles ────────────────────────────────────────
 
 const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
-  super_admin: { label: "Super Admin",    cls: "bg-purple-500/10 text-purple-500" },
-  accounts:    { label: "Accounts",       cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
-  hr:          { label: "HR",             cls: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
-  manager:     { label: "Department Lead",cls: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
-  lead:        { label: "Team Lead",      cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
-  employee:    { label: "Employee",       cls: "bg-theme-raised text-theme-muted" },
-  sales:       { label: "Sales",          cls: "bg-rose-500/10 text-rose-500" },
-  internship:  { label: "Internship",     cls: "bg-indigo-500/10 text-indigo-500" },
+  admin:     { label: "Admin",          cls: "bg-purple-500/10 text-purple-500" },
+  dept_lead: { label: "Dept Lead",      cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
+  team_lead: { label: "Team Lead",      cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  employee:  { label: "Employee",       cls: "bg-theme-raised text-theme-muted" },
+  intern:    { label: "Intern",         cls: "bg-indigo-500/10 text-indigo-500" },
 };
 
 // ─── Sidebar component ────────────────────────────────────────
@@ -186,8 +185,8 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => {
-        // While permissions are loading, show all (DashboardShell blocks render anyway)
-        if (!permissions) return true;
+        // While permissions are loading, hide all (DashboardShell loading state handles the wait)
+        if (!permissions) return false;
         const perm = permissions[item.moduleKey];
         // No DB row for this module/role = not enabled = hidden
         if (!perm) return false;

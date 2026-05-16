@@ -50,12 +50,11 @@ const PRIORITY_STYLES: Record<string, { bg: string; text: string }> = {
 };
 
 const ROLES = [
-  { id: "super_admin", label: "Super Admin" },
-  { id: "manager",     label: "Department Lead" },
-  { id: "lead",        label: "Team Lead" },
-  { id: "hr",          label: "HR" },
-  { id: "employee",    label: "Employee" },
-  { id: "internship",  label: "Internship" },
+  { id: "admin",     label: "Admin" },
+  { id: "dept_lead", label: "Department Lead" },
+  { id: "team_lead", label: "Team Lead" },
+  { id: "employee",  label: "Employee" },
+  { id: "intern",    label: "Intern" },
 ];
 
 const CATEGORIES = ["General", "Technical", "Payroll", "HR", "IT Support", "Compliance", "Other"];
@@ -365,9 +364,9 @@ export default function AdminSupportPage() {
 
   const getDynamicAssignLabel = (roleId: string) => {
     if (!roleId) return "Assign To Personnel";
-    if (roleId === 'super_admin') return "Show Admins are…";
-    if (roleId === 'lead') return "Show Team Leads are…";
-    if (roleId === 'manager') return "Show Dept Leads are…";
+    if (roleId === 'admin') return "Show Admins are…";
+    if (roleId === 'team_lead') return "Show Team Leads are…";
+    if (roleId === 'dept_lead') return "Show Dept Leads are…";
     return `Show ${ROLES.find(r=>r.id===roleId)?.label || roleId}s are…`;
   };
 

@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       query = query.eq("creator_id", userId);
     } else if (view === "assigned") {
       query = query.eq("assignee_id", userId);
-    } else if (userRole !== "super_admin" && userRole !== "hr") {
+    } else if (userRole !== "admin") {
       // Non-admin: show only tickets related to them
       query = query.or(`creator_id.eq.${userId},assignee_id.eq.${userId}`);
     }

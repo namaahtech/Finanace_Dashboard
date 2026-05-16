@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import {
   Users, UserPlus, Search, X, CreditCard, Building, UserCheck, UserX,
   ShieldCheck, FileText, Zap, CalendarDays, MoreVertical, Trash2, Edit2,
-  RefreshCw, Mail, ChevronDown, ChevronRight, Check, Clock, LayoutGrid, Coffee, Loader2
+  RefreshCw, Mail, ChevronDown, ChevronRight, Check, Clock, LayoutGrid, Coffee, Loader2, LogOut
 } from "lucide-react";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { usePermission } from "@/hooks/usePermission";
@@ -52,13 +52,14 @@ interface User {
   kra_weight?: number;
   behavioral_weight?: number;
   enable_salary_linkage?: boolean;
+  zoho_email?: string | null;
 }
 
 const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger" | "indigo"> = {
-  employee: "default", hr: "info", lead: "success", manager: "purple", super_admin: "purple", internship: "indigo",
+  employee: "default", team_lead: "success", dept_lead: "purple", admin: "purple", intern: "indigo",
 };
 const ROLE_LABEL: Record<string, string> = {
-  employee: "Employee", hr: "HR", manager: "Department Lead", lead: "Team Lead", super_admin: "Super Admin", internship: "Internship",
+  employee: "Employee", team_lead: "Team Lead", dept_lead: "Department Lead", admin: "Admin", intern: "Intern",
 };
 
 function getInitials(name: string) {
@@ -227,14 +228,39 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
             <Mail size={13} className="text-emerald-500" /> Send Custom Mail
           </button>
           {zohoConnected && (
-            <button onClick={createZohoMail}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
-              <Zap size={13} className="text-blue-500" /> Create Zoho Mail
-            </button>
+            user.zoho_email
+              ? <div className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold text-emerald-600 cursor-default">
+                  <Zap size={13} /> Mail Provisioned ✓
+                  <span className="ml-auto text-[10px] font-normal text-theme-muted truncate max-w-[120px]">{user.zoho_email}</span>
+                </div>
+              : <button onClick={createZohoMail}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
+                  <Zap size={13} className="text-blue-500" /> Create Zoho Mail
+                </button>
           )}
           {canDelete && (
             <>
               <div className="my-1.5 h-px bg-theme-border/50" />
+              {user.isActive && (
+                <button onClick={async () => {
+                  setOpen(false);
+                  if (!confirm(`Start 7-day offboarding for ${user.name}? They will lose access after 7 days.`)) return;
+                  setActing(true);
+                  try {
+                    const res = await fetch(`/api/employees/${user.id}/offboard`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ reason: "Admin initiated offboarding" }),
+                    });
+                    const data = await res.json();
+                    showToast(data.message || "Offboarding started.", res.ok ? "success" : "error");
+                    if (res.ok) onRefresh();
+                  } catch { showToast("Failed to start offboarding.", "error"); }
+                  finally { setActing(false); }
+                }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-black text-orange-500 hover:bg-orange-500/10 transition-all">
+                  <LogOut size={13} /> Begin Offboarding
+                </button>
+              )}
               <button onClick={() => { setDeleteConfirm(user); setOpen(false); }}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-black text-rose-500 hover:bg-rose-500/10 transition-all">
                 <Trash2 size={13} /> Delete Account
@@ -343,7 +369,7 @@ export default function AdminUsersPage() {
         setZohoConnected(d.config?.is_connected === true);
       }).catch(() => {});
       // Fetch which roles this user is allowed to assign
-      if (user.role === "super_admin") {
+      if (user.role === "admin") {
         setAssignableRoles(Object.keys(ROLE_LABEL));
       } else {
         fetch(`/api/permissions/assignable-roles?role=${user.role}`)
@@ -369,7 +395,7 @@ export default function AdminUsersPage() {
 
   // Re-fetch assignable roles if admin updates permissions while this user is active
   useEffect(() => {
-    if (!user?.role || user.role === "super_admin") return;
+    if (!user?.role || user.role === "admin") return;
     const ch = supabase
       .channel("permissions_sync")
       .on("broadcast", { event: "permissions_updated" }, (payload) => {
@@ -460,8 +486,12 @@ export default function AdminUsersPage() {
         return;
       }
 
+      const VALID_ROLES = ["admin", "dept_lead", "team_lead", "employee", "intern"];
+      const safeRole = VALID_ROLES.includes(form.role) ? form.role : "employee";
+
       const payload = {
         ...form,
+        role: safeRole,
         department: deptNode ? deptNode.name : form.department,
         shift_id: form.shift_id || null,
         team_id: form.team_id || null,
@@ -780,7 +810,11 @@ export default function AdminUsersPage() {
                       value={form.role}
                       onChange={(v) => setForm({...form, role: v})}
                       options={Object.entries(ROLE_LABEL)
-                        .filter(([v]) => assignableRoles.length === 0 || assignableRoles.includes(v))
+                        .filter(([v]) => {
+                          const validRoles = ["admin","dept_lead","team_lead","employee","intern"];
+                          const allowed = assignableRoles.filter(r => validRoles.includes(r));
+                          return allowed.length === 0 || allowed.includes(v);
+                        })
                         .map(([v, l]) => ({ label: l, value: v }))}
                     />
                   </div>

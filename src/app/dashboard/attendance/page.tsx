@@ -146,10 +146,10 @@ export default function AttendancePage() {
       } else {
         // 1. Determine hierarchy target roles based on the employee's current role
         let searchRoles: string[] = [];
-        if (["internship", "employee", "sales", "accounts"].includes(user.role)) {
-          searchRoles = ["lead", "manager"];
-        } else if (user.role === "lead") {
-          searchRoles = ["manager"];
+        if (["intern", "employee"].includes(user.role)) {
+          searchRoles = ["team_lead", "dept_lead"];
+        } else if (user.role === "team_lead") {
+          searchRoles = ["dept_lead"];
         }
 
         targetId = user.id;
@@ -173,7 +173,7 @@ export default function AttendancePage() {
 
         // 3. Escalation fallback if no direct lead exists, or if user is already a manager/hr
         if (!foundLead) {
-          const fallbackRole = (user.role === "hr" || user.role === "manager" || user.role === "super_admin") ? "super_admin" : "hr";
+          const fallbackRole = (user.role === "dept_lead" || user.role === "admin") ? "admin" : "admin";
           const { data: admins } = await supabase.from("employees")
             .select("id, role")
             .eq("role", fallbackRole)
@@ -228,7 +228,7 @@ export default function AttendancePage() {
         }
 
         // Notify all HR members
-        const { data: hrUsers } = await supabase.from("employees").select("id").eq("role", "hr");
+        const { data: hrUsers } = await supabase.from("employees").select("id").eq("role", "admin");
         if (hrUsers && hrUsers.length > 0) {
           const hrNotifs = hrUsers.map(hr => ({
             user_id: hr.id,

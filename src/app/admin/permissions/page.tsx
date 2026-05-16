@@ -45,25 +45,19 @@ interface RoleMember {
 
 // ─── All Roles ───────────────────────────────────────────────
 const ROLES = [
-  { id: "super_admin", name: "Super Admin",    description: "Root access — controls everything." },
-  { id: "hr",          name: "HR Manager",     description: "Manages people, recruitment, attendance." },
-  { id: "accounts",    name: "Accounts",       description: "Finance, payroll, invoicing." },
-  { id: "manager",     name: "Department Lead",description: "Oversees a department and its teams." },
-  { id: "lead",        name: "Team Lead",      description: "Runs a specific team day-to-day." },
-  { id: "sales",       name: "Sales",          description: "CRM, pipeline, client management." },
-  { id: "employee",    name: "Employee",       description: "Standard staff — self-service portal." },
-  { id: "internship",  name: "Intern",         description: "Interns — training and limited access." },
+  { id: "admin",     name: "Admin",          description: "Full access — HR, Finance, and all system controls." },
+  { id: "dept_lead", name: "Department Lead",description: "Oversees a department, its teams, and hiring." },
+  { id: "team_lead", name: "Team Lead",      description: "Runs a specific team day-to-day." },
+  { id: "employee",  name: "Employee",       description: "Standard staff — self-service portal." },
+  { id: "intern",    name: "Intern",         description: "Interns — training and limited access." },
 ];
 
 const ALL_ROLES_FOR_ASSIGN = [
-  { id: "super_admin", label: "Super Admin" },
-  { id: "hr",          label: "HR Manager" },
-  { id: "accounts",    label: "Accounts" },
-  { id: "manager",     label: "Department Lead" },
-  { id: "lead",        label: "Team Lead" },
-  { id: "sales",       label: "Sales" },
-  { id: "employee",    label: "Employee" },
-  { id: "internship",  label: "Intern" },
+  { id: "admin",     label: "Admin" },
+  { id: "dept_lead", label: "Department Lead" },
+  { id: "team_lead", label: "Team Lead" },
+  { id: "employee",  label: "Employee" },
+  { id: "intern",    label: "Intern" },
 ];
 
 // ─── All Modules grouped by section ──────────────────────────
@@ -341,7 +335,7 @@ export default function PermissionsPage() {
   const { showToast } = useToast();
   const { user, refreshPermissions } = useAuth();
 
-  const [activeRole, setActiveRole]           = useState("super_admin");
+  const [activeRole, setActiveRole]           = useState("admin");
   const [activeTab, setActiveTab]             = useState<"modules" | "assign" | "members">("modules");
   const [permissions, setPermissions]         = useState<PermMap>({});
   const [assignableRoles, setAssignableRoles] = useState<string[]>([]);
@@ -455,8 +449,8 @@ export default function PermissionsPage() {
   useEffect(() => { loadRole(activeRole); }, [activeRole, loadRole]);
 
   function togglePerm(key: string, field: keyof PermNode) {
-    if (activeRole === "super_admin" && field !== "can_view") {
-      showToast("Super Admin always has full action access. Only visibility can be toggled.", "info");
+    if (activeRole === "admin" && field !== "can_view") {
+      showToast("Admin always has full action access. Only visibility can be toggled.", "info");
       return;
     }
     setPermissions((prev) => {
@@ -530,7 +524,7 @@ export default function PermissionsPage() {
     }
   }
 
-  const isSuperAdmin = activeRole === "super_admin";
+  const isSuperAdmin = activeRole === "admin";
   const activeRoleInfo = ROLES.find((r) => r.id === activeRole)!;
 
   // Count visible modules for the active role
@@ -637,7 +631,7 @@ export default function PermissionsPage() {
                 )}
                 {isSuperAdmin && (
                   <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-3 py-1 rounded-full">
-                    ROOT ACCESS — ALL MODULES
+                    ADMIN — FULL ACCESS
                   </span>
                 )}
               </div>
@@ -648,7 +642,7 @@ export default function PermissionsPage() {
               <div className="mt-4 flex items-center gap-2 bg-theme-primary/5 border border-theme-primary/20 rounded-xl px-4 py-2.5">
                 <Shield size={14} className="text-theme-primary flex-shrink-0" />
                 <p className="text-[11px] text-theme-primary font-medium">
-                  You are managing the <span className="font-bold">Super Admin</span> profile. Changes here only affect your sidebar visibility and UI preferences.
+                  You are managing the <span className="font-bold">Admin</span> profile. Changes here only affect sidebar visibility and UI preferences.
                 </p>
               </div>
             )}
@@ -758,8 +752,16 @@ export default function PermissionsPage() {
                     </button>
 
                     {expanded && items.map((item) => {
+                      // DEFAULT STATE:
+                      // Manager Dashboard and Employee Dashboard are DISABLED by default for Admin.
+                      // Everything else is ENABLED by default for Admin (restoring previous behavior).
+                      const isTargetDashboard = item.key === "manager_dashboard" || item.key === "my_dashboard";
+                      const defaultForAdmin = isTargetDashboard
+                        ? DEFAULT_NODE
+                        : { can_view: true, can_create: true, can_edit: true, can_delete: true, can_export: true };
+
                       const node = permissions[item.key] ?? (isSuperAdmin 
-                        ? { can_view: true, can_create: true, can_edit: true, can_delete: true, can_export: true }
+                        ? defaultForAdmin
                         : DEFAULT_NODE);
 
                       return (

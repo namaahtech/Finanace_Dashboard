@@ -10,21 +10,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Client ID and Secret are required." }, { status: 400 });
   }
 
-  const redirect = redirectUri || `${process.env.NEXT_PUBLIC_APP_URL}/api/mail/auth/callback`;
+  const redirect = redirectUri || `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/mail/auth/callback`;
 
-  const { error } = await supabase.from("zoho_config").upsert(
-    {
-      client_id: clientId,
+  // Check if a row already exists — always update it, never create duplicates
+  const { data: existing } = await supabase
+    .from("zoho_config")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    await supabase.from("zoho_config").update({
+      client_id:    clientId,
       client_secret: clientSecret,
       redirect_uri: redirect,
-      mail_domain: mailDomain || process.env.ZOHO_MAIL_DOMAIN || "namaah.in",
+      mail_domain:  mailDomain || process.env.ZOHO_MAIL_DOMAIN || "namaah.in",
       is_connected: false,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" }
-  );
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      updated_at:   new Date().toISOString(),
+    }).eq("id", existing.id);
+  } else {
+    await supabase.from("zoho_config").insert({
+      client_id:    clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirect,
+      mail_domain:  mailDomain || process.env.ZOHO_MAIL_DOMAIN || "namaah.in",
+      is_connected: false,
+    });
+  }
 
   const authUrl = buildOAuthUrl(clientId, redirect);
   return NextResponse.json({ authUrl });
@@ -34,7 +46,8 @@ export async function GET() {
   const supabase = getSupabaseAdmin();
   const { data } = await supabase
     .from("zoho_config")
-    .select("is_connected, mail_domain, admin_account_id, connected_at, token_expiry")
+    .select("is_connected, mail_domain, admin_account_id, connected_at, token_expiry, org_id")
+    .limit(1)
     .maybeSingle();
 
   return NextResponse.json({ config: data });

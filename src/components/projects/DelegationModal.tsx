@@ -50,7 +50,7 @@ export function DelegationModal({ project, teams, employees, onClose, onSuccess 
   }, [onClose]);
 
   const handleSave = async () => {
-    const mustAssignLeads = (user?.role === "super_admin" && !canManagerDelegate) || user?.role === "manager";
+    const mustAssignLeads = (user?.role === "admin" && !canManagerDelegate) || user?.role === "dept_lead";
     if (mustAssignLeads && selectedTeams.some((tid) => !leadAssignments[tid])) {
       showToast("Please assign a team lead for every team, or allow manager to edit.", "error");
       return;
@@ -158,10 +158,10 @@ export function DelegationModal({ project, teams, employees, onClose, onSuccess 
           </div>
 
           {/* Permission toggles */}
-          {(user?.role === "super_admin" || user?.role === "manager") && (
+          {(user?.role === "admin" || user?.role === "dept_lead") && (
             <div className="rounded-lg border border-theme-border bg-theme-card divide-y divide-theme-border">
 
-              {user?.role === "super_admin" && (
+              {user?.role === "admin" && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <div className="flex items-center gap-2.5">
                     <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-sky-500/10">
@@ -229,14 +229,14 @@ export function DelegationModal({ project, teams, employees, onClose, onSuccess 
                 const teamLeads = employees.filter((e) => {
                   const r = e.role?.toLowerCase() || "";
                   const isInTeam = e.team_id === tid || e.department_id === tid;
-                  const isLeadRole = r.includes("lead") || r.includes("manager") || r.includes("head") || r.includes("supervisor");
+                  const isLeadRole = r.includes("lead") || r.includes("head") || r.includes("supervisor");
                   return isInTeam && isLeadRole;
                 });
                 const teamEmployees = employees.filter((e) => e.team_id === tid || e.department_id === tid);
                 const isEditable =
-                  user?.role === "super_admin" ||
-                  (user?.role === "manager" && canManagerDelegate) ||
-                  (user?.role === "lead" && canLeadDelegate);
+                  user?.role === "admin" ||
+                  (user?.role === "dept_lead" && canManagerDelegate) ||
+                  (user?.role === "team_lead" && canLeadDelegate);
 
                 return (
                   <div key={tid} className={cn("rounded-xl border bg-theme-card overflow-hidden", isEditable ? "border-theme-border" : "border-theme-border/50 opacity-80")}>
