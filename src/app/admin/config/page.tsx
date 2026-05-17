@@ -7,10 +7,11 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
 import { useToast } from "@/components/ui/Toast";
-import { 
-  Settings, ShieldAlert, Save, TrendingUp, IndianRupee, Layers, 
-  Briefcase, Mail, Bell, Lock, AlertCircle, RefreshCw, 
-  ChevronDown, Building2, LayoutGrid, FileCheck, CheckCircle2, Rocket 
+import {
+  Settings, ShieldAlert, Save, TrendingUp, IndianRupee, Layers,
+  Briefcase, Mail, Bell, Lock, AlertCircle, RefreshCw,
+  ChevronDown, Building2, LayoutGrid, FileCheck, CheckCircle2, Rocket,
+  Plus, Trash2, Pencil, X, Check
 } from "lucide-react";
 
 interface Config {
@@ -38,7 +39,23 @@ interface Config {
   consultant_agreement_url: string;
 }
 
-const B = "#FBFBFA"; 
+const B = "#FBFBFA";
+
+// Indian comma formatting helpers
+function toIndianDisplay(raw: string | number): string {
+  const s = String(raw).replace(/,/g, "");
+  if (s === "" || isNaN(Number(s))) return typeof raw === "string" ? raw : "";
+  return Number(s).toLocaleString("en-IN");
+}
+function fromIndianInput(val: string): string {
+  return val.replace(/,/g, "").replace(/[^\d]/g, "");
+}
+
+interface SalarySlab {
+  id: string; name: string; min_target: number;
+  max_target: number | null; commission_percent: number;
+  is_active: boolean; sort_order: number;
+}
 
 export default function AdminConfigPage() {
   const { user } = useAuth();
@@ -50,6 +67,14 @@ export default function AdminConfigPage() {
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [analyzingTask, setAnalyzingTask] = useState<any>(null);
+  // Salary Slabs
+  const [slabs, setSlabs] = useState<SalarySlab[]>([]);
+  const [slabsLoading, setSlabsLoading] = useState(false);
+  const [showSlabForm, setShowSlabForm] = useState(false);
+  const [slabForm, setSlabForm] = useState({ name: "", min_target: "", max_target: "", commission_percent: "", sort_order: "" });
+  const [savingSlab, setSavingSlab] = useState(false);
+  const [editingSlab, setEditingSlab] = useState<string | null>(null);
+  const [editSlabForm, setEditSlabForm] = useState<Partial<SalarySlab>>({});
 
   useEffect(() => {
     if (!analyzingTask?.id) return;
@@ -118,7 +143,70 @@ export default function AdminConfigPage() {
     fcmSender: "1092837465"
   });
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadSlabs(); }, []);
+
+  async function loadSlabs() {
+    setSlabsLoading(true);
+    try {
+      const res = await fetch("/api/salary-slabs");
+      const d = await res.json();
+      setSlabs(d.slabs || []);
+    } catch { } finally { setSlabsLoading(false); }
+  }
+
+  async function handleCreateSlab() {
+    setSavingSlab(true);
+    try {
+      const res = await fetch("/api/salary-slabs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: slabForm.name,
+          min_target: slabForm.min_target ? Number(slabForm.min_target.replace(/,/g, "")) : 0,
+          max_target: slabForm.max_target ? Number(slabForm.max_target.replace(/,/g, "")) : null,
+          commission_percent: Number(slabForm.commission_percent),
+          sort_order: slabForm.sort_order ? Number(slabForm.sort_order) : slabs.length + 1,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      showToast("Commission slab created.", "success");
+      setSlabForm({ name: "", min_target: "", max_target: "", commission_percent: "", sort_order: "" });
+      setShowSlabForm(false);
+      loadSlabs();
+    } catch (err: any) {
+      showToast(err.message || "Failed to create slab.", "error");
+    } finally { setSavingSlab(false); }
+  }
+
+  async function handleUpdateSlab() {
+    if (!editingSlab) return;
+    setSavingSlab(true);
+    try {
+      const res = await fetch("/api/salary-slabs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingSlab, ...editSlabForm }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      showToast("Slab updated.", "success");
+      setEditingSlab(null);
+      loadSlabs();
+    } catch (err: any) {
+      showToast(err.message || "Update failed.", "error");
+    } finally { setSavingSlab(false); }
+  }
+
+  async function handleDeleteSlab(id: string, name: string) {
+    if (!confirm(`Deactivate slab "${name}"?`)) return;
+    try {
+      const res = await fetch(`/api/salary-slabs?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error);
+      showToast("Slab deactivated.", "success");
+      loadSlabs();
+    } catch (err: any) {
+      showToast(err.message || "Delete failed.", "error");
+    }
+  }
 
   if (user && user.role !== "admin") {
     return (
@@ -702,6 +790,181 @@ export default function AdminConfigPage() {
                     </div>
                   );
                 })}
+              </div>
+            </section>
+
+            {/* BLOCK 5: SALES COMMISSION SLABS */}
+            <section className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-black/5 overflow-hidden">
+              <div className="p-8 border-b border-black/5 bg-black/[0.01] flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-500">
+                    <TrendingUp size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-black/90 uppercase tracking-widest">Sales Commission Slabs</h2>
+                    <p className="text-[11px] font-medium text-black/40 mt-0.5">Define tiered commission brackets for Sales role employees. Computed at payroll generation.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowSlabForm(true); setEditingSlab(null); }}
+                  className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-black text-white px-4 py-2.5 rounded-xl shadow hover:bg-black/80 transition-all"
+                >
+                  <Plus size={13} /> Add Slab
+                </button>
+              </div>
+
+              <div className="p-8">
+                {slabsLoading ? (
+                  <div className="flex items-center justify-center py-12 text-black/30 text-xs font-bold uppercase tracking-widest">Loading slabs...</div>
+                ) : slabs.length === 0 && !showSlabForm ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center">
+                      <TrendingUp size={22} className="text-orange-300" />
+                    </div>
+                    <p className="text-[11px] font-black text-black/30 uppercase tracking-widest">No commission slabs defined yet.</p>
+                    <button type="button" onClick={() => setShowSlabForm(true)} className="text-[10px] font-black uppercase tracking-widest text-orange-500 hover:underline">+ Create First Slab</button>
+                  </div>
+                ) : (
+                  <>
+                    {slabs.length > 0 && (
+                      <div className="overflow-x-auto mb-6">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-black/5">
+                              {["Tier Name", "Min Target (₹)", "Max Target (₹)", "Commission %", "Actions"].map(h => (
+                                <th key={h} className="pb-3 text-left text-[10px] font-black uppercase tracking-widest text-black/40">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-black/[0.03]">
+                            {slabs.map(slab => (
+                              <tr key={slab.id} className="group">
+                                {editingSlab === slab.id ? (
+                                  <>
+                                    <td className="py-3 pr-3">
+                                      <input value={editSlabForm.name ?? slab.name} onChange={e => setEditSlabForm(p => ({ ...p, name: e.target.value }))}
+                                        className="w-full rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-xs font-bold text-black/80 outline-none focus:border-black/20" />
+                                    </td>
+                                    <td className="py-3 pr-3">
+                                      <input type="text" inputMode="numeric"
+                                        value={toIndianDisplay(editSlabForm.min_target ?? slab.min_target)}
+                                        onChange={e => setEditSlabForm(p => ({ ...p, min_target: Number(fromIndianInput(e.target.value)) || 0 }))}
+                                        className="w-28 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-xs font-bold font-mono text-black/80 outline-none focus:border-black/20" />
+                                    </td>
+                                    <td className="py-3 pr-3">
+                                      <input type="text" inputMode="numeric" placeholder="Unlimited"
+                                        value={toIndianDisplay(editSlabForm.max_target ?? (slab.max_target ?? ""))}
+                                        onChange={e => { const v = fromIndianInput(e.target.value); setEditSlabForm(p => ({ ...p, max_target: v ? Number(v) : null })); }}
+                                        className="w-28 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-xs font-bold font-mono text-black/80 outline-none focus:border-black/20" />
+                                    </td>
+                                    <td className="py-3 pr-3">
+                                      <input type="number" step="0.1" value={editSlabForm.commission_percent ?? slab.commission_percent} onChange={e => setEditSlabForm(p => ({ ...p, commission_percent: Number(e.target.value) }))}
+                                        className="w-20 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-xs font-bold text-black/80 outline-none focus:border-black/20" />
+                                    </td>
+                                    <td className="py-3">
+                                      <div className="flex items-center gap-2">
+                                        <button type="button" onClick={handleUpdateSlab} disabled={savingSlab} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest bg-black text-white px-3 py-1.5 rounded-lg hover:bg-black/80 transition-all disabled:opacity-50">
+                                          <Check size={11} /> {savingSlab ? "Saving..." : "Save"}
+                                        </button>
+                                        <button type="button" onClick={() => setEditingSlab(null)} className="text-[10px] font-black uppercase tracking-widest text-black/40 px-3 py-1.5 rounded-lg hover:bg-black/5 transition-all">
+                                          <X size={11} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td className="py-4 pr-4">
+                                      <span className="text-[12px] font-black text-black/80">{slab.name}</span>
+                                    </td>
+                                    <td className="py-4 pr-4">
+                                      <span className="font-mono text-[12px] font-bold text-black/60">₹{slab.min_target.toLocaleString("en-IN")}</span>
+                                    </td>
+                                    <td className="py-4 pr-4">
+                                      <span className="font-mono text-[12px] font-bold text-black/60">
+                                        {slab.max_target ? `₹${slab.max_target.toLocaleString("en-IN")}` : <span className="text-black/30 text-[10px] uppercase tracking-widest font-black">Unlimited</span>}
+                                      </span>
+                                    </td>
+                                    <td className="py-4 pr-4">
+                                      <span className="inline-flex items-center gap-1 bg-orange-50 text-orange-600 border border-orange-100 px-3 py-1 rounded-full text-[11px] font-black">
+                                        {slab.commission_percent}%
+                                      </span>
+                                    </td>
+                                    <td className="py-4">
+                                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button type="button" onClick={() => { setEditingSlab(slab.id); setEditSlabForm({}); }}
+                                          className="p-1.5 rounded-lg text-black/40 hover:bg-black/5 hover:text-black/70 transition-all">
+                                          <Pencil size={13} />
+                                        </button>
+                                        <button type="button" onClick={() => handleDeleteSlab(slab.id, slab.name)}
+                                          className="p-1.5 rounded-lg text-black/40 hover:bg-rose-50 hover:text-rose-500 transition-all">
+                                          <Trash2 size={13} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Add new slab inline form */}
+                    {showSlabForm && (
+                      <div className="mt-2 p-6 rounded-2xl bg-orange-50/60 border border-orange-100 space-y-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">New Commission Slab</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <label className="text-[10px] font-black text-black/50 uppercase tracking-widest mb-1.5 block">Tier Name</label>
+                            <input required value={slabForm.name} onChange={e => setSlabForm(p => ({ ...p, name: e.target.value }))}
+                              placeholder="e.g. Gold Tier"
+                              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[13px] font-bold text-black/80 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black text-black/50 uppercase tracking-widest mb-1.5 block">Min Target (₹)</label>
+                            <input type="text" inputMode="numeric"
+                              value={toIndianDisplay(slabForm.min_target)}
+                              onChange={e => setSlabForm(p => ({ ...p, min_target: fromIndianInput(e.target.value) }))}
+                              placeholder="0"
+                              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[13px] font-bold font-mono text-black/80 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black text-black/50 uppercase tracking-widest mb-1.5 block">Max Target (₹)</label>
+                            <input type="text" inputMode="numeric"
+                              value={toIndianDisplay(slabForm.max_target)}
+                              onChange={e => setSlabForm(p => ({ ...p, max_target: fromIndianInput(e.target.value) }))}
+                              placeholder="Leave blank = unlimited"
+                              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[13px] font-bold font-mono text-black/80 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black text-black/50 uppercase tracking-widest mb-1.5 block">Commission %</label>
+                            <input required type="number" step="0.1" min="0.1" max="100" value={slabForm.commission_percent} onChange={e => setSlabForm(p => ({ ...p, commission_percent: e.target.value }))}
+                              placeholder="e.g. 5"
+                              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[13px] font-bold font-mono text-black/80 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all" />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 pt-2">
+                          <button type="button" onClick={handleCreateSlab} disabled={savingSlab} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-black text-white px-5 py-2.5 rounded-xl shadow hover:bg-black/80 transition-all disabled:opacity-50">
+                            <Plus size={12} /> {savingSlab ? "Creating..." : "Create Slab"}
+                          </button>
+                          <button type="button" onClick={() => setShowSlabForm(false)} className="text-[10px] font-black uppercase tracking-widest text-black/40 px-4 py-2.5 rounded-xl hover:bg-black/5 transition-all">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="mt-6 p-4 rounded-xl bg-black/[0.02] border border-dashed border-black/10 flex items-start gap-3">
+                  <AlertCircle size={14} className="text-black/30 flex-shrink-0 mt-0.5" />
+                  <p className="text-[11px] font-medium text-black/40 leading-relaxed">
+                    Slabs apply when an employee has <strong className="text-black/60">Sales role</strong> enabled. Commission = Actual Monthly Sales × Commission %. Computed automatically at payroll generation.
+                  </p>
+                </div>
               </div>
             </section>
 

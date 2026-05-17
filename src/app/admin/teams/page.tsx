@@ -92,13 +92,14 @@ export default function TeamsPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Structural Processing Logic
+  // Structural Processing Logic (exclude company root from display)
   const departments = useMemo(() => teamsData.filter(t => t.type === 'department'), [teamsData]);
   const subTeams = useMemo(() => teamsData.filter(t => t.type === 'team'), [teamsData]);
   const deptFilters = ["All", ...departments.map(d => d.name)];
 
   const finalArrangement = useMemo(() => {
     const filtered = teamsData.filter((t: any) => {
+      if (t.type === 'company') return false; // company root is implicit, not shown as a card
       const matchSearch = t.name.toLowerCase().includes(search.toLowerCase());
       if (typeFilter !== "All" && t.type !== typeFilter.toLowerCase()) return false;
       if (deptFilter !== "All") {
@@ -128,7 +129,9 @@ export default function TeamsPage() {
         .reduce((acc: any[], item: any) => [...acc, item, ...buildTree(item.id)], []);
     };
 
-    return buildTree(null);
+    // Start tree from company root's id so departments come first
+    const companyRoot = teamsData.find((t: any) => t.type === 'company');
+    return buildTree(companyRoot ? companyRoot.id : null);
   }, [teamsData, search, deptFilter, typeFilter, sortBy]);
 
   async function handleSaveEntity() {

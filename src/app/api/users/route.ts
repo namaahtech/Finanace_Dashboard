@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
 
-    const { name, email, role, department, designation, matrix_role, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary, salary_min, salary_max, kpi_weight, kra_weight, behavioral_weight, enable_salary_linkage } = body;
+    const { name, email, role, department, designation, matrix_role, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary, salary_min, salary_max, kpi_weight, kra_weight, behavioral_weight, enable_salary_linkage, commission_enabled, monthly_sales_target, salary_slab_id } = body;
 
     if (!name || !email || !role) {
       return NextResponse.json({ error: "Missing highly critical parameters (Name, Email, Role)" }, { status: 400 });
@@ -62,6 +62,10 @@ export async function POST(req: Request) {
     if (kra_weight !== undefined) insertData.kra_weight = kra_weight ? Number(kra_weight) : 40;
     if (behavioral_weight !== undefined) insertData.behavioral_weight = behavioral_weight ? Number(behavioral_weight) : 20;
     if (enable_salary_linkage !== undefined) insertData.enable_salary_linkage = enable_salary_linkage || false;
+    // Sales commission fields
+    if (commission_enabled !== undefined) insertData.commission_enabled = commission_enabled || false;
+    if (monthly_sales_target !== undefined) insertData.monthly_sales_target = monthly_sales_target ? Number(monthly_sales_target) : null;
+    if (salary_slab_id !== undefined) insertData.salary_slab_id = salary_slab_id || null;
 
     const { error: dbError } = await supabase
       .from("employees")

@@ -27,7 +27,7 @@ import {
   Gift,
 } from "lucide-react";
 
-interface User { _id: string; name: string; employeeId: string; department: string; }
+interface User { id: string; _id?: string; name: string; employeeId: string; department: string; }
 interface Incentive {
   _id: string;
   amount: number;
@@ -328,7 +328,7 @@ export default function AdminIncentivesPage() {
                       className="w-full appearance-none rounded-lg border border-theme-border bg-theme-page pl-3 pr-8 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
                     >
                       <option value="">Select employee…</option>
-                      {users.map((u) => <option key={u._id} value={u._id}>{u.name} — {u.employeeId}</option>)}
+                      {users.map((u) => <option key={u.id || u._id} value={u.id || u._id}>{u.name} — {u.employeeId}</option>)}
                     </select>
                     <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-muted" />
                   </div>
@@ -417,7 +417,7 @@ export default function AdminIncentivesPage() {
                     Grant History
                     {selectedUser && (
                       <span className="ml-2 text-xs font-normal text-theme-muted">
-                        — {users.find((u) => u._id === selectedUser)?.name}
+                        — {users.find((u) => (u.id || u._id) === selectedUser)?.name}
                       </span>
                     )}
                   </span>

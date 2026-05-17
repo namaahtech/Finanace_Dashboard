@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import {
   Users, UserPlus, Search, X, CreditCard, Building, UserCheck, UserX,
   ShieldCheck, FileText, Zap, CalendarDays, MoreVertical, Trash2, Edit2,
-  RefreshCw, Mail, ChevronDown, ChevronRight, Check, Clock, LayoutGrid, Coffee, Loader2, LogOut
+  RefreshCw, Mail, ChevronDown, ChevronRight, Check, Clock, LayoutGrid, Coffee, Loader2, LogOut, TrendingUp
 } from "lucide-react";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { usePermission } from "@/hooks/usePermission";
@@ -35,10 +35,12 @@ interface Shift {
   team_id: string | null;
 }
 
+interface SalarySlab { id: string; name: string; min_target: number; max_target: number | null; commission_percent: number; }
+
 interface User {
   id: string; name: string; email: string; employeeId: string;
   role: string; department: string; designation: string;
-  matrix_role: string; // Added field
+  matrix_role: string;
   joiningDate: string; isActive: boolean;
   shift_id: string | null;
   team_id: string | null;
@@ -53,13 +55,16 @@ interface User {
   behavioral_weight?: number;
   enable_salary_linkage?: boolean;
   zoho_email?: string | null;
+  commission_enabled?: boolean;
+  monthly_sales_target?: number | null;
+  salary_slab_id?: string | null;
 }
 
 const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger" | "indigo"> = {
-  employee: "default", team_lead: "success", dept_lead: "purple", admin: "purple", intern: "indigo",
+  employee: "default", team_lead: "success", dept_lead: "purple", admin: "purple", intern: "indigo", sales: "warning",
 };
 const ROLE_LABEL: Record<string, string> = {
-  employee: "Employee", team_lead: "Team Lead", dept_lead: "Department Lead", admin: "Admin", intern: "Intern",
+  employee: "Employee", team_lead: "Team Lead", dept_lead: "Department Lead", admin: "Admin", intern: "Intern", sales: "Sales",
 };
 
 function getInitials(name: string) {
@@ -332,10 +337,14 @@ export default function AdminUsersPage() {
     kpi_weight: 40, kra_weight: 40, behavioral_weight: 20,
     enable_salary_linkage: false,
     create_zoho_mail: true,
+    monthly_sales_target: "",
+    salary_slab_id: "",
+    linkSlab: false,
   });
   const [zohoConnected, setZohoConnected] = useState(false);
   const [zohoEmailPreview, setZohoEmailPreview] = useState("");
   const [assignableRoles, setAssignableRoles] = useState<string[]>([]);
+  const [salarySlabs, setSalarySlabs] = useState<SalarySlab[]>([]);
 
   async function load(q?: string) {
     setLoading(true);
@@ -367,6 +376,10 @@ export default function AdminUsersPage() {
       // Check if Zoho Mail is connected
       fetch("/api/mail/auth/connect").then(r => r.json()).then(d => {
         setZohoConnected(d.config?.is_connected === true);
+      }).catch(() => {});
+      // Load salary slabs for Sales commission dropdown
+      fetch("/api/salary-slabs").then(r => r.json()).then(d => {
+        setSalarySlabs(d.slabs || []);
       }).catch(() => {});
       // Fetch which roles this user is allowed to assign
       if (user.role === "admin") {
@@ -439,6 +452,9 @@ export default function AdminUsersPage() {
       kpi_weight: 40, kra_weight: 40, behavioral_weight: 20,
       enable_salary_linkage: false,
       create_zoho_mail: true,
+      monthly_sales_target: "",
+      salary_slab_id: "",
+      linkSlab: false,
     });
     setShowForm(true);
   }
@@ -449,7 +465,7 @@ export default function AdminUsersPage() {
     setForm({
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: user.commission_enabled ? "sales" : user.role,
       employeeId: user.employeeId,
       department: deptNode ? deptNode.id : user.department,
       designation: user.designation,
@@ -468,6 +484,9 @@ export default function AdminUsersPage() {
       behavioral_weight: user.behavioral_weight || 20,
       enable_salary_linkage: user.enable_salary_linkage || false,
       create_zoho_mail: false,
+      monthly_sales_target: String(user.monthly_sales_target || ""),
+      salary_slab_id: user.salary_slab_id || "",
+      linkSlab: !!(user.salary_slab_id),
     });
     setShowForm(true);
   }
@@ -486,8 +505,9 @@ export default function AdminUsersPage() {
         return;
       }
 
+      const isSales = form.role === "sales";
       const VALID_ROLES = ["admin", "dept_lead", "team_lead", "employee", "intern"];
-      const safeRole = VALID_ROLES.includes(form.role) ? form.role : "employee";
+      const safeRole = isSales ? "employee" : (VALID_ROLES.includes(form.role) ? form.role : "employee");
 
       const payload = {
         ...form,
@@ -496,13 +516,17 @@ export default function AdminUsersPage() {
         shift_id: form.shift_id || null,
         team_id: form.team_id || null,
         monthly_leave_quota: parseFloat(form.monthly_leave_quota),
+        employment_type: isSales ? "target_based" : form.employment_type,
         base_salary: form.base_salary ? parseFloat(form.base_salary) : 0,
         salary_min: form.salary_min ? parseFloat(form.salary_min) : null,
         salary_max: form.salary_max ? parseFloat(form.salary_max) : null,
         kpi_weight: form.kpi_weight,
         kra_weight: form.kra_weight,
         behavioral_weight: form.behavioral_weight,
-        enable_salary_linkage: form.enable_salary_linkage
+        enable_salary_linkage: form.enable_salary_linkage,
+        commission_enabled: isSales,
+        monthly_sales_target: isSales && form.monthly_sales_target ? parseFloat(form.monthly_sales_target) : null,
+        salary_slab_id: isSales && form.linkSlab ? form.salary_slab_id || null : null,
       };
 
       if (editingId) {
@@ -701,10 +725,15 @@ export default function AdminUsersPage() {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge variant={ROLE_BADGE[u.role] ?? "default"} className="text-[10px] px-2 py-0.5 transition-all group-hover:bg-theme-primary group-hover:text-white">
-                            {ROLE_LABEL[u.role] ?? u.role}
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <Badge variant={u.commission_enabled ? "warning" : (ROLE_BADGE[u.role] ?? "default")} className="text-[10px] px-2 py-0.5 transition-all group-hover:bg-theme-primary group-hover:text-white">
+                            {u.commission_enabled ? ROLE_LABEL["sales"] : (ROLE_LABEL[u.role] ?? u.role)}
                           </Badge>
+                          {u.commission_enabled && u.monthly_sales_target && (
+                            <span className="flex items-center gap-1 text-[9px] font-black text-orange-600 px-2 py-0.5 border border-orange-200 rounded-lg bg-orange-50">
+                              <TrendingUp size={9} /> ₹{Number(u.monthly_sales_target).toLocaleString("en-IN")} tgt
+                            </span>
+                          )}
                           <span className="flex items-center gap-1 text-[9px] font-black text-theme-muted px-2 py-0.5 border border-theme-border rounded-lg bg-theme-page">
                              <Coffee size={10} /> {u.monthly_leave_quota} L/M
                           </span>
@@ -808,14 +837,23 @@ export default function AdminUsersPage() {
                       icon={<ShieldCheck size={14} className="text-theme-primary" />}
                       placeholder="Select Role"
                       value={form.role}
-                      onChange={(v) => setForm({...form, role: v})}
-                      options={Object.entries(ROLE_LABEL)
-                        .filter(([v]) => {
-                          const validRoles = ["admin","dept_lead","team_lead","employee","intern"];
-                          const allowed = assignableRoles.filter(r => validRoles.includes(r));
-                          return allowed.length === 0 || allowed.includes(v);
-                        })
-                        .map(([v, l]) => ({ label: l, value: v }))}
+                      onChange={(v) => {
+                        if (v === "sales") {
+                          setForm({ ...form, role: "sales", employment_type: "target_based", salary_structure: "fixed_monthly" });
+                        } else {
+                          setForm({ ...form, role: v, commission_enabled: false, monthly_sales_target: "", salary_slab_id: "", linkSlab: false } as any);
+                        }
+                      }}
+                      options={[
+                        ...Object.entries(ROLE_LABEL)
+                          .filter(([v]) => {
+                            const validRoles = ["admin","dept_lead","team_lead","employee","intern"];
+                            const allowed = assignableRoles.filter(r => validRoles.includes(r));
+                            return (allowed.length === 0 || allowed.includes(v)) && v !== "sales";
+                          })
+                          .map(([v, l]) => ({ label: l, value: v })),
+                        { label: "Sales", value: "sales" },
+                      ]}
                     />
                   </div>
 
@@ -852,27 +890,100 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Employment Type</label>
-                    <CustomSelect
-                      placeholder="Select Type"
-                      value={form.employment_type}
-                      onChange={(v) => {
-                        // Auto-set salary structure based on employment type
-                        let newSalaryStructure = form.salary_structure;
-                        if (v === "internship") {
-                          newSalaryStructure = "stipend";
-                        } else if (v === "full_time") {
-                          newSalaryStructure = "fixed_monthly";
-                        }
-                        setForm({...form, employment_type: v, salary_structure: newSalaryStructure});
-                      }}
-                      options={[
-                        { label: "Full Time", value: "full_time" },
-                        { label: "Part Time", value: "part_time" },
-                        { label: "Internship", value: "internship" },
-                      ]}
-                    />
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Employment Type
+                      {form.role === "sales" && <span className="text-[10px] bg-orange-500/20 text-orange-600 px-2 py-0.5 rounded font-black">Auto: Target Based</span>}
+                    </label>
+                    {form.role === "sales" ? (
+                      <div className="flex h-[46px] w-full items-center gap-2 rounded-2xl border border-orange-200 bg-orange-50/50 px-4 text-sm font-bold text-orange-600 cursor-not-allowed">
+                        <TrendingUp size={14} className="text-orange-500" /> Target Based
+                      </div>
+                    ) : (
+                      <CustomSelect
+                        placeholder="Select Type"
+                        value={form.employment_type}
+                        onChange={(v) => {
+                          let newSalaryStructure = form.salary_structure;
+                          if (v === "internship") newSalaryStructure = "stipend";
+                          else if (v === "full_time") newSalaryStructure = "fixed_monthly";
+                          setForm({ ...form, employment_type: v, salary_structure: newSalaryStructure });
+                        }}
+                        options={[
+                          { label: "Full Time",   value: "full_time" },
+                          { label: "Part Time",   value: "part_time" },
+                          { label: "Internship",  value: "internship" },
+                        ]}
+                      />
+                    )}
                   </div>
+
+                  {/* Sales Commission Configuration — shown only when Sales role selected */}
+                  {form.role === "sales" && (
+                    <div className="sm:col-span-2 rounded-2xl border border-orange-200 bg-orange-50/40 p-5 space-y-4">
+                      <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-orange-600">
+                        <TrendingUp size={12} /> Sales Commission Configuration
+                      </p>
+
+                      {/* Monthly Sales Target */}
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-orange-700">Monthly Sales Target (₹)</label>
+                        <input
+                          type="number" min="0" step="100"
+                          value={form.monthly_sales_target}
+                          onChange={(e) => setForm({ ...form, monthly_sales_target: e.target.value })}
+                          placeholder="e.g. 100000"
+                          className="h-10 w-full rounded-lg border border-orange-200 bg-white px-3 text-sm text-theme-fg outline-none focus:border-orange-400 transition-all shadow-sm"
+                        />
+                        <p className="text-[10px] text-orange-600/70">Target monthly sales amount assigned to this employee.</p>
+                      </div>
+
+                      {/* Link Commission Slab checkbox */}
+                      <div className="flex items-start gap-3 p-3 rounded-xl border border-orange-100 bg-white cursor-pointer" onClick={() => setForm({ ...form, linkSlab: !form.linkSlab, salary_slab_id: "" })}>
+                        <input
+                          type="checkbox"
+                          id="link-slab-cb"
+                          checked={form.linkSlab}
+                          readOnly
+                          className="mt-0.5 w-4 h-4 rounded border-orange-300 accent-orange-500 cursor-pointer flex-shrink-0"
+                        />
+                        <div>
+                          <p className="text-xs font-bold text-orange-700">Link Commission Slab</p>
+                          <p className="text-[10px] text-orange-500 mt-0.5">
+                            When linked, commission auto-calculates from slab tiers.
+                            {salarySlabs.length === 0 && " Add slabs in System Config → Salary Slabs first."}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Slab selector — only when checkbox is ticked */}
+                      {form.linkSlab && (
+                        <div className="space-y-3">
+                          <CustomSelect
+                            placeholder="Select Commission Slab"
+                            value={form.salary_slab_id}
+                            onChange={(v) => setForm({ ...form, salary_slab_id: v })}
+                            options={salarySlabs.map(s => ({
+                              label: `${s.name} (${s.commission_percent}%)`,
+                              value: s.id,
+                            }))}
+                          />
+                          {form.salary_slab_id && form.monthly_sales_target && (() => {
+                            const slab = salarySlabs.find(s => s.id === form.salary_slab_id);
+                            if (!slab) return null;
+                            const est = (parseFloat(form.monthly_sales_target) * slab.commission_percent) / 100;
+                            return (
+                              <div className="flex items-center gap-3 rounded-xl bg-white border border-orange-100 px-4 py-3">
+                                <TrendingUp size={14} className="text-orange-500" />
+                                <span className="text-[11px] font-bold text-orange-700">
+                                  Est. Commission at 100% target: <span className="text-orange-600 font-black">₹{est.toLocaleString("en-IN")}</span>
+                                  <span className="text-orange-400 font-normal ml-2">({slab.commission_percent}% of ₹{parseFloat(form.monthly_sales_target).toLocaleString("en-IN")})</span>
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Salary Structure

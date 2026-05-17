@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
@@ -20,10 +20,12 @@ import {
   FileText,
   ArrowLeft,
   DollarSign,
-  User,
   ShieldCheck,
   CheckCircle2,
   Clock,
+  Target,
+  Trophy,
+  Zap,
 } from "lucide-react";
 
 interface Employee {
@@ -34,6 +36,9 @@ interface Employee {
   hourly_rate?: number; daily_rate?: number; stipend_amount?: number;
   kpi_weight?: number; kra_weight?: number; behavioral_weight?: number;
   kpi_enabled?: boolean; enable_salary_linkage?: boolean; is_active: boolean;
+  commission_enabled?: boolean;
+  monthly_sales_target?: number;
+  salary_slab_id?: string;
 }
 
 interface KpiScore {
@@ -43,6 +48,374 @@ interface KpiScore {
 interface WalletData { earned_total: number; locked_amount: number; claimable_amount: number; this_month_payout?: number }
 interface TeamData   { id: string; name: string; department: string }
 
+interface SalesRecord {
+  id: string; employee_id: string; month: number; year: number;
+  amount_achieved: number; notes?: string;
+}
+
+interface SalarySlab {
+  id: string; name: string; min_target: number; max_target: number | null;
+  commission_percent: number; sort_order: number;
+}
+
+// ── Enterprise Sales Performance Tracker ────────────────────────────
+function SalesTracker({
+  achieved,
+  target,
+  slabs,
+}: {
+  achieved: number;
+  target: number;
+  slabs: SalarySlab[];
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 150); return () => clearTimeout(t); }, []);
+
+  const pct       = target > 0 ? Math.min(100, (achieved / target) * 100) : 0;
+  const remaining = Math.max(0, target - achieved);
+  const activeSlab = slabs.filter(s => s.min_target <= achieved).at(-1) ?? null;
+  const estimatedCommission = activeSlab ? (achieved * activeSlab.commission_percent) / 100 : 0;
+
+  const checkpoints = slabs
+    .map(s => ({
+      ...s,
+      posPct:  target > 0 ? Math.min(100, (s.min_target / target) * 100) : 0,
+      cleared: achieved >= s.min_target,
+    }))
+    .filter(s => s.posPct <= 100);
+
+  const pctColor =
+    pct >= 100 ? "#10b981" :
+    pct >= 75  ? "#0ea5e9" :
+    pct >= 50  ? "#f59e0b" : "#f97316";
+
+  return (
+    <div className="page-card overflow-hidden p-0" style={{ borderColor: "rgba(249,115,22,0.25)" }}>
+      <style>{`
+        @keyframes stShimmer {
+          0%   { left: -80%; }
+          100% { left: 130%; }
+        }
+        @keyframes stLiveDot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%       { opacity: 0.4; transform: scale(0.7); }
+        }
+        @keyframes stFillGlow {
+          0%, 100% { filter: brightness(1); }
+          50%       { filter: brightness(1.15); }
+        }
+        @keyframes stCardIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      {/* ── Branded Header ── */}
+      <div style={{
+        background: "linear-gradient(135deg, #431407 0%, #7c2d12 60%, #9a3412 100%)",
+        padding: "14px 20px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        borderBottom: "1px solid rgba(249,115,22,0.25)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{
+            width: "34px", height: "34px", borderRadius: "8px", flexShrink: 0,
+            background: "rgba(249,115,22,0.25)",
+            border: "1px solid rgba(249,115,22,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+          }}>
+            <Target size={17} style={{ color: "#fb923c" }} />
+          </div>
+          <div>
+            <p style={{ color: "#fed7aa", fontSize: "12px", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", lineHeight: 1 }}>
+              Sales Performance
+            </p>
+            <p style={{ color: "#fdba74", fontSize: "10px", opacity: 0.7, marginTop: "2px" }}>
+              {dayjs().format("MMMM YYYY")} · Commission Tracker
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {pct >= 100 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(16,185,129,0.2)", border: "1px solid rgba(16,185,129,0.4)", borderRadius: "20px", padding: "3px 10px" }}>
+              <Trophy size={10} style={{ color: "#34d399" }} />
+              <span style={{ color: "#34d399", fontSize: "9px", fontWeight: 900, letterSpacing: "0.08em" }}>TARGET HIT</span>
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "rgba(249,115,22,0.15)", border: "1px solid rgba(249,115,22,0.35)", borderRadius: "20px", padding: "4px 10px" }}>
+            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#fb923c", animation: "stLiveDot 1.6s ease-in-out infinite" }} />
+            <span style={{ color: "#fb923c", fontSize: "9px", fontWeight: 900, letterSpacing: "0.1em" }}>LIVE</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 4-Stat Grid ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderBottom: "1px solid rgba(249,115,22,0.12)" }}>
+        {[
+          {
+            label: "ACHIEVED",
+            value: `₹${achieved.toLocaleString("en-IN")}`,
+            color: "#f97316",
+            sub: "This month",
+            bg: "rgba(249,115,22,0.04)",
+            border: "rgba(249,115,22,0.15)",
+          },
+          {
+            label: "TARGET",
+            value: `₹${target.toLocaleString("en-IN")}`,
+            color: "inherit",
+            sub: "Monthly goal",
+            bg: "transparent",
+            border: "transparent",
+          },
+          {
+            label: "PROGRESS",
+            value: `${pct.toFixed(1)}%`,
+            color: pctColor,
+            sub: remaining > 0 ? `₹${remaining.toLocaleString("en-IN")} left` : "Goal reached!",
+            bg: "transparent",
+            border: "transparent",
+          },
+          {
+            label: "EST. COMMISSION",
+            value: `₹${Math.round(estimatedCommission).toLocaleString("en-IN")}`,
+            color: "#10b981",
+            sub: activeSlab ? `${activeSlab.commission_percent}% rate` : "No slab active",
+            bg: "rgba(16,185,129,0.04)",
+            border: "rgba(16,185,129,0.15)",
+          },
+        ].map((s, i) => (
+          <div key={i} style={{
+            padding: "14px 18px",
+            borderRight: i < 3 ? "1px solid rgba(249,115,22,0.1)" : "none",
+            background: s.bg,
+            animation: `stCardIn 0.4s ease-out ${i * 0.07}s both`,
+          }}>
+            <p style={{ fontSize: "9px", fontWeight: 800, letterSpacing: "0.1em", color: "#94a3b8", textTransform: "uppercase", marginBottom: "5px" }}>
+              {s.label}
+            </p>
+            <p style={{ fontSize: i === 0 || i === 3 ? "18px" : "20px", fontWeight: 900, color: s.color, fontFamily: "'SF Mono', 'Fira Code', monospace", lineHeight: 1.1, letterSpacing: "-0.02em" }}>
+              {s.value}
+            </p>
+            <p style={{ fontSize: "9px", color: "#94a3b8", marginTop: "3px" }}>{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Progress Bar Section ── */}
+      <div style={{ padding: "18px 20px 4px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+          <p style={{ fontSize: "9px", fontWeight: 900, letterSpacing: "0.12em", color: "#94a3b8", textTransform: "uppercase" }}>
+            Commission Milestones
+          </p>
+          <p style={{ fontSize: "10px", color: "#94a3b8" }}>
+            {pct.toFixed(1)}% of target
+          </p>
+        </div>
+
+        {/* 3D Tube Bar */}
+        <div style={{
+          position: "relative",
+          height: "44px",
+          borderRadius: "8px",
+          overflow: "hidden",
+          background: "linear-gradient(180deg, #0d1117 0%, #161b22 45%, #0d1117 100%)",
+          boxShadow: "inset 0 3px 8px rgba(0,0,0,0.6), inset 0 -2px 4px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.04)",
+          border: "1px solid rgba(0,0,0,0.4)",
+        }}>
+          {/* Track depth lines */}
+          {[25, 50, 75].map(p => (
+            <div key={p} style={{ position: "absolute", left: `${p}%`, top: 0, height: "100%", width: "1px", background: "rgba(255,255,255,0.03)" }} />
+          ))}
+
+          {/* Glowing fill */}
+          <div style={{
+            position: "absolute",
+            left: "3px", top: "4px", bottom: "4px",
+            width: mounted ? `calc(${Math.max(pct, 0.5)}% - 6px)` : "3px",
+            borderRadius: "5px",
+            background: pct >= 100
+              ? "linear-gradient(90deg, #047857, #059669, #10b981, #34d399)"
+              : "linear-gradient(90deg, #9a3412, #c2410c, #ea580c, #f97316, #fb923c)",
+            boxShadow: pct >= 100
+              ? "0 0 20px rgba(16,185,129,0.7), 0 0 40px rgba(16,185,129,0.3), inset 0 1px 0 rgba(255,255,255,0.25)"
+              : "0 0 20px rgba(249,115,22,0.7), 0 0 40px rgba(249,115,22,0.3), inset 0 1px 0 rgba(255,255,255,0.25)",
+            transition: "width 1.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+            animation: pct > 0 ? "stFillGlow 2.5s ease-in-out infinite" : "none",
+            overflow: "hidden",
+          }}>
+            {/* 3D top bevel */}
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "40%", background: "linear-gradient(180deg, rgba(255,255,255,0.28) 0%, transparent 100%)", borderRadius: "5px 5px 0 0" }} />
+            {/* Shimmer sweep */}
+            {pct > 4 && (
+              <div style={{
+                position: "absolute", top: 0, bottom: 0,
+                width: "35%",
+                background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
+                animation: "stShimmer 2.6s ease-in-out infinite",
+              }} />
+            )}
+          </div>
+
+          {/* Checkpoint notches */}
+          {checkpoints.slice(1).map(cp => (
+            cp.posPct < 99 && (
+              <div key={cp.id} style={{
+                position: "absolute", left: `${cp.posPct}%`,
+                top: 0, height: "100%", width: "1px",
+                background: cp.cleared ? "rgba(16,185,129,0.35)" : "rgba(255,255,255,0.07)",
+                zIndex: 2,
+              }} />
+            )
+          ))}
+
+          {/* % label riding on fill */}
+          {pct > 10 && (
+            <div style={{
+              position: "absolute",
+              right: `${100 - Math.min(pct, 97)}%`,
+              top: "50%", transform: "translateY(-50%)",
+              fontSize: "11px", fontWeight: 900, color: "rgba(255,255,255,0.9)",
+              paddingRight: "8px", zIndex: 3, letterSpacing: "-0.02em",
+              textShadow: "0 1px 4px rgba(0,0,0,0.5)",
+            }}>
+              {pct.toFixed(0)}%
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Milestone Cards Grid ── */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(${Math.max(checkpoints.length, 1)}, 1fr)`,
+        gap: "10px",
+        padding: "14px 20px 18px",
+      }}>
+        {checkpoints.map((cp, idx) => {
+          const isActive = cp.id === activeSlab?.id;
+          return (
+            <div
+              key={cp.id}
+              style={{
+                borderRadius: "8px",
+                border: isActive
+                  ? "1px solid rgba(249,115,22,0.45)"
+                  : cp.cleared
+                  ? "1px solid rgba(16,185,129,0.3)"
+                  : "1px solid rgba(148,163,184,0.15)",
+                background: isActive
+                  ? "linear-gradient(135deg, rgba(249,115,22,0.1) 0%, rgba(234,88,12,0.06) 100%)"
+                  : cp.cleared
+                  ? "rgba(16,185,129,0.05)"
+                  : "rgba(148,163,184,0.04)",
+                padding: "10px 12px",
+                position: "relative",
+                overflow: "hidden",
+                animation: `stCardIn 0.4s ease-out ${idx * 0.08 + 0.2}s both`,
+                boxShadow: isActive ? "0 0 12px rgba(249,115,22,0.15)" : "none",
+              }}
+            >
+              {/* Active badge */}
+              {isActive && (
+                <div style={{
+                  position: "absolute", top: "5px", right: "5px",
+                  fontSize: "7px", fontWeight: 900, letterSpacing: "0.05em",
+                  background: "linear-gradient(90deg, #ea580c, #f97316)",
+                  color: "white", padding: "2px 5px", borderRadius: "3px",
+                  boxShadow: "0 1px 4px rgba(249,115,22,0.4)",
+                }}>
+                  ACTIVE
+                </div>
+              )}
+
+              {/* Icon + name */}
+              <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "6px" }}>
+                {cp.cleared
+                  ? <Trophy size={13} style={{ color: isActive ? "#f97316" : "#10b981", flexShrink: 0 }} />
+                  : <div style={{ width: "13px", height: "13px", borderRadius: "3px", border: "1.5px solid #475569", flexShrink: 0 }} />
+                }
+                <span style={{
+                  fontSize: "9px", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase",
+                  color: isActive ? "#ea580c" : cp.cleared ? "#10b981" : "#64748b",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>
+                  {cp.name.split("(")[0].trim()}
+                </span>
+              </div>
+
+              {/* Commission % */}
+              <p style={{
+                fontSize: "22px", fontWeight: 900, lineHeight: 1,
+                color: isActive ? "#f97316" : cp.cleared ? "#10b981" : "#475569",
+                fontFamily: "'SF Mono', 'Fira Code', monospace",
+                letterSpacing: "-0.03em",
+              }}>
+                {cp.commission_percent}%
+              </p>
+
+              {/* Threshold */}
+              <p style={{ fontSize: "9px", color: "#64748b", marginTop: "3px", fontFamily: "monospace" }}>
+                {cp.min_target > 0 ? `≥ ₹${cp.min_target.toLocaleString("en-IN")}` : "Base tier"}
+              </p>
+
+              {/* Status chip */}
+              <div style={{ marginTop: "7px" }}>
+                <span style={{
+                  fontSize: "8px", fontWeight: 800, letterSpacing: "0.06em",
+                  padding: "2px 6px", borderRadius: "3px",
+                  background: isActive ? "rgba(249,115,22,0.15)" : cp.cleared ? "rgba(16,185,129,0.12)" : "rgba(148,163,184,0.1)",
+                  color: isActive ? "#f97316" : cp.cleared ? "#10b981" : "#94a3b8",
+                }}>
+                  {isActive ? "⚡ EARNING" : cp.cleared ? "✓ CLEARED" : "○ LOCKED"}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Bottom Commission Strip ── */}
+      <div style={{
+        borderTop: "1px solid rgba(249,115,22,0.12)",
+        background: "linear-gradient(90deg, rgba(249,115,22,0.05) 0%, transparent 60%)",
+        padding: "11px 20px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+            <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: activeSlab ? "#f97316" : "#64748b", animation: activeSlab ? "stLiveDot 1.6s ease-in-out infinite" : "none" }} />
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b" }}>
+              {activeSlab ? (
+                <><span style={{ color: "#f97316" }}>{activeSlab.name}</span> · {activeSlab.commission_percent}% commission rate</>
+              ) : (
+                "No slab reached yet"
+              )}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "10px", color: "#64748b" }}>Est. earnings:</span>
+          <span style={{ fontSize: "14px", fontWeight: 900, color: "#10b981", fontFamily: "monospace", letterSpacing: "-0.02em" }}>
+            ₹{Math.round(estimatedCommission).toLocaleString("en-IN")}
+          </span>
+        </div>
+      </div>
+
+      {achieved === 0 && (
+        <div style={{ borderTop: "1px solid rgba(148,163,184,0.1)", padding: "9px 20px", textAlign: "center" }}>
+          <p style={{ fontSize: "10px", color: "#64748b", fontStyle: "italic" }}>
+            No sales recorded yet this month — your manager will update your progress.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Profile Page ─────────────────────────────────────
 export default function EmployeeProfile() {
   const { user } = useAuth();
   const { request } = useApi();
@@ -53,19 +426,21 @@ export default function EmployeeProfile() {
   const [onboarding, setOnboarding] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
+  const [salesRecord, setSalesRecord] = useState<SalesRecord | null>(null);
+  const [salarySlabs, setSalarySlabs] = useState<SalarySlab[]>([]);
 
   const loadProfile = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
       let currentEmployee: Employee | null = null;
-      
+
       try {
         const empRes = await request<any>({ url: `/api/employees/${user.id}` });
-        if (empRes?.data) { 
+        if (empRes?.data) {
           currentEmployee = empRes.data as Employee;
-          setEmployee(currentEmployee); 
-          setUsingFallback(false); 
+          setEmployee(currentEmployee);
+          setUsingFallback(false);
         } else {
           throw new Error("No data");
         }
@@ -75,20 +450,16 @@ export default function EmployeeProfile() {
         setUsingFallback(true);
       }
 
-
       try {
         const kpiRes = await request<any>({ url: `/api/kpi?employeeId=${user.id}&month=${dayjs().month() + 1}&year=${dayjs().year()}` });
         if (kpiRes?.data?.[0]) setKpiScore(kpiRes.data[0] as KpiScore);
-      } catch (err) {
-        console.error("KPI Error:", err);
-      }
+      } catch {}
 
       try {
         const walletRes = await request<{ wallet: WalletData }>({ url: "/api/wallet" });
         if (walletRes?.wallet) setWallet(walletRes.wallet);
       } catch {}
-      
-      // Fetch Team Info
+
       if (currentEmployee?.team_id) {
         try {
           const { data: teamData } = await supabase
@@ -97,9 +468,21 @@ export default function EmployeeProfile() {
             .eq("id", currentEmployee.team_id)
             .single();
           if (teamData) setTeam(teamData as TeamData);
-        } catch (err) {
-          console.error("Team Fetch Error:", err);
-        }
+        } catch {}
+      }
+
+      // Load sales data if this is a sales employee
+      if (currentEmployee?.commission_enabled) {
+        try {
+          const [salesRes, slabsRes] = await Promise.all([
+            fetch(`/api/sales-records?employeeId=${user.id}&month=${dayjs().month() + 1}&year=${dayjs().year()}`),
+            fetch("/api/salary-slabs"),
+          ]);
+          const salesData = await salesRes.json();
+          const slabsData = await slabsRes.json();
+          if (salesData.records?.[0]) setSalesRecord(salesData.records[0]);
+          if (slabsData.slabs?.length) setSalarySlabs(slabsData.slabs);
+        } catch {}
       }
     } finally {
       setLoading(false);
@@ -173,9 +556,15 @@ export default function EmployeeProfile() {
                       <span className={cn("h-1 w-1 rounded-full", employee.is_active ? "bg-emerald-500" : "bg-red-500")} />
                       {employee.is_active ? "Active" : "Inactive"}
                     </span>
-                    <span className="rounded-md bg-theme-raised px-2 py-0.5 text-[11px] font-semibold text-theme-muted">
-                      {employee.role}
-                    </span>
+                    {employee.commission_enabled ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
+                        <TrendingUp size={10} /> Sales
+                      </span>
+                    ) : (
+                      <span className="rounded-md bg-theme-raised px-2 py-0.5 text-[11px] font-semibold text-theme-muted">
+                        {employee.role}
+                      </span>
+                    )}
                     {employee.employment_type && (
                       <span className="rounded-md bg-theme-raised px-2 py-0.5 text-[11px] font-semibold text-theme-muted capitalize">
                         {employee.employment_type.replace(/_/g, " ")}
@@ -190,6 +579,15 @@ export default function EmployeeProfile() {
                 </Button>
               </Link>
             </div>
+
+            {/* Sales Performance Tracker — only for commission-enabled employees */}
+            {employee.commission_enabled && employee.monthly_sales_target && (
+              <SalesTracker
+                achieved={salesRecord?.amount_achieved ?? 0}
+                target={employee.monthly_sales_target}
+                slabs={salarySlabs}
+              />
+            )}
 
             {/* Info Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -406,23 +804,32 @@ export default function EmployeeProfile() {
                     <>
                       <div>
                         <p className="text-xs text-theme-muted uppercase font-bold tracking-tighter mb-1 opacity-70">
-                          {employee.salary_structure === "hourly" ? "Hourly Rate" : 
-                           employee.salary_structure === "daily" ? "Daily Rate" : 
-                           employee.salary_structure === "stipend" ? "Stipend Amount" : 
+                          {employee.commission_enabled ? "Base Salary + Commission" :
+                           employee.salary_structure === "hourly" ? "Hourly Rate" :
+                           employee.salary_structure === "daily" ? "Daily Rate" :
+                           employee.salary_structure === "stipend" ? "Stipend Amount" :
                            "Base Salary"}
                         </p>
                         <p className="text-2xl font-black text-theme-primary">
-                          {employee.hourly_rate ? `₹${employee.hourly_rate}/hr` : 
-                           employee.daily_rate ? `₹${employee.daily_rate}/day` : 
-                           employee.stipend_amount ? formatCurrency(employee.stipend_amount) : 
+                          {employee.hourly_rate ? `₹${employee.hourly_rate}/hr` :
+                           employee.daily_rate ? `₹${employee.daily_rate}/day` :
+                           employee.stipend_amount ? formatCurrency(employee.stipend_amount) :
                            formatCurrency(employee.base_salary || 0)}
                         </p>
                       </div>
+                      {employee.commission_enabled && employee.monthly_sales_target && (
+                        <div className="flex items-center gap-2 rounded-lg bg-orange-50 border border-orange-100 px-3 py-2">
+                          <TrendingUp size={12} className="text-orange-500 flex-shrink-0" />
+                          <p className="text-[11px] text-orange-700 font-semibold">
+                            + Commission on ₹{employee.monthly_sales_target.toLocaleString("en-IN")} target
+                          </p>
+                        </div>
+                      )}
                       <div className="pt-3 border-t border-theme-border">
                         <p className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">Payment Frequency</p>
                         <p className="text-sm font-semibold text-theme-fg mt-0.5">
-                          {employee.salary_structure === "hourly" ? "Cycle: Per Hour" : 
-                           employee.salary_structure === "daily" ? "Cycle: Per Day" : 
+                          {employee.salary_structure === "hourly" ? "Cycle: Per Hour" :
+                           employee.salary_structure === "daily" ? "Cycle: Per Day" :
                            "Cycle: Monthly Settlement"}
                         </p>
                       </div>

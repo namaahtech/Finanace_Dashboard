@@ -20,7 +20,8 @@
       "Bash(npm run *)",
       "Bash(netstat -tuln)",
       "Bash(curl -s http://localhost:3007/api/kpi/calculate?employeeId=test)",
-      "Bash(year=2026 2>&1)"
+      "Bash(year=2026 2>&1)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

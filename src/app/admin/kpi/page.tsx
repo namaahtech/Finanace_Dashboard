@@ -30,6 +30,9 @@ import {
   ClipboardList,
   CheckCircle2,
   Info,
+  Target,
+  Trophy,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
@@ -41,6 +44,19 @@ interface User {
   name: string;
   employeeId: string;
   department: string;
+  commission_enabled?: boolean;
+  monthly_sales_target?: number;
+  salary_slab_id?: string;
+}
+
+interface SalesRecord {
+  id: string; employee_id: string; month: number; year: number;
+  amount_achieved: number; notes?: string;
+}
+
+interface SalarySlab {
+  id: string; name: string; min_target: number; max_target: number | null;
+  commission_percent: number; sort_order: number;
 }
 
 interface KpiScore {
@@ -213,6 +229,61 @@ function StarRating({
   );
 }
 
+// ─── Admin: quick sales amount input ─────────────────────
+function SalesAmountEntry({
+  employeeId, month, year, current, onSaved,
+}: {
+  employeeId: string; month: number; year: number;
+  current: number; onSaved: (rec: SalesRecord) => void;
+}) {
+  const [val, setVal] = useState(current > 0 ? String(current) : "");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => { setVal(current > 0 ? String(current) : ""); setDone(false); }, [current, month, year]);
+
+  async function save() {
+    if (!val || isNaN(Number(val))) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/sales-records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employee_id: employeeId, month, year, amount_achieved: Number(val) }),
+      });
+      const d = await res.json();
+      if (d.record) { onSaved(d.record); setDone(true); }
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-orange-100 bg-orange-50/50 px-4 py-3">
+      <Target size={13} className="text-orange-500 flex-shrink-0" />
+      <span className="text-[11px] font-bold text-orange-700 shrink-0">Set sales:</span>
+      <div className="relative flex-1">
+        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-orange-400 font-bold">₹</span>
+        <input
+          type="number" min="0" step="100"
+          value={val}
+          onChange={e => { setVal(e.target.value); setDone(false); }}
+          placeholder="0"
+          className="h-8 w-full rounded-lg border border-orange-200 bg-white pl-6 pr-3 text-sm text-theme-fg outline-none focus:border-orange-400 transition-all"
+        />
+      </div>
+      <button
+        onClick={save}
+        disabled={saving}
+        className={cn(
+          "h-8 px-3 rounded-lg text-[11px] font-black transition-all flex-shrink-0",
+          done ? "bg-emerald-500 text-white" : "bg-orange-500 hover:bg-orange-600 text-white"
+        )}
+      >
+        {saving ? "…" : done ? "✓ Saved" : "Save"}
+      </button>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────
 export default function AdminKpiPage() {
   const { user } = useAuth();
@@ -231,6 +302,9 @@ export default function AdminKpiPage() {
   );
 
   const { canEdit, canExport } = usePermission("kpi_kra");
+  const [salesRecord, setSalesRecord] = useState<SalesRecord | null>(null);
+  const [salarySlabs, setSalarySlabs] = useState<SalarySlab[]>([]);
+  const [loadingSales, setLoadingSales] = useState(false);
 
   // Load real users with safe field mapping
   useEffect(() => {
@@ -242,12 +316,20 @@ export default function AdminKpiPage() {
             id: u.id || u._id,
             name: u.name,
             employeeId: u.employeeId || u.employee_id,
-            department: u.department
+            department: u.department,
+            commission_enabled: u.commission_enabled || false,
+            monthly_sales_target: u.monthly_sales_target || null,
+            salary_slab_id: u.salary_slab_id || null,
           }));
           setUsers(mappedUsers);
         }
       })
       .catch(() => {/* use mock */});
+    // Load salary slabs once for checkpoint display
+    fetch("/api/salary-slabs")
+      .then(r => r.json())
+      .then(d => { if (d.slabs) setSalarySlabs(d.slabs); })
+      .catch(() => {});
   }, []);
 
   // Fetch KPI scores in real-time
@@ -310,6 +392,18 @@ export default function AdminKpiPage() {
     const next = createFormFromScore(existing);
     if (JSON.stringify(form) !== JSON.stringify(next)) setForm(next);
   }, [selectedUser, scores]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch sales record when a commission-enabled employee is selected
+  useEffect(() => {
+    const emp = users.find(u => (u._id || u.id) === selectedUser);
+    if (!selectedUser || !emp?.commission_enabled) { setSalesRecord(null); return; }
+    setLoadingSales(true);
+    fetch(`/api/sales-records?employeeId=${selectedUser}&month=${form.month}&year=${form.year}`)
+      .then(r => r.json())
+      .then(d => setSalesRecord(d.records?.[0] ?? null))
+      .catch(() => setSalesRecord(null))
+      .finally(() => setLoadingSales(false));
+  }, [selectedUser, form.month, form.year, users]);
 
   // Live score calculations
   const kpiScore       = useMemo(() => calculateWeightedKpi(form.kpiEntries),        [form.kpiEntries]);
@@ -562,6 +656,118 @@ export default function AdminKpiPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Sales Performance Widget — shown when selected employee is on commission */}
+              {selectedEmployee?.commission_enabled && selectedEmployee.monthly_sales_target && (
+                <div className="page-card p-0 overflow-hidden" style={{ borderColor: "rgba(249,115,22,0.25)" }}>
+                  <style>{`
+                    @keyframes admShimmer { 0% { left:-80%; } 100% { left:130%; } }
+                    @keyframes admLiveDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.7); } }
+                    @keyframes admFillGlow { 0%,100% { filter:brightness(1); } 50% { filter:brightness(1.15); } }
+                  `}</style>
+
+                  {/* Header */}
+                  <div style={{ background: "linear-gradient(135deg,#431407,#7c2d12,#9a3412)", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(249,115,22,0.25)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+                      <div style={{ width: "30px", height: "30px", borderRadius: "7px", background: "rgba(249,115,22,0.25)", border: "1px solid rgba(249,115,22,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Target size={15} style={{ color: "#fb923c" }} />
+                      </div>
+                      <div>
+                        <p style={{ color: "#fed7aa", fontSize: "11px", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", lineHeight: 1 }}>Sales Performance</p>
+                        <p style={{ color: "#fdba74", fontSize: "10px", opacity: 0.7, marginTop: "2px" }}>{MONTH_NAMES[form.month - 1]} {form.year} · Commission Track</p>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "rgba(249,115,22,0.15)", border: "1px solid rgba(249,115,22,0.35)", borderRadius: "20px", padding: "3px 9px" }}>
+                      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#fb923c", animation: "admLiveDot 1.6s ease-in-out infinite" }} />
+                      <span style={{ color: "#fb923c", fontSize: "8px", fontWeight: 900, letterSpacing: "0.1em" }}>LIVE</span>
+                    </div>
+                  </div>
+
+                  {loadingSales ? (
+                    <div style={{ padding: "16px 18px" }}>
+                      <div style={{ height: "36px", borderRadius: "6px", background: "rgba(249,115,22,0.08)", animation: "pulse 1.5s ease-in-out infinite" }} />
+                    </div>
+                  ) : (() => {
+                    const achieved = salesRecord?.amount_achieved ?? 0;
+                    const target   = selectedEmployee.monthly_sales_target!;
+                    const pct      = target > 0 ? Math.min(100, (achieved / target) * 100) : 0;
+                    const activeSlab = salarySlabs.filter(s => s.min_target <= achieved).at(-1) ?? null;
+                    const estimatedCommission = activeSlab ? (achieved * activeSlab.commission_percent) / 100 : 0;
+                    const checkpoints = salarySlabs
+                      .map(s => ({ ...s, posPct: target > 0 ? Math.min(100, (s.min_target / target) * 100) : 0, cleared: achieved >= s.min_target }))
+                      .filter(s => s.posPct <= 100);
+                    const pctColor = pct >= 100 ? "#10b981" : pct >= 75 ? "#0ea5e9" : pct >= 50 ? "#f59e0b" : "#f97316";
+
+                    return (
+                      <>
+                        {/* 3-stat strip */}
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", borderBottom: "1px solid rgba(249,115,22,0.1)" }}>
+                          {[
+                            { label: "ACHIEVED", value: `₹${achieved.toLocaleString("en-IN")}`, color: "#f97316" },
+                            { label: "PROGRESS", value: `${pct.toFixed(1)}%`, color: pctColor },
+                            { label: "COMMISSION", value: `₹${Math.round(estimatedCommission).toLocaleString("en-IN")}`, color: "#10b981" },
+                          ].map((s, i) => (
+                            <div key={i} style={{ padding: "11px 14px", borderRight: i < 2 ? "1px solid rgba(249,115,22,0.1)" : "none" }}>
+                              <p style={{ fontSize: "8px", fontWeight: 800, letterSpacing: "0.1em", color: "#94a3b8", textTransform: "uppercase", marginBottom: "4px" }}>{s.label}</p>
+                              <p style={{ fontSize: "16px", fontWeight: 900, color: s.color, fontFamily: "monospace", lineHeight: 1, letterSpacing: "-0.02em" }}>{s.value}</p>
+                              {i === 0 && <p style={{ fontSize: "9px", color: "#94a3b8", marginTop: "2px" }}>of ₹{target.toLocaleString("en-IN")} target</p>}
+                              {i === 2 && <p style={{ fontSize: "9px", color: "#94a3b8", marginTop: "2px" }}>{activeSlab ? `${activeSlab.commission_percent}% rate` : "No slab"}</p>}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* 3D Bar */}
+                        <div style={{ padding: "14px 18px 4px" }}>
+                          <div style={{ position: "relative", height: "36px", borderRadius: "6px", overflow: "hidden", background: "linear-gradient(180deg,#0d1117,#161b22,#0d1117)", boxShadow: "inset 0 3px 8px rgba(0,0,0,0.6), inset 0 -2px 4px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.04)" }}>
+                            <div style={{ position: "absolute", left: "3px", top: "3px", bottom: "3px", width: `calc(${Math.max(pct, 0.5)}% - 6px)`, borderRadius: "4px", background: pct >= 100 ? "linear-gradient(90deg,#047857,#059669,#10b981)" : "linear-gradient(90deg,#9a3412,#c2410c,#ea580c,#f97316,#fb923c)", boxShadow: pct >= 100 ? "0 0 16px rgba(16,185,129,0.7)" : "0 0 16px rgba(249,115,22,0.7)", transition: "width 1.4s cubic-bezier(0.34,1.56,0.64,1)", animation: pct > 0 ? "admFillGlow 2.5s ease-in-out infinite" : "none", overflow: "hidden" }}>
+                              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "40%", background: "linear-gradient(180deg,rgba(255,255,255,0.28) 0%,transparent 100%)", borderRadius: "4px 4px 0 0" }} />
+                              {pct > 4 && <div style={{ position: "absolute", top: 0, bottom: 0, width: "35%", background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.22),transparent)", animation: "admShimmer 2.6s ease-in-out infinite" }} />}
+                            </div>
+                            {checkpoints.slice(1).map(cp => cp.posPct < 99 && (
+                              <div key={cp.id} style={{ position: "absolute", left: `${cp.posPct}%`, top: 0, height: "100%", width: "1px", background: cp.cleared ? "rgba(16,185,129,0.35)" : "rgba(255,255,255,0.06)", zIndex: 2 }} />
+                            ))}
+                            {pct > 10 && <div style={{ position: "absolute", right: `${100 - Math.min(pct, 97)}%`, top: "50%", transform: "translateY(-50%)", fontSize: "10px", fontWeight: 900, color: "rgba(255,255,255,0.9)", paddingRight: "6px", zIndex: 3, textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>{pct.toFixed(0)}%</div>}
+                          </div>
+                        </div>
+
+                        {/* Milestone pills */}
+                        <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(checkpoints.length, 1)},1fr)`, gap: "8px", padding: "10px 18px 14px" }}>
+                          {checkpoints.map((cp) => {
+                            const isActive = cp.id === activeSlab?.id;
+                            return (
+                              <div key={cp.id} style={{ borderRadius: "7px", border: isActive ? "1px solid rgba(249,115,22,0.45)" : cp.cleared ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(148,163,184,0.12)", background: isActive ? "rgba(249,115,22,0.08)" : cp.cleared ? "rgba(16,185,129,0.05)" : "rgba(148,163,184,0.04)", padding: "8px 10px", position: "relative", boxShadow: isActive ? "0 0 10px rgba(249,115,22,0.12)" : "none" }}>
+                                {isActive && <div style={{ position: "absolute", top: "4px", right: "4px", fontSize: "7px", fontWeight: 900, background: "linear-gradient(90deg,#ea580c,#f97316)", color: "white", padding: "1px 4px", borderRadius: "3px" }}>ACTIVE</div>}
+                                <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "4px" }}>
+                                  {cp.cleared ? <Trophy size={11} style={{ color: isActive ? "#f97316" : "#10b981" }} /> : <div style={{ width: "11px", height: "11px", borderRadius: "2px", border: "1.5px solid #475569" }} />}
+                                  <span style={{ fontSize: "8px", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: isActive ? "#ea580c" : cp.cleared ? "#10b981" : "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cp.name.split("(")[0].trim()}</span>
+                                </div>
+                                <p style={{ fontSize: "18px", fontWeight: 900, lineHeight: 1, color: isActive ? "#f97316" : cp.cleared ? "#10b981" : "#475569", fontFamily: "monospace", letterSpacing: "-0.03em" }}>{cp.commission_percent}%</p>
+                                <p style={{ fontSize: "8px", color: "#64748b", marginTop: "2px", fontFamily: "monospace" }}>{cp.min_target > 0 ? `≥ ₹${cp.min_target.toLocaleString("en-IN")}` : "Base"}</p>
+                                <span style={{ display: "inline-block", marginTop: "5px", fontSize: "7px", fontWeight: 800, letterSpacing: "0.05em", padding: "1px 5px", borderRadius: "3px", background: isActive ? "rgba(249,115,22,0.15)" : cp.cleared ? "rgba(16,185,129,0.12)" : "rgba(148,163,184,0.1)", color: isActive ? "#f97316" : cp.cleared ? "#10b981" : "#94a3b8" }}>
+                                  {isActive ? "⚡ EARNING" : cp.cleared ? "✓ CLEARED" : "○ LOCKED"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Bottom strip: admin sales entry */}
+                        {canEdit && (
+                          <div style={{ borderTop: "1px solid rgba(249,115,22,0.12)", background: "linear-gradient(90deg,rgba(249,115,22,0.05),transparent)", padding: "10px 18px" }}>
+                            <SalesAmountEntry
+                              employeeId={selectedUser}
+                              month={form.month}
+                              year={form.year}
+                              current={achieved}
+                              onSaved={(rec) => setSalesRecord(rec)}
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
 
               {/* Auto-Calculated Scores Section */}
               {selectedUser && (
