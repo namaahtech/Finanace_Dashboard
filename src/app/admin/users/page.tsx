@@ -132,7 +132,7 @@ function CustomSelect({ value, options, onChange, placeholder, icon, label }: {
   );
 }
 
-// ── 3-Dot Context Menu ──────────────────────────────────
+// ── Action Menu ─────────────────────────────────────────
 function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, canDelete, zohoConnected }: {
   user: User;
   onRefresh: () => void;
@@ -143,18 +143,15 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
   canDelete: boolean;
   zohoConnected: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const [showCustomMail, setShowCustomMail] = useState(false);
   const [mailSubject, setMailSubject] = useState("");
   const [mailBody, setMailBody] = useState("");
   const [acting, setActing] = useState(false);
   const [provisioningMail, setProvisioningMail] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
   async function createZohoMail() {
     setProvisioningMail(true);
-    setOpen(false);
     try {
       const res = await fetch("/api/mail/accounts/create-employee", {
         method: "POST",
@@ -179,14 +176,8 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
   }
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setOpen(false); setShowCustomMail(false); }
+      if (e.key === "Escape") { setShowCustomMail(false); }
     };
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
@@ -196,7 +187,6 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
 
   async function doAction(action: string, extra?: Record<string, string>) {
     setActing(true);
-    setOpen(false);
     try {
       const res = await axios.post(`/api/users/${user.id}`, { action, ...extra });
       showToast(res.data.message || res.data.warning || "Done", res.data.warning ? "warning" : "success");
@@ -209,75 +199,64 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
   }
 
   return (
-    <div ref={ref} className="relative inline-block">
-      <button onClick={() => setOpen((o) => !o)} disabled={isActing} className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-colors">
-        {provisioningMail ? <Loader2 size={14} className="animate-spin" /> : <MoreVertical size={14} />}
-      </button>
-
-      {open && (
-        <div className={cn("absolute z-[1000] w-52 rounded-2xl border border-theme-border bg-theme-surface shadow-2xl p-1.5 animate-in zoom-in-95 duration-150", 
-          "right-full mr-2", isLast ? "bottom-0" : "top-0"
-        )}>
-          {canEdit && (
-            <button onClick={() => { onEdit(); setOpen(false); }}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
-              <Edit2 size={13} className="text-theme-muted group-hover:text-theme-primary transition-colors" /> Edit Employee
-            </button>
-          )}
-          <button onClick={() => doAction("resend_credentials")}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
-            <RefreshCw size={13} className="text-sky-500 group-hover:rotate-45 transition-transform" /> Resend Login Info
+    <div className="flex flex-col items-end gap-2">
+      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+        {canEdit && (
+          <button onClick={() => onEdit()} disabled={isActing} title="Edit Employee"
+            className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-theme-primary transition-colors">
+            <Edit2 size={15} />
           </button>
-          <button onClick={() => { setShowCustomMail(true); setOpen(false); }}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
-            <Mail size={13} className="text-emerald-500" /> Send Custom Mail
-          </button>
-          {zohoConnected && (
-            user.zoho_email
-              ? <div className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold text-emerald-600 cursor-default">
-                  <Zap size={13} /> Mail Provisioned ✓
-                  <span className="ml-auto text-[10px] font-normal text-theme-muted truncate max-w-[120px]">{user.zoho_email}</span>
-                </div>
-              : <button onClick={createZohoMail}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-theme-fg hover:bg-theme-raised transition-all group">
-                  <Zap size={13} className="text-blue-500" /> Create Zoho Mail
-                </button>
-          )}
-          {canDelete && (
-            <>
-              <div className="my-1.5 h-px bg-theme-border/50" />
-              {user.isActive && (
-                <button onClick={async () => {
-                  setOpen(false);
-                  if (!confirm(`Start 7-day offboarding for ${user.name}? They will lose access after 7 days.`)) return;
-                  setActing(true);
-                  try {
-                    const res = await fetch(`/api/employees/${user.id}/offboard`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ reason: "Admin initiated offboarding" }),
-                    });
-                    const data = await res.json();
-                    showToast(data.message || "Offboarding started.", res.ok ? "success" : "error");
-                    if (res.ok) onRefresh();
-                  } catch { showToast("Failed to start offboarding.", "error"); }
-                  finally { setActing(false); }
-                }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-black text-orange-500 hover:bg-orange-500/10 transition-all">
-                  <LogOut size={13} /> Begin Offboarding
-                </button>
-              )}
-              <button onClick={() => { setDeleteConfirm(user); setOpen(false); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-black text-rose-500 hover:bg-rose-500/10 transition-all">
-                <Trash2 size={13} /> Delete Account
+        )}
+        <button onClick={() => doAction("resend_credentials")} disabled={isActing} title="Resend Login Info"
+          className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-sky-500 transition-colors">
+          <RefreshCw size={15} />
+        </button>
+        <button onClick={() => setShowCustomMail(true)} disabled={isActing} title="Send Custom Mail"
+          className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-emerald-500 transition-colors">
+          <Mail size={15} />
+        </button>
+        {zohoConnected && (
+          user.zoho_email
+            ? <div title={`Mail Provisioned: ${user.zoho_email}`} className="p-1.5 rounded-lg text-emerald-600 cursor-default">
+                <Zap size={15} />
+              </div>
+            : <button onClick={createZohoMail} disabled={isActing} title="Create Zoho Mail"
+                className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-blue-500 transition-colors">
+                {provisioningMail ? <Loader2 size={15} className="animate-spin text-theme-muted" /> : <Zap size={15} />}
               </button>
-            </>
-          )}
-        </div>
-      )}
+        )}
+        {canDelete && (
+          <>
+            {user.isActive && (
+              <button onClick={async () => {
+                if (!confirm(`Start 7-day offboarding for ${user.name}? They will lose access after 7 days.`)) return;
+                setActing(true);
+                try {
+                  const res = await fetch(`/api/employees/${user.id}/offboard`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ reason: "Admin initiated offboarding" }),
+                  });
+                  const data = await res.json();
+                  showToast(data.message || "Offboarding started.", res.ok ? "success" : "error");
+                  if (res.ok) onRefresh();
+                } catch { showToast("Failed to start offboarding.", "error"); }
+                finally { setActing(false); }
+              }} disabled={isActing} title="Begin Offboarding" className="p-1.5 rounded-lg text-theme-muted hover:bg-orange-500/10 hover:text-orange-500 transition-colors">
+                <LogOut size={15} />
+              </button>
+            )}
+            <button onClick={() => setDeleteConfirm(user)} disabled={isActing} title="Delete Account"
+              className="p-1.5 rounded-lg text-theme-muted hover:bg-rose-500/10 hover:text-rose-500 transition-colors">
+              <Trash2 size={15} />
+            </button>
+          </>
+        )}
+      </div>
 
       {showCustomMail && (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl bg-theme-surface border border-theme-border shadow-2xl p-6 space-y-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-theme-surface border border-theme-border shadow-2xl p-6 space-y-4 animate-in fade-in duration-200 text-left">
             <div className="flex items-center justify-between border-b border-theme-border pb-3">
               <h3 className="text-sm font-bold text-theme-fg">Message: {user.name}</h3>
               <button onClick={() => setShowCustomMail(false)} className="text-theme-muted hover:text-theme-fg p-1 rounded-lg hover:bg-theme-raised transition-colors"><X size={15} /></button>

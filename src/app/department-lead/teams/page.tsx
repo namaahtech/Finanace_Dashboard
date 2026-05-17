@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import {
@@ -20,6 +20,7 @@ import { useToast } from "@/components/ui/Toast";
 import { cn, formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/components/layout/AuthProvider";
+import { supabase } from "@/lib/supabase";
 
 const ROLE_LABEL: Record<string, string> = {
   employee:  "EMPLOYEE",
@@ -111,6 +112,15 @@ export default function ManagerTeamsPage() {
 
   useEffect(() => {
     fetchData();
+    const channel = supabase
+      .channel('teams-employees-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => fetchData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const filteredEmployees = useMemo(() => {

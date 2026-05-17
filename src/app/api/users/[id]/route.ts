@@ -55,10 +55,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (body.role) updates.role = body.role;
   if (body.department) updates.department = body.department;
   if (body.team_id !== undefined) updates.team_id = body.team_id;
+  if (body.shift_id !== undefined) updates.shift_id = body.shift_id;
+  if (body.matrix_role !== undefined) updates.matrix_role = body.matrix_role;
   if (body.monthly_leave_quota !== undefined) updates.monthly_leave_quota = body.monthly_leave_quota;
   if (body.employment_type !== undefined) updates.employment_type = body.employment_type;
   if (body.salary_structure !== undefined) updates.salary_structure = body.salary_structure;
   if (body.base_salary !== undefined) updates.base_salary = Number(body.base_salary);
+  if (body.employeeId !== undefined) updates.employee_id = body.employeeId;
+  if (body.commission_enabled !== undefined) updates.commission_enabled = body.commission_enabled;
+  if (body.monthly_sales_target !== undefined) updates.monthly_sales_target = body.monthly_sales_target;
+  if (body.salary_slab_id !== undefined) updates.salary_slab_id = body.salary_slab_id;
 
   // New salary range and KPI fields
   if (body.salary_min !== undefined) updates.salary_min = body.salary_min ? Number(body.salary_min) : null;

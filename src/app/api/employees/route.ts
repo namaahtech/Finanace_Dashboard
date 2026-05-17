@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from("employees")
-      .select("id, employee_id, name, email, zoho_email, department, designation, team_id, role, joining_date, is_active, status, monthly_leave_quota, leave_balance, teams:team_id(name)")
+      .select("id, employee_id, name, email, zoho_email, department, designation, matrix_role, team_id, role, joining_date, is_active, status, monthly_leave_quota, leave_balance, teams:team_id(name)")
       .order("name");
     if (error) throw error;
     return NextResponse.json({ employees: data || [] });

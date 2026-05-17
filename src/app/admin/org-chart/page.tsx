@@ -18,6 +18,8 @@ interface OrgNode {
   type: "root" | "dept" | "team" | "employee";
   employee_id?: string;
   matrix_role?: string;
+  access_level?: string;
+  candidate_name?: string;
   children?: OrgNode[];
 }
 
@@ -26,8 +28,8 @@ function collectIds(node: OrgNode): string[] {
 }
 
 // ── Layout constants ──────────────────────────────────────────
-const NW   = 200;  // node card width  (px, natural)
-const NH   = 110;  // node card height (px, approximate)
+const NW   = 220;  // node card width  (px, natural)
+const NH   = 140;  // node card height (px, approximate)
 const HGAP = 40;   // min horizontal gap between sibling subtrees
 const VGAP = 64;   // vertical gap between parent bottom and child top
 const PAD  = 72;   // canvas edge padding
@@ -120,6 +122,14 @@ function NodeCard({
           )}>
             {node.name}
           </p>
+          {node.candidate_name && (
+            <p className={cn(
+              "text-[10px] font-medium leading-none truncate mt-1 tracking-wide",
+              isRoot ? "text-white/70" : "text-theme-muted",
+            )}>
+              {node.candidate_name}
+            </p>
+          )}
         </div>
         {hasChildren && (
           <div className={cn(
@@ -132,21 +142,28 @@ function NodeCard({
         )}
       </div>
 
-      {/* Role badge */}
+      {/* Details list */}
       <div className={cn(
-        "rounded-lg px-2.5 py-1 text-center space-y-0.5",
+        "rounded-lg px-2.5 py-1.5 flex flex-col gap-1",
         isRoot ? "bg-white/10" : "bg-theme-raised",
       )}>
-        <p className={cn(
-          "text-[10px] font-black truncate uppercase tracking-widest",
-          isRoot ? "text-white/60" : "text-theme-muted",
-        )}>
-          {node.matrix_role || node.role}
-        </p>
-        {node.employee_id && (
-          <p className="text-[9px] font-bold text-theme-primary/60 tracking-widest uppercase">
-            ID: {node.employee_id}
-          </p>
+        <div className="flex items-center justify-between text-[9px] uppercase tracking-wider">
+          <span className={isRoot ? "text-white/50" : "text-theme-subtle"}>Designation</span>
+          <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-muted")}>{node.role || "N/A"}</span>
+        </div>
+        
+        {(node.access_level || node.type === "employee" || node.type === "root") && (
+          <div className="flex items-center justify-between text-[9px] uppercase tracking-wider">
+            <span className={isRoot ? "text-white/50" : "text-theme-subtle"}>Access Level</span>
+            <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-primary/80")}>{node.access_level?.replace('_', ' ') || "N/A"}</span>
+          </div>
+        )}
+
+        {(node.matrix_role || node.type === "employee" || node.type === "root") && (
+          <div className="flex items-center justify-between text-[9px] uppercase tracking-wider">
+            <span className={isRoot ? "text-white/50" : "text-theme-subtle"}>Matrix Role</span>
+            <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-muted")}>{node.matrix_role || "N/A"}</span>
+          </div>
         )}
       </div>
     </div>
@@ -171,7 +188,7 @@ export default function OrgChartPage() {
         supabase.from("system_config").select("*").limit(1).single(),
         supabase.from("teams").select("*"),
         supabase.from("employees").select(
-          "id, name, employee_id, designation, matrix_role, team_id, department",
+          "id, name, employee_id, designation, matrix_role, team_id, department, role",
         ),
       ]);
 
@@ -182,17 +199,23 @@ export default function OrgChartPage() {
         teams
           .filter((t: any) => t.parent_id === parentId && t.type !== "company")
           .map((t: any) => {
+            const leadEmp = employees.find((e: any) => e.id === t.lead_id)
+                         || employees.find((e: any) => e.team_id === t.id && (e.role === 'team_lead' || e.role === 'dept_lead' || e.role === 'manager'));
             const teamEmps = employees
-              .filter((e: any) => e.team_id === t.id)
+              .filter((e: any) => (e.team_id === t.id || (t.type === "department" && e.department === t.name && !e.team_id)) && (!leadEmp || e.id !== leadEmp.id))
               .map((e: any) => ({
                 id: e.id, name: e.name, employee_id: e.employee_id,
                 role: e.designation, matrix_role: e.matrix_role,
+                access_level: e.role,
                 type: "employee" as const,
               }));
             return {
               id: t.id,
               name: t.name,
-              role: t.head_designation || (t.type === "department" ? "Dept Head" : "Team Lead"),
+              candidate_name: leadEmp ? leadEmp.name : undefined,
+              role: leadEmp ? leadEmp.designation : (t.head_designation || (t.type === "department" ? "Dept Head" : "Team Lead")),
+              access_level: leadEmp ? leadEmp.role : undefined,
+              matrix_role: leadEmp ? leadEmp.matrix_role : undefined,
               type: t.type === "department" ? ("dept" as const) : ("team" as const),
               children: [...teamEmps, ...buildTree(t.id)],
             };
@@ -202,7 +225,10 @@ export default function OrgChartPage() {
       const root: OrgNode = {
         id:   "root_node",
         name: config?.company_name || companyNode?.name || "Namaah Nexus HQ",
-        role: [config?.founder_name, config?.founder_designation].filter(Boolean).join(" · ") || "CEO",
+        candidate_name: config?.founder_name || "CEO",
+        role: config?.founder_designation || "Chief Executive Officer",
+        access_level: "admin",
+        matrix_role: "Global Leader",
         type: "root",
         children: buildTree(companyNode?.id ?? null),
       };
@@ -385,8 +411,10 @@ export default function OrgChartPage() {
               width: canvasW,
               height: canvasH,
               position: "relative",
+              margin: "0 auto",
+              marginTop: "40px",
               transform: `scale(${zoom})`,
-              transformOrigin: "top left",
+              transformOrigin: "top center",
               transition: "transform 0.12s ease",
             }}
           >
