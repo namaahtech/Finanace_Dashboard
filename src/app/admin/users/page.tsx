@@ -132,8 +132,36 @@ function CustomSelect({ value, options, onChange, placeholder, icon, label }: {
   );
 }
 
+// ── Inline action button with tooltip ────────────────────
+function ActionBtn({ icon, label, onClick, disabled, hoverColor = "hover:text-theme-fg" }: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  hoverColor?: string;
+}) {
+  return (
+    <div className="relative group/ab flex items-center">
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className={cn(
+          "p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+          hoverColor,
+        )}
+      >
+        {icon}
+      </button>
+      {/* Tooltip — appears to the left of the button */}
+      <span className="pointer-events-none absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-theme-fg px-2 py-0.5 text-[10px] font-semibold text-theme-surface opacity-0 transition-opacity group-hover/ab:opacity-100 z-[9999]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 // ── Action Menu ─────────────────────────────────────────
-function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, canDelete, zohoConnected }: {
+function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, canDelete, zohoConnected, zohoDomain }: {
   user: User;
   onRefresh: () => void;
   onEdit: () => void;
@@ -142,6 +170,7 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
   canEdit: boolean;
   canDelete: boolean;
   zohoConnected: boolean;
+  zohoDomain: string;
 }) {
   const [showCustomMail, setShowCustomMail] = useState(false);
   const [mailSubject, setMailSubject] = useState("");
@@ -156,7 +185,7 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
       const res = await fetch("/api/mail/accounts/create-employee", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employee_id: user.id, name: user.name, domain: "namaah.in" }),
+        body: JSON.stringify({ employee_id: user.id, name: user.name, domain: zohoDomain }),
       });
       const data = await res.json();
       if (res.ok && data.email_address) {
@@ -200,56 +229,59 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+      {/* Vertical inline action icons — tooltip appears on hover, no popup */}
+      <div className="flex flex-col items-end gap-0.5">
         {canEdit && (
-          <button onClick={() => onEdit()} disabled={isActing} title="Edit Employee"
-            className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-theme-primary transition-colors">
-            <Edit2 size={15} />
-          </button>
+          <ActionBtn icon={<Edit2 size={14} />} label="Edit Employee" onClick={onEdit} disabled={isActing} hoverColor="hover:text-theme-primary" />
         )}
-        <button onClick={() => doAction("resend_credentials")} disabled={isActing} title="Resend Login Info"
-          className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-sky-500 transition-colors">
-          <RefreshCw size={15} />
-        </button>
-        <button onClick={() => setShowCustomMail(true)} disabled={isActing} title="Send Custom Mail"
-          className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-emerald-500 transition-colors">
-          <Mail size={15} />
-        </button>
+        <ActionBtn icon={<RefreshCw size={14} />} label="Resend Login Info" onClick={() => doAction("resend_credentials")} disabled={isActing} hoverColor="hover:text-sky-500" />
+        <ActionBtn icon={<Mail size={14} />} label="Send Custom Mail" onClick={() => setShowCustomMail(true)} disabled={isActing} hoverColor="hover:text-emerald-500" />
         {zohoConnected && (
           user.zoho_email
-            ? <div title={`Mail Provisioned: ${user.zoho_email}`} className="p-1.5 rounded-lg text-emerald-600 cursor-default">
-                <Zap size={15} />
+            ? (
+              <div className="relative group/ab flex items-center">
+                <div className="p-1.5 rounded-lg text-emerald-500 cursor-default">
+                  <Zap size={14} />
+                </div>
+                <span className="pointer-events-none absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-theme-fg px-2 py-0.5 text-[10px] font-semibold text-theme-surface opacity-0 transition-opacity group-hover/ab:opacity-100 z-[9999]">
+                  Mail: {user.zoho_email}
+                </span>
               </div>
-            : <button onClick={createZohoMail} disabled={isActing} title="Create Zoho Mail"
-                className="p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised hover:text-blue-500 transition-colors">
-                {provisioningMail ? <Loader2 size={15} className="animate-spin text-theme-muted" /> : <Zap size={15} />}
-              </button>
+            )
+            : <ActionBtn
+                icon={provisioningMail ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                label="Create Zoho Mail"
+                onClick={createZohoMail}
+                disabled={isActing}
+                hoverColor="hover:text-blue-500"
+              />
         )}
         {canDelete && (
           <>
             {user.isActive && (
-              <button onClick={async () => {
-                if (!confirm(`Start 7-day offboarding for ${user.name}? They will lose access after 7 days.`)) return;
-                setActing(true);
-                try {
-                  const res = await fetch(`/api/employees/${user.id}/offboard`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ reason: "Admin initiated offboarding" }),
-                  });
-                  const data = await res.json();
-                  showToast(data.message || "Offboarding started.", res.ok ? "success" : "error");
-                  if (res.ok) onRefresh();
-                } catch { showToast("Failed to start offboarding.", "error"); }
-                finally { setActing(false); }
-              }} disabled={isActing} title="Begin Offboarding" className="p-1.5 rounded-lg text-theme-muted hover:bg-orange-500/10 hover:text-orange-500 transition-colors">
-                <LogOut size={15} />
-              </button>
+              <ActionBtn
+                icon={<LogOut size={14} />}
+                label="Begin Offboarding"
+                disabled={isActing}
+                hoverColor="hover:text-orange-500"
+                onClick={async () => {
+                  if (!confirm(`Start 7-day offboarding for ${user.name}? They will lose access after 7 days.`)) return;
+                  setActing(true);
+                  try {
+                    const res = await fetch(`/api/employees/${user.id}/offboard`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ reason: "Admin initiated offboarding" }),
+                    });
+                    const data = await res.json();
+                    showToast(data.message || "Offboarding started.", res.ok ? "success" : "error");
+                    if (res.ok) onRefresh();
+                  } catch { showToast("Failed to start offboarding.", "error"); }
+                  finally { setActing(false); }
+                }}
+              />
             )}
-            <button onClick={() => setDeleteConfirm(user)} disabled={isActing} title="Delete Account"
-              className="p-1.5 rounded-lg text-theme-muted hover:bg-rose-500/10 hover:text-rose-500 transition-colors">
-              <Trash2 size={15} />
-            </button>
+            <ActionBtn icon={<Trash2 size={14} />} label="Delete Account" onClick={() => setDeleteConfirm(user)} disabled={isActing} hoverColor="hover:text-rose-500" />
           </>
         )}
       </div>
@@ -321,6 +353,7 @@ export default function AdminUsersPage() {
     linkSlab: false,
   });
   const [zohoConnected, setZohoConnected] = useState(false);
+  const [zohoDomain, setZohoDomain] = useState("mail.namaah.io");
   const [zohoEmailPreview, setZohoEmailPreview] = useState("");
   const [assignableRoles, setAssignableRoles] = useState<string[]>([]);
   const [salarySlabs, setSalarySlabs] = useState<SalarySlab[]>([]);
@@ -356,6 +389,10 @@ export default function AdminUsersPage() {
       fetch("/api/mail/auth/connect").then(r => r.json()).then(d => {
         setZohoConnected(d.config?.is_connected === true);
       }).catch(() => {});
+      // Fetch active provisioning domain
+      fetch("/api/mail/config/domain").then(r => r.json()).then(d => {
+        if (d.current_domain) setZohoDomain(d.current_domain);
+      }).catch(() => {});
       // Load salary slabs for Sales commission dropdown
       fetch("/api/salary-slabs").then(r => r.json()).then(d => {
         setSalarySlabs(d.slabs || []);
@@ -377,13 +414,13 @@ export default function AdminUsersPage() {
     if (form.name && zohoConnected) {
       const parts = form.name.trim().toLowerCase().split(" ");
       const preview = parts.length >= 2
-        ? `${parts[0]}.${parts[parts.length - 1]}@namaah.in`
-        : `${parts[0]}@namaah.in`;
+        ? `${parts[0]}.${parts[parts.length - 1]}@${zohoDomain}`
+        : `${parts[0]}@${zohoDomain}`;
       setZohoEmailPreview(preview);
     } else {
       setZohoEmailPreview("");
     }
-  }, [form.name, zohoConnected]);
+  }, [form.name, zohoConnected, zohoDomain]);
 
   // Re-fetch assignable roles if admin updates permissions while this user is active
   useEffect(() => {
@@ -523,7 +560,7 @@ export default function AdminUsersPage() {
               body: JSON.stringify({
                 employee_id: newEmployee.id,
                 name: form.name,
-                domain: "namaah.in",
+                domain: zohoDomain,
               }),
             });
             const zohoData = await zohoRes.json();
@@ -728,7 +765,7 @@ export default function AdminUsersPage() {
                         </button>
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <RowMenu user={u} onRefresh={() => load(search || undefined)} onEdit={() => handleEdit(u)} isLast={idx >= filteredUsers.length - 2} setDeleteConfirm={setDeleteConfirm} canEdit={canEdit} canDelete={canDelete} zohoConnected={zohoConnected} />
+                        <RowMenu user={u} onRefresh={() => load(search || undefined)} onEdit={() => handleEdit(u)} isLast={idx >= filteredUsers.length - 2} setDeleteConfirm={setDeleteConfirm} canEdit={canEdit} canDelete={canDelete} zohoConnected={zohoConnected} zohoDomain={zohoDomain} />
                       </td>
                     </tr>
                   ))}

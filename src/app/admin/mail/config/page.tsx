@@ -18,6 +18,13 @@ type Config = {
   token_expiry: string;
 };
 
+type DomainInfo = {
+  current_domain: string | null;
+  domain_synced_at: string | null;
+  zoho_domains: { name: string; isPrimary: boolean; isVerified: boolean }[];
+  is_connected: boolean;
+};
+
 export default function MailConfigPage() {
   const { showToast } = useToast();
 
@@ -26,9 +33,14 @@ export default function MailConfigPage() {
   const [saving,      setSaving]      = useState(false);
   const [testLoading, setTestLoading] = useState(false);
 
+  const [domainInfo,   setDomainInfo]   = useState<DomainInfo | null>(null);
+  const [domainInput,  setDomainInput]  = useState("");
+  const [domainSaving, setDomainSaving] = useState(false);
+  const [domainSyncing,setDomainSyncing]= useState(false);
+
   const [clientId,     setClientId]     = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [mailDomain,   setMailDomain]   = useState("namaah.in");
+  const [mailDomain,   setMailDomain]   = useState("mail.namaah.io");
   const [redirectUri,  setRedirectUri]  = useState(
     typeof window !== "undefined" ? `${window.location.origin}/api/mail/auth/callback` : ""
   );
@@ -42,7 +54,55 @@ export default function MailConfigPage() {
         if (d.config?.mail_domain) setMailDomain(d.config.mail_domain);
         setLoading(false);
       });
+    // Load domain info
+    fetch("/api/mail/config/domain")
+      .then(r => r.json())
+      .then(d => {
+        setDomainInfo(d);
+        if (d.current_domain) { setDomainInput(d.current_domain); setMailDomain(d.current_domain); }
+      })
+      .catch(() => {});
   }, []);
+
+  async function handleSyncDomain() {
+    setDomainSyncing(true);
+    try {
+      const res  = await fetch("/api/mail/config/domain", { method: "PUT" });
+      const data = await res.json();
+      if (data.domain) {
+        setDomainInput(data.domain);
+        setMailDomain(data.domain);
+        setDomainInfo(prev => prev ? { ...prev, current_domain: data.domain } : null);
+        showToast(`Domain synced: ${data.domain}`, "success");
+      } else {
+        showToast(data.error || "Sync failed.", "error");
+      }
+    } finally {
+      setDomainSyncing(false);
+    }
+  }
+
+  async function handleSaveDomain() {
+    if (!domainInput.includes(".")) { showToast("Enter a valid domain.", "warning"); return; }
+    setDomainSaving(true);
+    try {
+      const res  = await fetch("/api/mail/config/domain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: domainInput }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMailDomain(data.domain);
+        setDomainInfo(prev => prev ? { ...prev, current_domain: data.domain } : null);
+        showToast(`Domain set to ${data.domain}`, "success");
+      } else {
+        showToast(data.error || "Save failed.", "error");
+      }
+    } finally {
+      setDomainSaving(false);
+    }
+  }
 
   async function handleConnect() {
     if (!clientId || !clientSecret) {
@@ -256,6 +316,78 @@ export default function MailConfigPage() {
                 </button>
               </p>
             )}
+          </div>
+
+          {/* Domain Management */}
+          <div className="page-card">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-8 w-8 rounded-xl bg-sky-500/10 flex items-center justify-center flex-shrink-0">
+                <Globe size={15} className="text-sky-500" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-theme-fg">Mail Domain for New Employees</p>
+                <p className="text-xs text-theme-muted">
+                  All new employee mailboxes are created under this domain in Zoho Admin Console.
+                  {domainInfo?.domain_synced_at && (
+                    <span className="ml-1 text-emerald-500">
+                      · Last synced {new Date(domainInfo.domain_synced_at).toLocaleString()}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <button
+                onClick={handleSyncDomain}
+                disabled={domainSyncing || !domainInfo?.is_connected}
+                title="Auto-detect domain from Zoho"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-theme-border text-xs font-semibold text-theme-muted hover:text-sky-500 hover:border-sky-500/40 transition-all disabled:opacity-40"
+              >
+                {domainSyncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                Auto-detect from Zoho
+              </button>
+            </div>
+
+            {/* Verified domains from Zoho */}
+            {domainInfo?.zoho_domains?.length ? (
+              <div className="mb-4 flex flex-wrap gap-2">
+                {domainInfo.zoho_domains.map(d => (
+                  <button
+                    key={d.name}
+                    onClick={() => setDomainInput(d.name)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1 rounded-xl border text-xs font-semibold transition-all",
+                      domainInput === d.name
+                        ? "bg-theme-primary text-white border-theme-primary"
+                        : "bg-theme-raised border-theme-border text-theme-muted hover:text-theme-fg",
+                    )}
+                  >
+                    {d.isVerified && <Check size={11} />}
+                    {d.name}
+                    {d.isPrimary && <span className="text-[9px] uppercase tracking-wider opacity-60">primary</span>}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="flex gap-2">
+              <input
+                value={domainInput}
+                onChange={e => setDomainInput(e.target.value)}
+                placeholder="e.g. mail.namaah.io"
+                className="flex-1 h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-sm text-theme-fg outline-none focus:border-theme-primary font-mono"
+              />
+              <button
+                onClick={handleSaveDomain}
+                disabled={domainSaving || !domainInput}
+                className="flex items-center gap-1.5 px-4 h-10 rounded-xl bg-theme-primary text-white text-sm font-bold hover:bg-theme-primary/90 transition-all disabled:opacity-50"
+              >
+                {domainSaving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                Save Domain
+              </button>
+            </div>
+
+            <p className="mt-2 text-[11px] text-theme-muted">
+              New employees will get <strong className="text-theme-fg font-mono">firstname.lastname@{domainInput || "mail.namaah.io"}</strong> as their Zoho mail address.
+            </p>
           </div>
 
           {/* Employee Email Provisioning Info */}

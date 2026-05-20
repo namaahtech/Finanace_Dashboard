@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { exchangeCodeForTokens, zohoGet } from "@/lib/zoho-mail";
+import { syncDomainFromZoho } from "@/lib/zoho-provisioning";
 
 export async function GET(req: NextRequest) {
   const supabase = getSupabaseAdmin();
@@ -59,6 +60,9 @@ export async function GET(req: NextRequest) {
     connected_at:     new Date().toISOString(),
     updated_at:       new Date().toISOString(),
   }).eq("id", config.id);
+
+  // Auto-detect and persist the verified domain from Zoho (non-blocking)
+  syncDomainFromZoho().catch(() => {});
 
   return NextResponse.redirect(`${appUrl}/admin/mail/config?success=connected`);
 }

@@ -16,7 +16,12 @@ export async function POST(req: NextRequest) {
   const localPart    = parts.length >= 2
     ? `${parts[0]}.${parts[parts.length - 1]}`
     : parts[0];
-  const mailDomain   = domain || process.env.ZOHO_MAIL_DOMAIN || "namaah.in";
+  // Prefer client-passed domain, then DB org_domain, then env var
+  let mailDomain = domain || process.env.ZOHO_MAIL_DOMAIN || "mail.namaah.io";
+  if (!domain) {
+    const { data: orgCfg } = await supabase.from("zoho_config").select("org_domain").maybeSingle();
+    if (orgCfg?.org_domain) mailDomain = orgCfg.org_domain;
+  }
   const emailAddress = `${localPart}@${mailDomain}`;
 
   // Check if already provisioned
@@ -46,9 +51,10 @@ export async function POST(req: NextRequest) {
     if (config?.zoid) {
       try {
         const zohoRes = await zohoPost(token, `/organization/${config.zoid}/accounts`, {
-          emailAddress,
-          displayName: name,
-          password:    tempPassword,
+          primaryEmailAddress: emailAddress,
+          displayName:         name,
+          password:            tempPassword,
+          role:                "member",
         });
         zohoAccountId  = zohoRes?.data?.mailboxId || zohoRes?.data?.accountId || null;
         zohoApiSuccess = true;
