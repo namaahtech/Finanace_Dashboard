@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/ButtonLegacy";
@@ -9,6 +9,14 @@ import { Badge } from "@/components/ui/BadgeLegacy";
 import { useToast } from "@/components/ui/ToastLegacy";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-current border-t-transparent opacity-60" /></div>}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const { user, loading: authLoading, login } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
