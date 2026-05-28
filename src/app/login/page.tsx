@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/ButtonLegacy";
 import { Mail, Lock, ShieldCheck, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/BadgeLegacy";
@@ -12,6 +12,8 @@ export default function LoginPage() {
   const { user, loading: authLoading, login } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams?.get("next");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
@@ -19,9 +21,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace("/");
+      // If middleware redirected with ?next=<path>, honor it; else role-router
+      router.replace(nextPath && nextPath.startsWith("/") ? nextPath : "/");
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, nextPath]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

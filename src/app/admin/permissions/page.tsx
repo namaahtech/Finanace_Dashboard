@@ -67,6 +67,8 @@ const SECTIONS = [
     icon: LayoutDashboard,
     items: [
       { key: "admin_dashboard",    label: "Admin Dashboard",              desc: "/admin — main overview for admin roles" },
+      { key: "hr_dashboard",       label: "HR Hub",                       desc: "/hr — landing for HR role" },
+      { key: "accounts_dashboard", label: "Accounts Hub",                 desc: "/accounts — landing for Accounts role" },
       { key: "manager_dashboard",  label: "Manager Dashboard",            desc: "/manager/dashboard — department overview" },
       { key: "my_dashboard",       label: "Employee Dashboard",           desc: "/dashboard — personal home for staff" },
       { key: "projects",           label: "Projects",                     desc: "Project Kanban, tasks, delegation" },

@@ -267,6 +267,12 @@ function RowMenu({ user, onRefresh, onEdit, setDeleteConfirm, canEdit, canDelete
               Edit Employee
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem asChild>
+            <a href={`/admin/users/${user.id}/permissions`}>
+              <ShieldCheck className="text-muted-foreground" />
+              Manage Permissions
+            </a>
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => doAction("resend_credentials")}>
             <RefreshCw className="text-muted-foreground" />
             Resend Login Info

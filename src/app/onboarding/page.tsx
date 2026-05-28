@@ -15,7 +15,7 @@ import {
   Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/ButtonLegacy";
-import { useAuth } from "@/components/layout/AuthProvider";
+import { useAuth, getDashboardForRole, type Role } from "@/components/layout/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
@@ -84,7 +84,8 @@ export default function OnboardingPage() {
 
       if (data) {
         if (data.status === "completed") {
-          router.push("/dashboard"); 
+          // Route to the user's role-specific landing, not always /dashboard
+          router.push(user ? getDashboardForRole(user.role as Role) : "/dashboard");
           return;
         }
         setOnboardingData(data);

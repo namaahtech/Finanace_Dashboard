@@ -51,6 +51,8 @@ const MASTER_NAV: NavSection[] = [
     title: "Organization",
     items: [
       { href: "/admin",             label: "Admin Overview",   icon: LayoutDashboard, moduleKey: "admin_dashboard" },
+      { href: "/hr",                label: "HR Hub",           icon: LayoutDashboard, moduleKey: "hr_dashboard" },
+      { href: "/accounts",          label: "Accounts Hub",     icon: LayoutDashboard, moduleKey: "accounts_dashboard" },
       { href: "/department-lead/dashboard", label: "Manager Hub",      icon: LayoutDashboard, moduleKey: "manager_dashboard" },
       { href: "/dashboard",         label: "My Dashboard",     icon: LayoutDashboard, moduleKey: "my_dashboard" },
       { href: "/admin/projects",    label: "Projects",         icon: Folder,          moduleKey: "projects" },
