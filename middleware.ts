@@ -40,34 +40,39 @@ export async function middleware(req: NextRequest) {
   // Always allow Next.js internals + explicit public routes
   if (isPublic(pathname)) return NextResponse.next();
 
-  let response = NextResponse.next({ request: { headers: req.headers } });
+  // Bail out gracefully if Supabase env vars aren't set (e.g. preview build
+  // for a branch that hasn't been linked). Without this, middleware would
+  // throw on every request and crash the entire app.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    return NextResponse.next();
+  }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return req.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          response.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          response.cookies.set({ name, value: "", ...options });
-        },
+  const response = NextResponse.next({ request: { headers: req.headers } });
+
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      get(name: string) {
+        return req.cookies.get(name)?.value;
+      },
+      set(name: string, value: string, options: CookieOptions) {
+        response.cookies.set({ name, value, ...options });
+      },
+      remove(name: string, options: CookieOptions) {
+        response.cookies.set({ name, value: "", ...options });
       },
     },
-  );
+  });
 
   const { data: { session } } = await supabase.auth.getSession();
 
   // Unauthenticated → /login (preserve intended destination)
   if (!session) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/login";
-    if (pathname !== "/") url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/login";
+    if (pathname !== "/") redirectUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(redirectUrl);
   }
 
   return response;
