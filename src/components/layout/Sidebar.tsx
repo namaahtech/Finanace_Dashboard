@@ -141,7 +141,7 @@ const MASTER_NAV: NavSection[] = [
       { href: "/dashboard/profile",        label: "My Profile",      icon: User,         moduleKey: "my_profile" },
       // Daily workflow
       { href: "/dashboard/attendance",     label: "My Attendance",   icon: CalendarDays, moduleKey: "my_attendance" },
-      { href: "/dashboard/calendar",       label: "My Calendar",     icon: CalendarDays, moduleKey: "my_meetings" },
+      { href: "/dashboard/calendar",       label: "My Calendar",     icon: CalendarDays, moduleKey: "my_calendar" },
       { href: "/dashboard/meetings",       label: "Meetings",        icon: CalendarClock,moduleKey: "my_meetings" },
       { href: "/dashboard/messages",       label: "Messages",        icon: MessageSquare,moduleKey: "my_messages" },
       { href: "/dashboard/projects",       label: "My Projects",     icon: Folder,       moduleKey: "my_projects" },
@@ -165,7 +165,7 @@ const MASTER_NAV: NavSection[] = [
     items: [
       { href: "/admin/analytics",   label: "Analytics",     icon: BarChart3,    moduleKey: "analytics" },
       { href: "/admin/permissions", label: "Permissions",   icon: Shield,       moduleKey: "permissions_control" },
-      { href: "/admin/audit",       label: "Audit Log",     icon: ClipboardList,moduleKey: "system_config" },
+      { href: "/admin/audit",       label: "Audit Log",     icon: ClipboardList,moduleKey: "audit_log" },
       { href: "/admin/report",      label: "Feature Report",icon: ClipboardList,moduleKey: "feature_report" },
       { href: "/admin/config",      label: "System Config", icon: Settings,     moduleKey: "system_config" },
     ],

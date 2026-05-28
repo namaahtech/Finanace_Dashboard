@@ -222,6 +222,7 @@ export default function CalendarPage() {
 
   return (
     <DashboardShell
+      moduleKey="my_calendar"
       title="Calendar"
       subtitle="Personal, department & compliance events"
       actions={<Button size="sm" onClick={() => openCreate()}><Plus size={14} /> New Event</Button>}

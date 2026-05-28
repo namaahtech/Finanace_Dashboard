@@ -41,6 +41,7 @@ export default function ProjectPage() {
 
   return (
     <DashboardShell
+      moduleKey="my_projects"
       title="Project Management"
       subtitle={project ? `Managing ${project.name}` : "Loading project workspace..."}
       actions={

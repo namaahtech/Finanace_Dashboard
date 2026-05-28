@@ -23,12 +23,22 @@ import { Badge } from "@/components/ui/BadgeLegacy";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/components/layout/AuthProvider";
+import { useAuth, getDashboardForRole, type Role } from "@/components/layout/AuthProvider";
 
 export default function CoursePlayerPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, permissions, loading: authLoading } = useAuth();
+
+  // Permission guard — this page is a full-screen player so it doesn't use
+  // DashboardShell. Manually enforce my_academy view permission.
+  useEffect(() => {
+    if (authLoading || !user || !permissions) return;
+    const perm = permissions["my_academy"];
+    if (perm && !perm.can_view) {
+      router.replace(getDashboardForRole(user.role as Role));
+    }
+  }, [authLoading, user, permissions, router]);
   const [course, setCourse] = useState<any>(null);
   const [activeLesson, setActiveLesson] = useState<any>(null);
   const [enrollment, setEnrollment] = useState<any>(null);
