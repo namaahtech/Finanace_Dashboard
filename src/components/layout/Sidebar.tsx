@@ -11,7 +11,7 @@ import {
   Shield, RefreshCw, Mail, Ticket,
   Network, Briefcase, BarChart3, ClipboardList, Folder, User,
   BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award,
-  Inbox, PenLine, Send, Paperclip, Layers, KeyRound, ChevronDown,
+  Inbox, PenLine, Send, Paperclip, Layers, KeyRound,
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
@@ -28,6 +28,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -40,8 +43,8 @@ type NavItem = {
 type NavSection = { title: string; items: NavItem[] };
 
 // ─── MASTER NAV ───────────────────────────────────────────────
-// Single source of truth for ALL possible routes in the app.
-// The DB (role_permissions) controls which items are visible per role.
+// Single source of truth for ALL possible routes. The DB (role_permissions)
+// controls which items are visible per role.
 
 const MASTER_NAV: NavSection[] = [
   {
@@ -161,15 +164,22 @@ const MASTER_NAV: NavSection[] = [
   },
 ];
 
-// ─── Role badge styles ────────────────────────────────────────
+// ─── Role badge variant ───────────────────────────────────────
 
-const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
-  admin:     { label: "Admin",     cls: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
-  dept_lead: { label: "Dept Lead", cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-  team_lead: { label: "Team Lead", cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
-  employee:  { label: "Employee",  cls: "bg-muted text-muted-foreground" },
-  intern:    { label: "Intern",    cls: "bg-indigo-500/10 text-indigo-500" },
-};
+function roleBadge(role?: string) {
+  const map: Record<string, { label: string; className: string }> = {
+    admin:     { label: "Admin",     className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/20" },
+    dept_lead: { label: "Dept Lead", className: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20" },
+    team_lead: { label: "Team Lead", className: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20" },
+    employee:  { label: "Employee", className: "" },
+    intern:    { label: "Intern",    className: "bg-indigo-500/15 text-indigo-500 border-indigo-500/20" },
+  };
+  return map[role ?? "employee"] ?? map.employee;
+}
+
+function initials(name?: string) {
+  return (name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+}
 
 // ─── Sidebar component ────────────────────────────────────────
 
@@ -179,7 +189,7 @@ export function Sidebar() {
   const { theme, setTheme } = useTheme();
   const navRef = useRef<HTMLDivElement>(null);
 
-  const roleInfo = ROLE_BADGE[user?.role ?? "employee"] ?? ROLE_BADGE.employee;
+  const role = roleBadge(user?.role);
 
   // ── Permission filtering ──────────────────────────────────
   const sections: NavSection[] = MASTER_NAV
@@ -240,20 +250,14 @@ export function Sidebar() {
     try {
       const raw = sessionStorage.getItem("sidebar-open-section");
       if (raw !== null) setOpenSection(JSON.parse(raw));
-    } catch {
-      // ignore parse errors
-    }
+    } catch {}
   }, []);
 
   const toggleSection = (title: string) => {
     setOpenSection((prev) => {
       const current = prev === undefined ? activeSectionTitle : prev;
       const next = current === title ? null : title;
-      try {
-        sessionStorage.setItem("sidebar-open-section", JSON.stringify(next));
-      } catch {
-        // ignore quota errors
-      }
+      try { sessionStorage.setItem("sidebar-open-section", JSON.stringify(next)); } catch {}
       return next;
     });
   };
@@ -264,133 +268,137 @@ export function Sidebar() {
   };
 
   return (
-    <ShadcnSidebar collapsible="icon" className="border-none">
-      <SidebarHeader className="border-none">
-        <div className="flex items-center gap-2.5 px-2 py-2">
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
+    <ShadcnSidebar collapsible="icon" className="border-r border-sidebar-border">
+      <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-semibold">
             N
           </div>
-          <span className="text-sm font-semibold tracking-tight truncate group-data-[collapsible=icon]:hidden">
-            Namaah Nexus
-          </span>
+          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+            <p className="text-sm font-semibold tracking-tight truncate">Namaah Nexus</p>
+            <p className="text-[11px] text-muted-foreground truncate">Workspace</p>
+          </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent ref={navRef} onScroll={handleScroll} className="gap-0">
-        {sections.map((section, sectionIdx) => {
+      <SidebarContent ref={navRef} onScroll={handleScroll} className="gap-0 px-2 py-2">
+        {sections.map((section) => {
           const open = isSectionOpen(section.title);
           const sectionHasActive = section.items.some((i) => isActive(i.href));
           return (
-            <SidebarGroup
-              key={section.title}
-              className={cn(
-                "py-1.5",
-                sectionIdx > 0 && "border-t border-sidebar-border group-data-[collapsible=icon]:border-t-0"
-              )}
-            >
+            <SidebarGroup key={section.title} className="py-0.5">
               <button
                 type="button"
                 onClick={() => toggleSection(section.title)}
                 aria-expanded={open}
-                className="group/label group-data-[collapsible=icon]:hidden flex w-full items-center justify-between px-2 py-1.5 rounded-md hover:bg-sidebar-accent/60 transition-colors"
+                className="group/label group-data-[collapsible=icon]:hidden flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent/40"
               >
                 <SidebarGroupLabel asChild>
                   <span
                     className={cn(
-                      "text-[10px] font-bold uppercase tracking-wider transition-colors",
-                      sectionHasActive ? "text-foreground" : "text-muted-foreground group-hover/label:text-foreground"
+                      "text-xs font-semibold transition-colors",
+                      sectionHasActive || open
+                        ? "text-foreground"
+                        : "text-muted-foreground group-hover/label:text-foreground",
                     )}
                   >
                     {section.title}
                   </span>
                 </SidebarGroupLabel>
-                <ChevronDown
-                  size={11}
-                  strokeWidth={2.5}
+                <ChevronRight
+                  size={13}
                   className={cn(
-                    "transition-transform duration-200",
-                    open ? "rotate-0 text-foreground" : "-rotate-90 text-muted-foreground",
-                    sectionHasActive && !open && "text-primary"
+                    "text-muted-foreground transition-transform duration-200 ease-out",
+                    open && "rotate-90 text-foreground",
                   )}
                 />
               </button>
-              <SidebarGroupContent
+
+              {/* Animated expand/collapse — grid-rows trick (no JS height calc) */}
+              <div
                 className={cn(
-                  "mt-0.5",
-                  !open && "group-data-[state=expanded]:hidden"
+                  "grid transition-[grid-template-rows] duration-200 ease-out",
+                  "group-data-[collapsible=icon]:grid-rows-[1fr]",
+                  open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
                 )}
               >
-                <SidebarMenu className="gap-0.5">
-                  {section.items.map(({ href, label, icon: Icon }) => {
-                    const active = isActive(href);
-                    return (
-                      <SidebarMenuItem key={href}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={active}
-                          tooltip={label}
-                          className={cn(
-                            "relative h-9 text-[13px] rounded-md transition-colors",
-                            "data-[active=true]:bg-sidebar-accent data-[active=true]:text-foreground data-[active=true]:font-semibold",
-                            !active && "text-foreground/70 font-medium hover:bg-sidebar-accent/50 hover:text-foreground"
-                          )}
-                        >
-                          <Link href={href} scroll={false}>
-                            {active && (
-                              <span
-                                aria-hidden
-                                className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary"
-                              />
-                            )}
-                            <Icon className="size-4 shrink-0" />
-                            <span className="truncate">{label}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              </SidebarGroupContent>
+                <div className="overflow-hidden">
+                  <SidebarGroupContent
+                    className={cn(
+                      "mt-1 ml-3 border-l border-sidebar-border/60 pl-2",
+                      // No indent / guide in icon-collapsed mode
+                      "group-data-[collapsible=icon]:ml-0 group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:border-l-0 group-data-[collapsible=icon]:mt-0",
+                    )}
+                  >
+                    <SidebarMenu className="gap-0.5">
+                      {section.items.map(({ href, label, icon: Icon }) => {
+                        const active = isActive(href);
+                        return (
+                          <SidebarMenuItem key={href}>
+                            <SidebarMenuButton
+                              asChild
+                              isActive={active}
+                              tooltip={label}
+                              className="h-8 rounded-md text-sm font-normal data-[active=true]:bg-sidebar-accent data-[active=true]:text-foreground data-[active=true]:font-medium"
+                            >
+                              <Link href={href} scroll={false}>
+                                <Icon className="size-4 shrink-0" />
+                                <span className="truncate">{label}</span>
+                              </Link>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </div>
+              </div>
             </SidebarGroup>
           );
         })}
       </SidebarContent>
 
-      <SidebarFooter className="gap-2 border-t border-sidebar-border">
+      <SidebarFooter className="gap-2 border-t border-sidebar-border p-2">
         {/* User card */}
-        <div className="group-data-[collapsible=icon]:hidden rounded-lg bg-sidebar-accent/50 border border-sidebar-border px-3 py-2.5">
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <p className="text-xs font-semibold text-foreground truncate">{user?.name ?? "—"}</p>
-            <span className={cn(
-              "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0",
-              roleInfo.cls
-            )}>
-              {roleInfo.label}
-            </span>
+        <div className="group-data-[collapsible=icon]:hidden flex items-center gap-2.5 rounded-md px-2 py-1.5">
+          <Avatar className="h-8 w-8">
+            <AvatarFallback className="text-xs font-medium">{initials(user?.name)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium text-foreground truncate">{user?.name ?? "—"}</p>
+            </div>
+            <p className="text-xs text-muted-foreground truncate">{user?.email ?? "—"}</p>
           </div>
-          <p className="text-[10px] text-muted-foreground truncate">{user?.email ?? "—"}</p>
+          <Badge variant="secondary" className={cn("text-[10px] font-medium border", role.className)}>
+            {role.label}
+          </Badge>
         </div>
 
         {/* Theme toggle + Logout */}
         <div className="flex gap-1.5 group-data-[collapsible=icon]:flex-col">
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8"
+            className="flex-1 justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:p-0"
             title={theme === "dark" ? "Light mode" : "Dark mode"}
           >
             {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-            <span className="group-data-[collapsible=icon]:hidden">
-              {theme === "dark" ? "Light" : "Dark"}
-            </span>
-          </button>
-          <button
+            <span className="group-data-[collapsible=icon]:hidden">{theme === "dark" ? "Light" : "Dark"}</span>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => logout()}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs text-destructive hover:bg-destructive/10 transition-colors group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8"
+            className="flex-1 justify-center gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:p-0"
             title="Logout"
           >
             <LogOut size={14} />
             <span className="group-data-[collapsible=icon]:hidden">Logout</span>
-          </button>
+          </Button>
         </div>
       </SidebarFooter>
     </ShadcnSidebar>

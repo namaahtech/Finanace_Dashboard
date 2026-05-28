@@ -1,22 +1,26 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge, statusBadgeVariant } from "@/components/ui/BadgeLegacy";
-import { Button } from "@/components/ui/ButtonLegacy";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import { toast } from "sonner";
 import axios from "axios";
-import { useToast } from "@/components/ui/ToastLegacy";
 import { usePermission } from "@/hooks/usePermission";
 import {
-  FileText,
-  Clock,
-  CheckCircle2,
-  IndianRupee,
-  RefreshCw,
-  X,
-  AlertCircle,
-  ListOrdered,
+  FileText, Clock, CheckCircle2, IndianRupee, RefreshCw, ListOrdered, Loader2,
 } from "lucide-react";
 
 interface Claim {
@@ -30,21 +34,25 @@ interface Claim {
   incentive?: { amount: number; month: number; year: number };
 }
 
-// Mock data for preview
-const MOCK_CLAIMS: Claim[] = [];
-
-function getInitials(name: string) {
-  return name.split(" ").map((n) => n[0]).join("").toUpperCase();
+function initials(name?: string) {
+  return (name || "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
 function monthLabel(m: number, y: number) {
   return new Date(y, m - 1).toLocaleString("en-IN", { month: "short", year: "numeric" });
 }
 
+function statusBadge(status: string) {
+  if (status === "approved") return <Badge className="bg-sky-500 hover:bg-sky-500/90 text-white capitalize">{status}</Badge>;
+  if (status === "paid")     return <Badge className="bg-emerald-500 hover:bg-emerald-500/90 text-white capitalize">{status}</Badge>;
+  if (status === "queued")   return <Badge className="bg-purple-500 hover:bg-purple-500/90 text-white capitalize">{status}</Badge>;
+  if (status === "rejected") return <Badge variant="destructive" className="capitalize">{status}</Badge>;
+  return <Badge variant="secondary" className="capitalize">{status}</Badge>;
+}
+
 export default function AdminClaimsPage() {
-  const { showToast } = useToast();
-  const { canEdit, canCreate } = usePermission("claims");
-  const [claims, setClaims] = useState<Claim[]>(MOCK_CLAIMS);
+  const { canEdit } = usePermission("claims");
+  const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -55,24 +63,24 @@ export default function AdminClaimsPage() {
     try {
       const url = `/api/claims${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`;
       const res = await axios.get(url);
-      if (res.data.claims?.length) setClaims(res.data.claims);
+      setClaims(res.data.claims || []);
     } catch {
-      // use mock data
+      // non-fatal
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, [statusFilter]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [statusFilter]);
 
   async function processClaim(claimId: string) {
     setProcessing(claimId);
     try {
       await axios.post("/api/claims", { action: "process", claimId });
-      showToast("Payout protocol executed. Funds dispatched to nodal queue.", "success");
+      toast.success("Payout dispatched");
       await load();
-    } catch (err: unknown) {
-      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Payout Sync Error", "error");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Payout sync error");
     } finally {
       setProcessing(null);
     }
@@ -82,22 +90,27 @@ export default function AdminClaimsPage() {
     setCycleConfirm(false);
     try {
       await axios.post("/api/claims", { action: "advance_cycle" });
-      showToast("Global claim cycle advanced. Queues re-serialized.", "success");
+      toast.success("Claim cycle advanced; queues re-serialized");
       await load();
-    } catch (err: unknown) {
-      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Cycle Shift Error", "error");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Cycle shift error");
     }
   }
 
-  const filtered = statusFilter === "all"
-    ? claims
-    : claims.filter((c) => c.status === statusFilter);
-
+  const filtered = statusFilter === "all" ? claims : claims.filter((c) => c.status === statusFilter);
   const pending  = claims.filter((c) => c.status === "pending").length;
   const approved = claims.filter((c) => c.status === "approved").length;
   const paid     = claims.filter((c) => c.status === "paid").length;
   const queued   = claims.filter((c) => c.status === "queued").length;
   const totalAmt = claims.reduce((s, c) => s + c.amount, 0);
+
+  const stats = [
+    { label: "Total",    value: claims.length, icon: FileText,     tone: "text-foreground",  bg: "bg-muted" },
+    { label: "Pending",  value: pending,       icon: Clock,        tone: "text-amber-600",   bg: "bg-amber-500/10" },
+    { label: "Approved", value: approved,      icon: CheckCircle2, tone: "text-sky-600",     bg: "bg-sky-500/10" },
+    { label: "Queued",   value: queued,        icon: ListOrdered,  tone: "text-purple-600",  bg: "bg-purple-500/10" },
+    { label: "Paid",     value: paid,          icon: IndianRupee,  tone: "text-emerald-600", bg: "bg-emerald-500/10" },
+  ];
 
   return (
     <DashboardShell
@@ -106,183 +119,148 @@ export default function AdminClaimsPage() {
       subtitle="Review and process employee incentive claim requests."
       actions={
         canEdit ? (
-          <Button variant="secondary" size="sm" onClick={() => setCycleConfirm(true)}>
-            <RefreshCw size={13} className="mr-1.5" /> Advance Cycle
+          <Button variant="outline" size="sm" onClick={() => setCycleConfirm(true)}>
+            <RefreshCw size={13} /> Advance Cycle
           </Button>
         ) : null
       }
     >
       <div className="space-y-5">
-
-        {/* Stat cards */}
+        {/* Stat tiles */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-          {[
-            { label: "Total",    value: claims.length, icon: FileText,     color: "text-theme-fg",    bg: "bg-theme-raised" },
-            { label: "Pending",  value: pending,       icon: Clock,        color: "text-amber-600",   bg: "bg-amber-500/10" },
-            { label: "Approved", value: approved,      icon: CheckCircle2, color: "text-sky-600",     bg: "bg-sky-500/10" },
-            { label: "Queued",   value: queued,        icon: ListOrdered,  color: "text-purple-600",  bg: "bg-purple-500/10" },
-            { label: "Paid",     value: paid,          icon: IndianRupee,  color: "text-emerald-600", bg: "bg-emerald-500/10" },
-          ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="page-card flex items-center gap-3">
-              <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
-                <Icon size={15} className={color} />
-              </div>
-              <div>
-                <p className="text-[11px] text-theme-muted">{label}</p>
-                <p className={cn("text-xl font-black leading-tight", color)}>{value}</p>
-              </div>
-            </div>
+          {stats.map(({ label, value, icon: Icon, tone, bg }) => (
+            <Card key={label}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg", bg)}>
+                  <Icon size={15} className={tone} />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className={cn("text-xl font-semibold tabular-nums leading-tight", tone)}>{value}</p>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
 
-        {/* Table */}
-        <div className="page-card overflow-hidden p-0">
-          {/* Header: tabs + total amount */}
-          <div className="flex flex-col gap-3 border-b border-theme-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5 flex-wrap">
-              {[
-                { id: "all",      label: "All" },
-                { id: "pending",  label: "Pending" },
-                { id: "approved", label: "Approved" },
-                { id: "queued",   label: "Queued" },
-                { id: "paid",     label: "Paid" },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setStatusFilter(t.id)}
-                  className={cn(
-                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
-                    statusFilter === t.id
-                      ? "bg-theme-surface text-theme-fg shadow-sm"
-                      : "text-theme-muted hover:text-theme-fg"
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <span className="text-xs text-theme-muted flex-shrink-0">
-              Total pool: <span className="font-bold text-theme-fg">{formatCurrency(totalAmt)}</span>
+        <Card className="p-0 overflow-hidden">
+          <div className="flex flex-col gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+              <TabsList>
+                <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+                <TabsTrigger value="pending" className="text-xs">Pending</TabsTrigger>
+                <TabsTrigger value="approved" className="text-xs">Approved</TabsTrigger>
+                <TabsTrigger value="queued" className="text-xs">Queued</TabsTrigger>
+                <TabsTrigger value="paid" className="text-xs">Paid</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <span className="text-xs text-muted-foreground flex-shrink-0">
+              Total pool: <span className="font-semibold text-foreground">{formatCurrency(totalAmt)}</span>
             </span>
           </div>
 
-          {/* Table body */}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
-                  <th className="px-5 py-3 font-semibold">Employee</th>
-                  <th className="px-5 py-3 font-semibold">Amount</th>
-                  <th className="px-5 py-3 font-semibold">Period</th>
-                  <th className="px-5 py-3 font-semibold">Cycle</th>
-                  <th className="px-5 py-3 font-semibold text-center">Queue</th>
-                  <th className="px-5 py-3 font-semibold">Status</th>
-                  <th className="px-5 py-3 font-semibold">Requested</th>
-                  <th className="px-5 py-3 font-semibold text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-theme-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>Cycle</TableHead>
+                  <TableHead className="text-center">Queue</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Requested</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {loading ? (
                   Array.from({ length: 4 }).map((_, i) => (
-                    <tr key={i}>
+                    <TableRow key={i}>
                       {Array.from({ length: 8 }).map((_, j) => (
-                        <td key={j} className="px-5 py-3"><div className="h-3 animate-pulse rounded bg-theme-raised" /></td>
+                        <TableCell key={j}><Skeleton className="h-4 w-20" /></TableCell>
                       ))}
-                    </tr>
+                    </TableRow>
                   ))
                 ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-sm text-theme-subtle">No claims found</td>
-                  </tr>
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
+                      No claims found
+                    </TableCell>
+                  </TableRow>
                 ) : filtered.map((c) => (
-                  <tr key={c._id} className="group transition-colors hover:bg-theme-raised/40">
-                    <td className="px-5 py-3">
+                  <TableRow key={c._id}>
+                    <TableCell>
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-black">
-                          {getInitials(c.employee?.name ?? "?")}
-                        </div>
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-[10px] font-semibold">{initials(c.employee?.name)}</AvatarFallback>
+                        </Avatar>
                         <div>
-                          <p className="text-xs font-semibold text-theme-fg">{c.employee?.name}</p>
-                          <p className="text-[10px] text-theme-subtle">{c.employee?.department} · {c.employee?.employeeId}</p>
+                          <p className="text-sm font-medium text-foreground">{c.employee?.name}</p>
+                          <p className="text-xs text-muted-foreground">{c.employee?.department} · {c.employee?.employeeId}</p>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-5 py-3 text-sm font-bold text-emerald-600">{formatCurrency(c.amount)}</td>
-                    <td className="px-5 py-3 text-xs text-theme-muted">
+                    </TableCell>
+                    <TableCell className="font-semibold text-emerald-600 tabular-nums">{formatCurrency(c.amount)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
                       {c.incentive ? monthLabel(c.incentive.month, c.incentive.year) : "—"}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className="rounded-md bg-theme-raised px-2 py-0.5 text-xs font-semibold text-theme-muted">
-                        #{c.cycle}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-center">
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">#{c.cycle}</Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
                       {c.queue_position ? (
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/10 text-xs font-bold text-purple-600">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/10 text-xs font-semibold text-purple-600">
                           {c.queue_position}
                         </span>
-                      ) : <span className="text-theme-subtle text-xs">—</span>}
-                    </td>
-                    <td className="px-5 py-3">
-                      <Badge variant={statusBadgeVariant(c.status)}>
-                        {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3 text-xs text-theme-muted">{formatDate(c.requested_at)}</td>
-                    <td className="px-5 py-3 text-right">
+                      ) : <span className="text-muted-foreground text-xs">—</span>}
+                    </TableCell>
+                    <TableCell>{statusBadge(c.status)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatDate(c.requested_at)}</TableCell>
+                    <TableCell className="text-right">
                       {canEdit && c.status === "approved" && (
                         <Button
+                          type="button"
                           size="sm"
-                          variant="success"
-                          loading={processing === c._id}
+                          className="h-8 bg-emerald-500 hover:bg-emerald-500/90"
+                          disabled={processing === c._id}
                           onClick={() => processClaim(c._id)}
                         >
+                          {processing === c._id ? <Loader2 size={13} className="animate-spin" /> : null}
                           Process Payout
                         </Button>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
-          <div className="flex items-center justify-between border-t border-theme-border bg-theme-page px-5 py-2.5">
-            <span className="text-xs text-theme-subtle">{filtered.length} claim{filtered.length !== 1 ? "s" : ""}</span>
-            <span className="text-xs text-theme-subtle">
-              {approved} ready to process
-            </span>
+          <div className="flex items-center justify-between border-t border-border bg-muted/30 px-5 py-2.5">
+            <span className="text-xs text-muted-foreground">{filtered.length} claim{filtered.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-muted-foreground">{approved} ready to process</span>
           </div>
-        </div>
+        </Card>
       </div>
 
-      {/* Advance cycle confirm modal */}
-      {cycleConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-theme-surface border border-theme-border shadow-2xl">
-            <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
-              <div className="flex items-center gap-2 text-amber-600">
-                <AlertCircle size={16} />
-                <h3 className="text-sm font-bold">Advance Claim Cycle</h3>
-              </div>
-              <button onClick={() => setCycleConfirm(false)} className="rounded-lg p-1 text-theme-muted hover:bg-theme-raised transition-colors">
-                <X size={15} />
-              </button>
-            </div>
-            <div className="px-6 py-4">
-              <p className="text-sm text-theme-muted">
-                This will move all queued claims to the next cycle. Employees waiting in queue will be re-positioned. This action cannot be undone.
-              </p>
-            </div>
-            <div className="flex gap-3 border-t border-theme-border px-6 py-4">
-              <Button variant="secondary" size="sm" className="flex-1" onClick={() => setCycleConfirm(false)}>Cancel</Button>
-              <Button size="sm" className="flex-1" onClick={advanceCycle}>
-                <RefreshCw size={13} className="mr-1.5" /> Confirm
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Advance cycle confirm */}
+      <AlertDialog open={cycleConfirm} onOpenChange={setCycleConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Advance Claim Cycle?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This moves all queued claims to the next cycle and re-positions employees in queue. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={advanceCycle}>
+              <RefreshCw size={13} /> Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardShell>
   );
 }

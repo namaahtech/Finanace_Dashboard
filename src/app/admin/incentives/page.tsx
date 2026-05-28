@@ -1,20 +1,27 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge, statusBadgeVariant } from "@/components/ui/BadgeLegacy";
-import { Button } from "@/components/ui/ButtonLegacy";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/components/layout/AuthProvider";
 import axios from "axios";
-import { useToast } from "@/components/ui/ToastLegacy";
+import { toast } from "sonner";
 import { formatCurrency, getYearRange, cn } from "@/lib/utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   calculateCompanyScore,
   calculateFinalIncentive,
@@ -22,16 +29,7 @@ import {
   getEmployeeMultiplier,
 } from "@/lib/incentiveMath";
 import {
-  Award,
-  ChevronDown,
-  TrendingUp,
-  IndianRupee,
-  RefreshCw,
-  Save,
-  Activity,
-  CheckCircle2,
-  Lock,
-  Gift,
+  Award, TrendingUp, IndianRupee, RefreshCw, Save, Activity, CheckCircle2, Lock, Gift, Loader2,
 } from "lucide-react";
 
 interface User { id: string; _id?: string; name: string; employeeId: string; department: string; }
@@ -58,10 +56,6 @@ interface ConfigState {
 }
 interface KpiScore { final_score: number; }
 
-const MOCK_USERS: User[] = [];
-
-const MOCK_INCENTIVES: Incentive[] = [];
-
 const MONTHS = Array.from({ length: 12 }, (_, i) => ({
   value: i + 1,
   label: new Date(2000, i).toLocaleString("en-IN", { month: "long" }),
@@ -71,22 +65,22 @@ function monthLabel(m: number, y: number) {
   return new Date(y, m - 1).toLocaleString("en-IN", { month: "short", year: "numeric" });
 }
 
-function getInitials(name: string) {
-  return name.split(" ").map((n) => n[0]).join("").toUpperCase();
+function initials(name?: string) {
+  return (name || "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
-function gaugeColor(score: number) {
-  if (score >= 80) return "#10b981";
-  if (score >= 60) return "#f59e0b";
-  return "#ef4444";
+function incentiveStatusBadge(status: string) {
+  if (status === "paid")      return <Badge className="bg-purple-500 hover:bg-purple-500/90 text-white capitalize">{status}</Badge>;
+  if (status === "claimable") return <Badge className="bg-sky-500 hover:bg-sky-500/90 text-white capitalize">{status}</Badge>;
+  if (status === "locked")    return <Badge variant="secondary" className="capitalize"><Lock size={10} /> {status}</Badge>;
+  return <Badge variant="secondary" className="capitalize">{status}</Badge>;
 }
 
 export default function AdminIncentivesPage() {
   const { user } = useAuth();
-  const { showToast } = useToast();
 
-  const [users, setUsers]           = useState<User[]>(MOCK_USERS);
-  const [incentives, setIncentives] = useState<Incentive[]>(MOCK_INCENTIVES);
+  const [users, setUsers]           = useState<User[]>([]);
+  const [incentives, setIncentives] = useState<Incentive[]>([]);
   const [selectedUser, setSelectedUser] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [submitting, setSubmitting]     = useState(false);
@@ -125,9 +119,9 @@ export default function AdminIncentivesPage() {
     try {
       const url = empId ? `/api/incentives?employeeId=${empId}` : "/api/incentives";
       const res = await axios.get(url);
-      if (res.data.incentives?.length) setIncentives(res.data.incentives);
+      setIncentives(res.data.incentives || []);
     } catch {
-      // use mock data
+      // non-fatal
     } finally {
       setLoading(false);
     }
@@ -147,7 +141,7 @@ export default function AdminIncentivesPage() {
     const fixedAmount    = parseFloat(form.fixed_amount    || "0");
     const variableAmount = parseFloat(form.variable_amount || "0");
     if (fixedAmount + variableAmount <= 0) {
-      showToast("Reward mapping incomplete. Enter fixed or variable quantum.", "warning");
+      toast.warning("Enter a fixed or variable amount");
       return;
     }
     setSubmitting(true);
@@ -155,9 +149,9 @@ export default function AdminIncentivesPage() {
       await axios.post("/api/incentives", { employee: selectedUser, fixed_amount: fixedAmount, variable_amount: variableAmount, month: form.month, year: form.year, notes: form.notes });
       setForm({ fixed_amount: "", variable_amount: "", month: new Date().getMonth() + 1, year: new Date().getFullYear(), notes: "" });
       await loadIncentives(selectedUser);
-      showToast("Incentive grant successfully mapped and protocol-locked.", "success");
-    } catch (err: unknown) {
-      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Incentive Sync Error", "error");
+      toast.success("Incentive granted");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Failed to grant incentive");
     } finally {
       setSubmitting(false);
     }
@@ -168,9 +162,9 @@ export default function AdminIncentivesPage() {
     try {
       await axios.post("/api/incentives", { action: "process_vesting" });
       if (selectedUser) await loadIncentives(selectedUser); else await loadIncentives();
-      showToast("Global vesting algorithms executed and synchronized.", "success");
-    } catch (err: unknown) {
-      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Vesting Protocol Error", "error");
+      toast.success("Vesting processed");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Vesting failed");
     } finally {
       setVestingLoading(false);
     }
@@ -180,9 +174,9 @@ export default function AdminIncentivesPage() {
     setSavingPerformance(true);
     try {
       await axios.patch("/api/config", config);
-      showToast("Company performance multipliers updated in cloud architecture.", "success");
-    } catch (err: unknown) {
-      showToast((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Multiplier Sync Error", "error");
+      toast.success("Company performance saved");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Failed to save");
     } finally {
       setSavingPerformance(false);
     }
@@ -198,10 +192,19 @@ export default function AdminIncentivesPage() {
   const canEditConfig = user?.role === "admin";
 
   const filtered = statusFilter === "all" ? incentives : incentives.filter((i) => i.status === statusFilter);
-
   const totalAmt    = incentives.reduce((s, i) => s + i.amount, 0);
   const claimable   = incentives.filter((i) => i.status === "claimable").length;
   const paid        = incentives.filter((i) => i.status === "paid").length;
+
+  const stats = [
+    { label: "Total Grants",  value: String(incentives.length),     icon: Award,        tone: "text-foreground",   bg: "bg-muted" },
+    { label: "Total Amount",  value: formatCurrency(totalAmt),       icon: IndianRupee,  tone: "text-emerald-600",  bg: "bg-emerald-500/10" },
+    { label: "Claimable",     value: String(claimable),              icon: Gift,         tone: "text-sky-600",      bg: "bg-sky-500/10" },
+    { label: "Paid",          value: String(paid),                   icon: CheckCircle2, tone: "text-purple-600",   bg: "bg-purple-500/10" },
+  ];
+
+  const scoreColor = companyScore >= 80 ? "text-emerald-600" : companyScore >= 60 ? "text-amber-600" : "text-rose-500";
+  const scoreBg    = companyScore >= 80 ? "bg-emerald-500/10" : companyScore >= 60 ? "bg-amber-500/10" : "bg-rose-500/10";
 
   return (
     <DashboardShell
@@ -211,305 +214,272 @@ export default function AdminIncentivesPage() {
       actions={
         <div className="flex items-center gap-2">
           {canEditConfig && (
-            <Button variant="secondary" size="sm" loading={savingPerformance} onClick={saveCompanyPerformance}>
-              <Save size={13} className="mr-1.5" /> Save Config
+            <Button variant="outline" size="sm" disabled={savingPerformance} onClick={saveCompanyPerformance}>
+              {savingPerformance ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+              Save Config
             </Button>
           )}
-          <Button variant="primary" size="sm" loading={vestingLoading} onClick={processVesting}>
-            <RefreshCw size={13} className="mr-1.5" /> Process Vesting
+          <Button size="sm" disabled={vestingLoading} onClick={processVesting}>
+            {vestingLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            Process Vesting
           </Button>
         </div>
       }
     >
       <div className="space-y-5">
-
-        {/* Stat cards */}
+        {/* Stat tiles */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {[
-            { label: "Total Grants",  value: incentives.length, icon: Award,       color: "text-theme-fg",    bg: "bg-theme-raised" },
-            { label: "Total Amount",  value: formatCurrency(totalAmt), icon: IndianRupee, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-            { label: "Claimable",     value: claimable,          icon: Gift,        color: "text-sky-600",     bg: "bg-sky-500/10" },
-            { label: "Paid",          value: paid,               icon: CheckCircle2,color: "text-purple-600",  bg: "bg-purple-500/10" },
-          ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="page-card flex items-center gap-3">
-              <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
-                <Icon size={15} className={color} />
-              </div>
-              <div>
-                <p className="text-[11px] text-theme-muted">{label}</p>
-                <p className={cn("text-xl font-black leading-tight", color)}>{value}</p>
-              </div>
-            </div>
+          {stats.map(({ label, value, icon: Icon, tone, bg }) => (
+            <Card key={label}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg", bg)}>
+                  <Icon size={15} className={tone} />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className={cn("text-xl font-semibold tabular-nums leading-tight", tone)}>{value}</p>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
 
         {/* Company performance */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-          {/* Overall score card */}
-          <div className="page-card flex flex-col items-center justify-center text-center gap-1">
-            <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl mb-1", companyScore >= 80 ? "bg-emerald-500/10" : companyScore >= 60 ? "bg-amber-500/10" : "bg-red-500/10")}>
-              <Activity size={17} className={companyScore >= 80 ? "text-emerald-600" : companyScore >= 60 ? "text-amber-600" : "text-red-500"} />
-            </div>
-            <p className="text-[11px] text-theme-muted">Company Score</p>
-            <p className={cn("text-3xl font-black leading-tight", companyScore >= 80 ? "text-emerald-600" : companyScore >= 60 ? "text-amber-600" : "text-red-500")}>
-              {Math.round(companyScore)}%
-            </p>
-            <span className={cn("rounded-md px-2 py-0.5 text-xs font-semibold", companyScore >= 80 ? "bg-emerald-500/10 text-emerald-600" : companyScore >= 60 ? "bg-amber-500/10 text-amber-600" : "bg-red-500/10 text-red-500")}>
-              {companyMultiplier.toFixed(1)}× multiplier
-            </span>
-          </div>
+          <Card>
+            <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-1.5">
+              <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg mb-1", scoreBg)}>
+                <Activity size={17} className={scoreColor} />
+              </div>
+              <p className="text-xs text-muted-foreground">Company Score</p>
+              <p className={cn("text-3xl font-bold tabular-nums leading-tight", scoreColor)}>{Math.round(companyScore)}%</p>
+              <Badge variant="outline" className={cn("text-xs", scoreColor)}>{companyMultiplier.toFixed(1)}× multiplier</Badge>
+            </CardContent>
+          </Card>
 
-          {/* Three metric cards */}
           {[
             { key: "revenue_achievement_percentage", label: "Revenue Achievement", barColor: "bg-sky-500",    textColor: "text-sky-600",     bg: "bg-sky-500/10",     icon: TrendingUp },
-            { key: "collections_percentage",         label: "Collections",         barColor: "bg-emerald-500",textColor: "text-emerald-600",  bg: "bg-emerald-500/10", icon: IndianRupee },
-            { key: "delivery_health_percentage",     label: "Delivery Health",     barColor: "bg-purple-500", textColor: "text-purple-600",   bg: "bg-purple-500/10",  icon: Activity },
+            { key: "collections_percentage",         label: "Collections",         barColor: "bg-emerald-500",textColor: "text-emerald-600", bg: "bg-emerald-500/10", icon: IndianRupee },
+            { key: "delivery_health_percentage",     label: "Delivery Health",     barColor: "bg-purple-500", textColor: "text-purple-600",  bg: "bg-purple-500/10",  icon: Activity },
           ].map((item) => {
             const val = config[item.key as keyof ConfigState];
             const Icon = item.icon;
             return (
-              <div key={item.key} className="page-card flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={cn("flex h-7 w-7 items-center justify-center rounded-lg", item.bg)}>
-                      <Icon size={13} className={item.textColor} />
+              <Card key={item.key}>
+                <CardContent className="p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("flex h-7 w-7 items-center justify-center rounded-md", item.bg)}>
+                        <Icon size={13} className={item.textColor} />
+                      </div>
+                      <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
                     </div>
-                    <p className="text-xs font-semibold text-theme-muted">{item.label}</p>
+                    <span className={cn("text-lg font-semibold tabular-nums", item.textColor)}>{val}%</span>
                   </div>
-                  <span className={cn("text-lg font-black", item.textColor)}>{val}%</span>
-                </div>
 
-                {/* Progress bar */}
-                <div className="h-2 w-full overflow-hidden rounded-full bg-theme-raised">
-                  <div className={cn("h-full rounded-full transition-all duration-500", item.barColor)} style={{ width: `${Math.min(100, val)}%` }} />
-                </div>
-
-                {/* Stepper */}
-                {canEditConfig ? (
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setConfig({ ...config, [item.key]: Math.max(0, val - 1) })}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-theme-fg hover:border-theme-strong transition-all text-base font-bold leading-none"
-                    >−</button>
-                    <input
-                      type="number" min={0} max={120}
-                      value={val}
-                      onChange={(e) => setConfig({ ...config, [item.key]: Math.max(0, Math.min(120, parseInt(e.target.value) || 0)) })}
-                      className="h-7 flex-1 rounded-lg border border-theme-border bg-theme-page px-2 text-center text-xs font-bold text-theme-fg outline-none focus:border-theme-strong transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setConfig({ ...config, [item.key]: Math.min(120, val + 1) })}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-theme-fg hover:border-theme-strong transition-all text-base font-bold leading-none"
-                    >+</button>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div className={cn("h-full rounded-full transition-all duration-500", item.barColor)} style={{ width: `${Math.min(100, val)}%` }} />
                   </div>
-                ) : (
-                  <p className="text-[11px] text-theme-subtle">Read-only — super admin can edit</p>
-                )}
-              </div>
+
+                  {canEditConfig ? (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button" variant="outline" size="icon" className="h-8 w-8"
+                        onClick={() => setConfig({ ...config, [item.key]: Math.max(0, val - 1) })}
+                      >−</Button>
+                      <Input
+                        type="number" min={0} max={120}
+                        value={val}
+                        onChange={(e) => setConfig({ ...config, [item.key]: Math.max(0, Math.min(120, parseInt(e.target.value) || 0)) })}
+                        className="h-8 text-center font-semibold"
+                      />
+                      <Button
+                        type="button" variant="outline" size="icon" className="h-8 w-8"
+                        onClick={() => setConfig({ ...config, [item.key]: Math.min(120, val + 1) })}
+                      >+</Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Read-only — super admin can edit</p>
+                  )}
+                </CardContent>
+              </Card>
             );
           })}
         </div>
 
         {/* Award form + history */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-
-          {/* Award form */}
           <div className="lg:col-span-2">
-            <div className="page-card">
-              <div className="mb-4 flex items-center gap-2">
-                <Award size={15} className="text-theme-muted" />
-                <span className="text-sm font-semibold text-theme-fg">Award Incentive</span>
-              </div>
-              <form onSubmit={handleAward} className="space-y-4">
-
-                {/* Employee selector */}
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Employee</label>
-                  <Select value={selectedUser || undefined} onValueChange={setSelectedUser}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Select employee…" /></SelectTrigger>
-                    <SelectContent>
-                      {users.map((u) => <SelectItem key={u.id || u._id} value={u.id || u._id || ""}>{u.name} — {u.employeeId}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  {employeeScore !== null && (
-                    <p className="mt-1 text-[11px] text-theme-muted">
-                      KPI Score: <span className={cn("font-bold", employeeScore >= 80 ? "text-emerald-600" : employeeScore >= 60 ? "text-amber-600" : "text-red-500")}>{employeeScore}%</span>
-                      <span className="ml-2 text-theme-subtle">→ {employeeMultiplier.toFixed(1)}× multiplier</span>
-                    </p>
-                  )}
+            <Card>
+              <CardContent className="p-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Award size={15} className="text-muted-foreground" />
+                  <span className="text-sm font-semibold text-foreground">Award Incentive</span>
                 </div>
-
-                {/* Month / Year */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Month</label>
-                    <Select value={String(form.month)} onValueChange={(v) => setForm({ ...form, month: parseInt(v) })}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <form onSubmit={handleAward} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Employee</Label>
+                    <Select value={selectedUser || undefined} onValueChange={setSelectedUser}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Select employee…" /></SelectTrigger>
                       <SelectContent>
-                        {MONTHS.map((m) => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+                        {users.map((u) => <SelectItem key={u.id || u._id} value={u.id || u._id || ""}>{u.name} — {u.employeeId}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    {employeeScore !== null && (
+                      <p className="text-xs text-muted-foreground">
+                        KPI Score: <span className={cn("font-semibold", employeeScore >= 80 ? "text-emerald-600" : employeeScore >= 60 ? "text-amber-600" : "text-rose-500")}>{employeeScore}%</span>
+                        <span className="ml-2">→ {employeeMultiplier.toFixed(1)}× multiplier</span>
+                      </p>
+                    )}
                   </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Year</label>
-                    <Select value={String(form.year)} onValueChange={(v) => setForm({ ...form, year: parseInt(v) })}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {getYearRange().map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
 
-                {/* Fixed / Variable */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Fixed Amount (₹)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-theme-muted">₹</span>
-                      <input type="number" min="0" placeholder="0" value={form.fixed_amount} onChange={(e) => setForm({ ...form, fixed_amount: e.target.value })}
-                        className="w-full rounded-lg border border-theme-border bg-theme-page pl-7 pr-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Month</Label>
+                      <Select value={String(form.month)} onValueChange={(v) => setForm({ ...form, month: parseInt(v) })}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {MONTHS.map((m) => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Year</Label>
+                      <Select value={String(form.year)} onValueChange={(v) => setForm({ ...form, year: parseInt(v) })}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {getYearRange().map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Variable Base (₹)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-theme-muted">₹</span>
-                      <input type="number" min="0" placeholder="0" value={form.variable_amount} onChange={(e) => setForm({ ...form, variable_amount: e.target.value })}
-                        className="w-full rounded-lg border border-theme-border bg-theme-page pl-7 pr-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Fixed Amount (₹)</Label>
+                      <Input
+                        type="number" min="0" placeholder="0" value={form.fixed_amount}
+                        onChange={(e) => setForm({ ...form, fixed_amount: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Variable Base (₹)</Label>
+                      <Input
+                        type="number" min="0" placeholder="0" value={form.variable_amount}
+                        onChange={(e) => setForm({ ...form, variable_amount: e.target.value })}
+                      />
                     </div>
                   </div>
-                </div>
 
-                {/* Calculation preview */}
-                <div className="rounded-xl border border-theme-border bg-theme-raised px-4 py-3 space-y-2">
-                  <p className="text-[11px] font-semibold text-theme-muted uppercase tracking-wide">Preview</p>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-theme-muted">Employee multiplier</span>
-                    <span className="font-semibold text-theme-fg">{employeeMultiplier.toFixed(1)}×</span>
+                  <div className="rounded-md border border-border bg-muted/40 px-3 py-2.5 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">Preview</p>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Employee multiplier</span>
+                      <span className="font-medium text-foreground tabular-nums">{employeeMultiplier.toFixed(1)}×</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Company multiplier</span>
+                      <span className="font-medium text-foreground tabular-nums">{companyMultiplier.toFixed(1)}×</span>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-muted-foreground">Final payout</span>
+                      <span className="text-base font-semibold text-emerald-600 tabular-nums">{formatCurrency(totalAmount)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-theme-muted">Company multiplier</span>
-                    <span className="font-semibold text-theme-fg">{companyMultiplier.toFixed(1)}×</span>
-                  </div>
-                  <div className="border-t border-theme-border pt-2 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-theme-muted">Final payout</span>
-                    <span className="text-base font-black text-emerald-600">{formatCurrency(totalAmount)}</span>
-                  </div>
-                </div>
 
-                <Button type="submit" variant="primary" className="w-full" loading={submitting} disabled={!selectedUser}>
-                  Award Incentive
-                </Button>
-              </form>
-            </div>
+                  <Button type="submit" className="w-full" disabled={submitting || !selectedUser}>
+                    {submitting && <Loader2 size={13} className="animate-spin" />}
+                    Award Incentive
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
           </div>
 
           {/* History table */}
           <div className="lg:col-span-3">
-            <div className="page-card overflow-hidden p-0">
-              {/* Header */}
-              <div className="flex flex-col gap-3 border-b border-theme-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <Card className="p-0 overflow-hidden">
+              <div className="flex flex-col gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
-                  <TrendingUp size={14} className="text-theme-muted" />
-                  <span className="text-sm font-semibold text-theme-fg">
+                  <TrendingUp size={14} className="text-muted-foreground" />
+                  <span className="text-sm font-semibold text-foreground">
                     Grant History
                     {selectedUser && (
-                      <span className="ml-2 text-xs font-normal text-theme-muted">
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
                         — {users.find((u) => (u.id || u._id) === selectedUser)?.name}
                       </span>
                     )}
                   </span>
                 </div>
-                <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5">
-                  {[
-                    { id: "all",       label: "All" },
-                    { id: "claimable", label: "Claimable" },
-                    { id: "paid",      label: "Paid" },
-                    { id: "locked",    label: "Locked" },
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setStatusFilter(t.id)}
-                      className={cn(
-                        "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
-                        statusFilter === t.id
-                          ? "bg-theme-surface text-theme-fg shadow-sm"
-                          : "text-theme-muted hover:text-theme-fg"
-                      )}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
+                <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+                  <TabsList>
+                    <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+                    <TabsTrigger value="claimable" className="text-xs">Claimable</TabsTrigger>
+                    <TabsTrigger value="paid" className="text-xs">Paid</TabsTrigger>
+                    <TabsTrigger value="locked" className="text-xs">Locked</TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
 
-              {/* Table */}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
-                      <th className="px-5 py-3 font-semibold">Employee</th>
-                      <th className="px-5 py-3 font-semibold">Period</th>
-                      <th className="px-5 py-3 font-semibold">Fixed</th>
-                      <th className="px-5 py-3 font-semibold">Variable</th>
-                      <th className="px-5 py-3 font-semibold">Final</th>
-                      <th className="px-5 py-3 font-semibold text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-theme-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Fixed</TableHead>
+                      <TableHead>Variable</TableHead>
+                      <TableHead>Final</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {loading ? (
                       Array.from({ length: 4 }).map((_, i) => (
-                        <tr key={i}>
+                        <TableRow key={i}>
                           {Array.from({ length: 6 }).map((_, j) => (
-                            <td key={j} className="px-5 py-3"><div className="h-3 animate-pulse rounded bg-theme-raised" /></td>
+                            <TableCell key={j}><Skeleton className="h-4 w-20" /></TableCell>
                           ))}
-                        </tr>
+                        </TableRow>
                       ))
                     ) : filtered.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-12 text-center text-sm text-theme-subtle">No incentive records found</td>
-                      </tr>
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+                          No incentive records found
+                        </TableCell>
+                      </TableRow>
                     ) : filtered.map((inc) => (
-                      <tr key={inc._id} className="group transition-colors hover:bg-theme-raised/40">
-                        <td className="px-5 py-3">
+                      <TableRow key={inc._id}>
+                        <TableCell>
                           <div className="flex items-center gap-2.5">
-                            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-black">
-                              {getInitials(inc.employee.name)}
-                            </div>
+                            <Avatar className="h-8 w-8">
+                              <AvatarFallback className="text-[10px] font-semibold">{initials(inc.employee.name)}</AvatarFallback>
+                            </Avatar>
                             <div>
-                              <p className="text-xs font-semibold text-theme-fg">{inc.employee.name}</p>
-                              <p className="text-[10px] text-theme-subtle">{inc.employee.employeeId}</p>
+                              <p className="text-sm font-medium text-foreground">{inc.employee.name}</p>
+                              <p className="text-xs text-muted-foreground">{inc.employee.employeeId}</p>
                             </div>
                           </div>
-                        </td>
-                        <td className="px-5 py-3 text-xs text-theme-muted">{monthLabel(inc.month, inc.year)}</td>
-                        <td className="px-5 py-3 text-xs text-theme-muted">{formatCurrency(inc.fixed_amount ?? 0)}</td>
-                        <td className="px-5 py-3 text-xs text-theme-muted">{formatCurrency(inc.variable_amount ?? 0)}</td>
-                        <td className="px-5 py-3 text-sm font-bold text-emerald-600">{formatCurrency(inc.amount)}</td>
-                        <td className="px-5 py-3 text-right">
-                          <div className="inline-flex items-center gap-1">
-                            {inc.status === "locked" && <Lock size={11} className="text-theme-subtle" />}
-                            <Badge variant={statusBadgeVariant(inc.status)}>
-                              {inc.status.charAt(0).toUpperCase() + inc.status.slice(1)}
-                            </Badge>
-                          </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{monthLabel(inc.month, inc.year)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground tabular-nums">{formatCurrency(inc.fixed_amount ?? 0)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground tabular-nums">{formatCurrency(inc.variable_amount ?? 0)}</TableCell>
+                        <TableCell className="font-semibold text-emerald-600 tabular-nums">{formatCurrency(inc.amount)}</TableCell>
+                        <TableCell className="text-right">{incentiveStatusBadge(inc.status)}</TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
 
-              <div className="flex items-center justify-between border-t border-theme-border bg-theme-page px-5 py-2.5">
-                <span className="text-xs text-theme-subtle">{filtered.length} grant{filtered.length !== 1 ? "s" : ""}</span>
-                <span className="text-xs text-theme-subtle">
-                  Total: <span className="font-bold text-theme-fg">{formatCurrency(filtered.reduce((s, i) => s + i.amount, 0))}</span>
+              <div className="flex items-center justify-between border-t border-border bg-muted/30 px-5 py-2.5">
+                <span className="text-xs text-muted-foreground">{filtered.length} grant{filtered.length !== 1 ? "s" : ""}</span>
+                <span className="text-xs text-muted-foreground">
+                  Total: <span className="font-semibold text-foreground">{formatCurrency(filtered.reduce((s, i) => s + i.amount, 0))}</span>
                 </span>
               </div>
-            </div>
+            </Card>
           </div>
         </div>
       </div>

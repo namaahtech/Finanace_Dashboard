@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { provisionZohoMailbox, generateTempPassword, checkMailboxLicense } from "@/lib/zoho-provisioning";
 
+// Flip to `true` once Zoho is connected and licenses are configured.
+// When false: skip the mailbox-license gate and skip auto-provisioning a mailbox.
+const ZOHO_ONBOARDING_ENABLED = false;
+
 export async function GET() {
   const supabase = getSupabaseAdmin();
   try {
@@ -30,14 +34,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "name, email, and role are required." }, { status: 400 });
     }
 
-    // ── 0. License gate ────────────────────────────────────────────────────────
-    // Don't create an employee/auth user if there's no Zoho mailbox seat to give them.
-    const license = await checkMailboxLicense();
-    if (!license.canCreate) {
-      return NextResponse.json({
-        error: `No Zoho mailbox licenses available (${license.used ?? "?"}/${license.allowed ?? "?"} seats used). Add seats in Zoho before onboarding a new employee.`,
-        license,
-      }, { status: 402 });
+    // ── 0. License gate (Zoho onboarding) ──────────────────────────────────────
+    // Skipped while ZOHO_ONBOARDING_ENABLED is false.
+    if (ZOHO_ONBOARDING_ENABLED) {
+      const license = await checkMailboxLicense();
+      if (!license.canCreate) {
+        return NextResponse.json({
+          error: `No Zoho mailbox licenses available (${license.used ?? "?"}/${license.allowed ?? "?"} seats used). Add seats in Zoho before onboarding a new employee.`,
+          license,
+        }, { status: 402 });
+      }
     }
 
     // ── 1. Generate employee_id ───────────────────────────────────────────────
@@ -88,17 +94,20 @@ export async function POST(req: NextRequest) {
     if (empError) throw empError;
 
     // ── 4. Auto-provision Zoho mailbox ────────────────────────────────────────
+    // Skipped while ZOHO_ONBOARDING_ENABLED is false.
     let zohoResult: any = null;
-    try {
-      zohoResult = await provisionZohoMailbox({
-        employeeId:  emp.id,
-        name,
-        designation: designation || "",
-        department:  department  || "",
-        tempPassword,
-      });
-    } catch (zohoErr: any) {
-      console.error("[Zoho provision] non-fatal:", zohoErr.message);
+    if (ZOHO_ONBOARDING_ENABLED) {
+      try {
+        zohoResult = await provisionZohoMailbox({
+          employeeId:  emp.id,
+          name,
+          designation: designation || "",
+          department:  department  || "",
+          tempPassword,
+        });
+      } catch (zohoErr: any) {
+        console.error("[Zoho provision] non-fatal:", zohoErr.message);
+      }
     }
 
     // ── 5. Audit log ──────────────────────────────────────────────────────────
