@@ -188,6 +188,8 @@ const SECTIONS = [
       { key: "my_priority_payout",  label: "My Priority Payout",   desc: "View ad-hoc bonus payouts" },
       { key: "my_messages",         label: "My Messages",          desc: "/dashboard/messages — employee messaging" },
       { key: "my_meetings",         label: "My Meetings",          desc: "/dashboard/meetings — employee meeting list" },
+      { key: "my_projects",         label: "My Projects",          desc: "/dashboard/projects — projects the user is assigned to" },
+      { key: "my_academy",          label: "Academy",              desc: "/dashboard/academy — assigned courses and learning" },
       { key: "support_user",        label: "Support & Help",       desc: "Raise tickets to other roles, resolve assigned tickets" },
     ],
   },

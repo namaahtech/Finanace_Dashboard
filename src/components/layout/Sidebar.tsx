@@ -10,7 +10,7 @@ import {
   MessageSquare, CalendarClock, IndianRupee,
   Shield, RefreshCw, Mail, Ticket,
   Network, Briefcase, BarChart3, ClipboardList, Folder, User,
-  BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award,
+  BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award, GraduationCap,
   Inbox, PenLine, Send, Paperclip, Layers, KeyRound,
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
@@ -137,18 +137,26 @@ const MASTER_NAV: NavSection[] = [
   {
     title: "My Account",
     items: [
+      // Identity
       { href: "/dashboard/profile",        label: "My Profile",      icon: User,         moduleKey: "my_profile" },
+      // Daily workflow
       { href: "/dashboard/attendance",     label: "My Attendance",   icon: CalendarDays, moduleKey: "my_attendance" },
+      { href: "/dashboard/calendar",       label: "My Calendar",     icon: CalendarDays, moduleKey: "my_meetings" },
+      { href: "/dashboard/meetings",       label: "Meetings",        icon: CalendarClock,moduleKey: "my_meetings" },
+      { href: "/dashboard/messages",       label: "Messages",        icon: MessageSquare,moduleKey: "my_messages" },
+      { href: "/dashboard/projects",       label: "My Projects",     icon: Folder,       moduleKey: "my_projects" },
+      // Manager visibility
+      { href: "/department-lead/teams",     label: "My Teams",        icon: Building2,    moduleKey: "manager_teams" },
+      { href: "/department-lead/org-chart", label: "My Org Chart",    icon: Network,      moduleKey: "manager_org_chart" },
+      // Performance & compensation (periodic)
       { href: "/dashboard/performance",    label: "Performance",     icon: TrendingUp,   moduleKey: "my_performance" },
-      { href: "/dashboard/incentives",     label: "My Incentives",   icon: Wallet,       moduleKey: "my_incentives" },
       { href: "/dashboard/payslips",       label: "My Payslips",     icon: IndianRupee,  moduleKey: "my_payslips" },
+      { href: "/dashboard/incentives",     label: "My Incentives",   icon: Wallet,       moduleKey: "my_incentives" },
       { href: "/dashboard/reimbursements", label: "Reimbursements",  icon: Receipt,      moduleKey: "my_reimbursements" },
       { href: "/dashboard/priority",       label: "Priority Payout", icon: Zap,          moduleKey: "my_priority_payout" },
-      { href: "/dashboard/messages",       label: "Messages",        icon: MessageSquare,moduleKey: "my_messages" },
-      { href: "/dashboard/meetings",       label: "Meetings",        icon: CalendarClock,moduleKey: "my_meetings" },
-      { href: "/dashboard/calendar",       label: "My Calendar",     icon: CalendarDays, moduleKey: "my_meetings" },
-      { href: "/department-lead/teams",     label: "My Teams",        icon: Building2,    moduleKey: "manager_teams" },
-      { href: "/department-lead/org-chart", label: "My Org Chart",   icon: Network,      moduleKey: "manager_org_chart" },
+      // Growth
+      { href: "/dashboard/academy",        label: "Academy",         icon: GraduationCap,moduleKey: "my_academy" },
+      // Help (last)
       { href: "/dashboard/support",        label: "Support & Help",  icon: Ticket,       moduleKey: "support_user" },
     ],
   },
