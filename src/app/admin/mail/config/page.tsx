@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { cn } from "@/lib/utils";
 import {
   Settings, Check, X, ExternalLink, RefreshCw, Loader2, Shield,
@@ -231,7 +231,7 @@ export default function MailConfigPage() {
               <p className="font-semibold text-theme-fg mb-2">Setup Guide:</p>
               <p>1. Go to <strong>api-console.zoho.in</strong> → Add Client → Server-based Application</p>
               <p>2. Set Authorized Redirect URI to:</p>
-              <div className="flex items-center gap-2 mt-1 p-2 rounded-lg bg-theme-page border border-theme-border font-mono text-[11px]">
+              <div className="flex items-center gap-2 mt-1 p-2 rounded-lg bg-theme-page border border-theme-border tabular-nums text-[11px]">
                 <span className="flex-1 truncate">{redirectUri}</span>
                 <button onClick={() => { navigator.clipboard.writeText(redirectUri); showToast("Copied!", "success"); }}
                   className="p-1 rounded hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all"><Copy size={11} /></button>
@@ -258,7 +258,7 @@ export default function MailConfigPage() {
                 </label>
                 <input value={clientId} onChange={(e) => setClientId(e.target.value)}
                   placeholder="1000.XXXXXXXXXXXX"
-                  className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-sm text-theme-fg outline-none focus:border-theme-primary font-mono" />
+                  className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-sm text-theme-fg outline-none focus:border-theme-primary tabular-nums" />
               </div>
               <div className="space-y-1.5">
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-theme-muted">
@@ -268,7 +268,7 @@ export default function MailConfigPage() {
                   <input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)}
                     type={showSecret ? "text" : "password"}
                     placeholder="Your client secret"
-                    className="w-full h-10 pl-3 pr-10 rounded-xl border border-theme-border bg-theme-page text-sm text-theme-fg outline-none focus:border-theme-primary font-mono" />
+                    className="w-full h-10 pl-3 pr-10 rounded-xl border border-theme-border bg-theme-page text-sm text-theme-fg outline-none focus:border-theme-primary tabular-nums" />
                   <button onClick={() => setShowSecret(!showSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-fg">
                     {showSecret ? <EyeOff size={13} /> : <Eye size={13} />}
                   </button>
@@ -287,7 +287,7 @@ export default function MailConfigPage() {
                   <Mail size={11} /> Redirect URI
                 </label>
                 <input value={redirectUri} onChange={(e) => setRedirectUri(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-xs text-theme-fg outline-none focus:border-theme-primary font-mono" />
+                  className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-xs text-theme-fg outline-none focus:border-theme-primary tabular-nums" />
               </div>
             </div>
           </div>
@@ -373,7 +373,7 @@ export default function MailConfigPage() {
                 value={domainInput}
                 onChange={e => setDomainInput(e.target.value)}
                 placeholder="e.g. mail.namaah.io"
-                className="flex-1 h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-sm text-theme-fg outline-none focus:border-theme-primary font-mono"
+                className="flex-1 h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-sm text-theme-fg outline-none focus:border-theme-primary tabular-nums"
               />
               <button
                 onClick={handleSaveDomain}
@@ -386,7 +386,7 @@ export default function MailConfigPage() {
             </div>
 
             <p className="mt-2 text-[11px] text-theme-muted">
-              New employees will get <strong className="text-theme-fg font-mono">firstname.lastname@{domainInput || "mail.namaah.io"}</strong> as their Zoho mail address.
+              New employees will get <strong className="text-theme-fg tabular-nums">firstname.lastname@{domainInput || "mail.namaah.io"}</strong> as their Zoho mail address.
             </p>
           </div>
 
@@ -402,7 +402,7 @@ export default function MailConfigPage() {
                   Once Zoho Mail is connected, adding a new employee in{" "}
                   <strong className="text-theme-fg">Employees → Add Employee</strong>{" "}
                   will automatically create a Zoho Mail account in the format{" "}
-                  <strong className="text-theme-primary font-mono">firstname.lastname@{mailDomain}</strong>.
+                  <strong className="text-theme-primary tabular-nums">firstname.lastname@{mailDomain}</strong>.
                   This can be toggled off per employee.
                 </p>
               </div>

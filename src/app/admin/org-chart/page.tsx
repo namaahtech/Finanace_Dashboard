@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 interface OrgNode {
   id: string;
@@ -293,11 +294,42 @@ export default function OrgChartPage() {
   }
   function expandAll()   { if (orgData) setExpanded(new Set(collectIds(orgData))); }
   function collapseAll() { setExpanded(new Set(["root_node"])); }
+
+  /** Center the scroll viewport on the middle of the chart canvas */
+  function centerScroll() {
+    if (!scrollRef.current) return;
+    const el = scrollRef.current;
+    el.scrollLeft = Math.max(0, (canvasW * zoom - el.clientWidth) / 2);
+    el.scrollTop = 0;
+  }
+
+  /** Auto-fit: compute zoom that makes the whole chart fit in the canvas */
+  function fitToScreen() {
+    if (!scrollRef.current || !orgData) return;
+    const el = scrollRef.current;
+    const pad = 40;
+    const zw = (el.clientWidth - pad * 2) / canvasW;
+    const zh = (el.clientHeight - pad * 2) / canvasH;
+    const next = Math.max(0.15, Math.min(1.2, Math.min(zw, zh)));
+    setZoom(+next.toFixed(2));
+    // Re-center after the next paint when canvasW * zoom updates
+    setTimeout(() => centerScroll(), 50);
+  }
+
   function reset() {
     setZoom(0.75);
     collapseAll();
-    if (scrollRef.current) { scrollRef.current.scrollLeft = 0; scrollRef.current.scrollTop = 0; }
+    setTimeout(() => centerScroll(), 50);
   }
+
+  // Auto-center the chart on first data load only — don't fight the user's pan after that
+  const hasCenteredRef = useRef(false);
+  useEffect(() => {
+    if (!orgData || hasCenteredRef.current) return;
+    const t = setTimeout(() => { centerScroll(); hasCenteredRef.current = true; }, 60);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgData]);
 
   // ── Pan handlers ─────────────────────────────────────────────
   const onMouseDown = (e: React.MouseEvent) => {
@@ -330,54 +362,11 @@ export default function OrgChartPage() {
   return (
     <DashboardShell
       moduleKey="org_chart"
-      title="Dynamic Org Chart"
-      subtitle="Live enterprise hierarchy automatically mapped from PostgreSQL."
-      actions={
-        <div className="flex items-center gap-2">
-          {/* Collapse / Expand */}
-          <div className="flex rounded-lg border border-theme-border bg-theme-raised p-0.5 gap-0.5">
-            <button
-              onClick={collapseAll}
-              title="Collapse all"
-              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-theme-muted hover:bg-theme-page hover:text-theme-fg transition-colors"
-            >
-              <Minus size={12} /> Collapse
-            </button>
-            <button
-              onClick={expandAll}
-              title="Expand all"
-              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-theme-muted hover:bg-theme-page hover:text-theme-fg transition-colors"
-            >
-              <Plus size={12} /> Expand All
-            </button>
-          </div>
-
-          {/* Zoom */}
-          <div className="flex rounded-lg border border-theme-border bg-theme-raised p-0.5 gap-0.5">
-            <button
-              onClick={() => setZoom(z => Math.max(0.15, +(z - 0.1).toFixed(2)))}
-              className="p-1.5 rounded-md text-theme-muted hover:bg-theme-page hover:text-theme-fg transition-colors"
-            >
-              <ZoomOut size={14} />
-            </button>
-            <div className="flex min-w-[46px] items-center justify-center px-1 text-xs font-semibold text-theme-muted">
-              {Math.round(zoom * 100)}%
-            </div>
-            <button
-              onClick={() => setZoom(z => Math.min(2, +(z + 0.1).toFixed(2)))}
-              className="p-1.5 rounded-md text-theme-muted hover:bg-theme-page hover:text-theme-fg transition-colors"
-            >
-              <ZoomIn size={14} />
-            </button>
-          </div>
-
-          <Button variant="outline" size="sm" onClick={reset}>
-            <Maximize2 size={13} className="mr-1.5" /> Reset
-          </Button>
-        </div>
-      }
+      title="Org Chart"
+      subtitle="Live enterprise hierarchy mapped from your database."
     >
-      {/* ── Canvas ── */}
+      {/* ── Canvas container with floating overlays ── */}
+      <div className="relative w-full max-w-full overflow-hidden rounded-lg border border-border bg-background">
       <div
         ref={scrollRef}
         onMouseDown={onMouseDown}
@@ -385,19 +374,18 @@ export default function OrgChartPage() {
         onMouseUp={onMouseUp}
         onMouseMove={onMouseMove}
         onWheel={onWheel}
-        className="relative h-[76vh] w-full overflow-auto rounded-2xl border border-theme-border"
+        className="relative h-[calc(100dvh-10rem)] w-full max-w-full overflow-auto"
         style={{
           cursor: "grab",
-          background: "hsl(var(--bg))",
-          backgroundImage: "radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px)",
+          backgroundImage: "radial-gradient(circle, var(--border) 1px, transparent 1px)",
           backgroundSize: "24px 24px",
         }}
       >
         {loading && !orgData ? (
           <div className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-theme-primary border-t-transparent" />
-              <p className="text-xs font-semibold text-theme-muted">Loading chart…</p>
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              <p className="text-xs font-medium text-muted-foreground">Loading chart…</p>
             </div>
           </div>
         ) : orgData ? (
@@ -459,9 +447,9 @@ export default function OrgChartPage() {
         ) : (
           <div className="flex h-full items-center justify-center">
             <div className="space-y-2 text-center">
-              <ShieldCheck size={40} className="mx-auto text-theme-subtle opacity-30" />
-              <p className="text-sm font-semibold text-theme-muted">No organizational data found</p>
-              <p className="text-xs text-theme-subtle">
+              <ShieldCheck size={40} className="mx-auto text-muted-foreground opacity-30" />
+              <p className="text-sm font-semibold text-muted-foreground">No organizational data found</p>
+              <p className="text-xs text-muted-foreground">
                 Create departments and teams to see them here.
               </p>
             </div>
@@ -469,27 +457,63 @@ export default function OrgChartPage() {
         )}
       </div>
 
-      {/* Legend + hint */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 px-1">
+      {/* ── Floating Top-Right Toolbar ── */}
+      <div className="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-1.5">
+        <div className="pointer-events-auto flex items-center rounded-md border border-border bg-background/90 p-0.5 shadow-sm backdrop-blur">
+          <Button variant="ghost" size="sm" onClick={collapseAll} title="Collapse all" className="h-7 px-2 text-xs">
+            <Minus className="size-3" /> Collapse
+          </Button>
+          <Separator orientation="vertical" className="h-4" />
+          <Button variant="ghost" size="sm" onClick={expandAll} title="Expand all" className="h-7 px-2 text-xs">
+            <Plus className="size-3" /> Expand
+          </Button>
+        </div>
+
+        <div className="pointer-events-auto flex items-center rounded-md border border-border bg-background/90 p-0.5 shadow-sm backdrop-blur">
+          <Button variant="ghost" size="icon" onClick={() => setZoom(z => Math.max(0.15, +(z - 0.1).toFixed(2)))} className="h-7 w-7" title="Zoom out">
+            <ZoomOut className="size-3.5" />
+          </Button>
+          <span className="flex min-w-[42px] items-center justify-center text-xs font-medium text-muted-foreground tabular-nums">
+            {Math.round(zoom * 100)}%
+          </span>
+          <Button variant="ghost" size="icon" onClick={() => setZoom(z => Math.min(2, +(z + 0.1).toFixed(2)))} className="h-7 w-7" title="Zoom in">
+            <ZoomIn className="size-3.5" />
+          </Button>
+        </div>
+
+        <Button variant="outline" size="sm" onClick={fitToScreen} className="pointer-events-auto h-8 bg-background/90 shadow-sm backdrop-blur" title="Fit chart to screen">
+          <Maximize2 /> Fit
+        </Button>
+        <Button variant="outline" size="sm" onClick={reset} className="pointer-events-auto h-8 bg-background/90 shadow-sm backdrop-blur" title="Reset view">
+          Reset
+        </Button>
+      </div>
+
+      {/* ── Floating Bottom-Left Legend ── */}
+      <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-3 rounded-md border border-border bg-background/90 px-3 py-1.5 shadow-sm backdrop-blur">
         {[
-          { Icon: Crown,     label: "HQ Root",        dark: true  },
-          { Icon: Building2, label: "Department",      dark: false },
-          { Icon: Users,     label: "Team / Sub-Team", dark: false },
+          { Icon: Crown,     label: "HQ Root",       dark: true  },
+          { Icon: Building2, label: "Department",     dark: false },
+          { Icon: Users,     label: "Team",           dark: false },
         ].map(({ Icon, label, dark }) => (
           <div key={label} className="flex items-center gap-1.5">
             <div className={cn(
-              "flex h-5 w-5 items-center justify-center rounded-md",
-              dark ? "bg-[hsl(222,47%,11%)] text-white" : "bg-theme-raised text-theme-muted",
+              "flex h-4 w-4 items-center justify-center rounded",
+              dark ? "bg-foreground text-background" : "bg-muted text-muted-foreground",
             )}>
-              <Icon size={10} />
+              <Icon size={9} />
             </div>
-            <span className="text-[11px] text-theme-subtle">{label}</span>
+            <span className="text-[11px] text-muted-foreground">{label}</span>
           </div>
         ))}
-        <div className="ml-auto flex items-center gap-1 text-[11px] text-theme-subtle">
-          <ChevronDown size={11} />
-          Click node to expand · Drag to pan · Ctrl + scroll to zoom
-        </div>
+      </div>
+
+      {/* ── Floating Bottom-Right Hint ── */}
+      <div className="pointer-events-none absolute bottom-3 right-3 z-10 hidden md:block rounded-md border border-border bg-background/90 px-3 py-1.5 shadow-sm backdrop-blur">
+        <span className="text-[11px] text-muted-foreground">
+          Click node · Drag to pan · ⌘+scroll to zoom
+        </span>
+      </div>
       </div>
     </DashboardShell>
   );

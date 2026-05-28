@@ -1,30 +1,45 @@
-import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { AuthProvider } from "@/components/layout/AuthProvider";
-import { ToastProvider } from "@/components/ui/Toast";
+import { ToastProvider } from "@/components/ui/ToastLegacy";
 import { NotificationProvider } from "@/components/layout/NotificationProvider";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 
-const pjs = Plus_Jakarta_Sans({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Namaah Nexus",
   description: "Namaah Nexus — Internal Operations Platform",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={pjs.className} suppressHydrationWarning>
+      <body className={inter.className} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <AuthProvider>
-            <ToastProvider>
-              <NotificationProvider>
-                {children}
-              </NotificationProvider>
-            </ToastProvider>
-          </AuthProvider>
+          <TooltipProvider delayDuration={200}>
+            <AuthProvider>
+              <ToastProvider>
+                <NotificationProvider>
+                  {children}
+                </NotificationProvider>
+              </ToastProvider>
+            </AuthProvider>
+          </TooltipProvider>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

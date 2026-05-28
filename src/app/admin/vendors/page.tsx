@@ -1,7 +1,14 @@
 ﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/ButtonLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import {
@@ -90,13 +97,21 @@ function FInput({ value, onChange, placeholder, type="text", className="", disab
   return <input type={type} value={value} onChange={(e)=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
     className={cn("w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-blue-500 transition-all placeholder:text-theme-subtle disabled:opacity-50", className)} />;
 }
-function FSelect({ value, onChange, children, className="" }: {
-  value:string; onChange:(v:string)=>void; children:React.ReactNode; className?:string;
+function FSelect({ value, onChange, items, placeholder, className = "" }: {
+  value: string;
+  onChange: (v: string) => void;
+  items: { label: string; value: string }[];
+  placeholder?: string;
+  className?: string;
 }) {
-  return <select value={value} onChange={(e)=>onChange(e.target.value)}
-    className={cn("w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-blue-500 transition-all", className)}>
-    {children}
-  </select>;
+  return (
+    <Select value={value || undefined} onValueChange={onChange}>
+      <SelectTrigger className={cn("w-full", className)}><SelectValue placeholder={placeholder} /></SelectTrigger>
+      <SelectContent>
+        {items.map((it) => <SelectItem key={it.value} value={it.value}>{it.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
 }
 
 // ─── Receipt number generator ─────────────────────────────────────────────────
@@ -114,7 +129,8 @@ function printPurchaseBill(p: Purchase) {
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html><head><title>Purchase Bill - ${p.purchase_number}</title>
 <style>
-  body{font-family:'Segoe UI',sans-serif;margin:0;padding:32px;color:#111;background:#fff}
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  body{font-family:'Inter',Arial,sans-serif;margin:0;padding:32px;color:#111;background:#fff}
   .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:16px;margin-bottom:24px}
   .title{font-size:24px;font-weight:900;letter-spacing:-0.5px}
   .subtitle{font-size:11px;color:#666;margin-top:4px}
@@ -672,7 +688,7 @@ export default function PurchasesPage() {
                           <td className="px-5 py-3">
                             <p className="text-xs font-semibold text-theme-fg">{p.vendor_name}</p>
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              <p className="text-[10px] text-theme-subtle font-mono">{p.purchase_number}</p>
+                              <p className="text-[10px] text-theme-subtle tabular-nums">{p.purchase_number}</p>
                               {editedPurchaseIds.has(p.id) && (
                                 <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 border border-amber-200/60 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-600">
                                   <Pencil size={7}/> Edited
@@ -717,7 +733,7 @@ export default function PurchasesPage() {
                                 <div>
                                   <p className="text-[9px] font-black uppercase tracking-widest text-theme-subtle leading-none mb-0.5">Filed</p>
                                   <p className="text-[11px] font-bold text-theme-fg leading-none">{p.filed_by_name || "System"}</p>
-                                  <p className="text-[9px] text-theme-subtle font-mono mt-0.5">{p.filed_by_emp_id || "LOG-ERR"}</p>
+                                  <p className="text-[9px] text-theme-subtle tabular-nums mt-0.5">{p.filed_by_emp_id || "LOG-ERR"}</p>
                                 </div>
                               </div>
 
@@ -732,7 +748,7 @@ export default function PurchasesPage() {
                                       <Pencil size={7}/> Edited
                                     </p>
                                     <p className="text-[11px] font-bold text-theme-fg leading-none">{editAuthMap[p.id].name}</p>
-                                    <p className="text-[9px] text-theme-subtle font-mono mt-0.5">{editAuthMap[p.id].empId}</p>
+                                    <p className="text-[9px] text-theme-subtle tabular-nums mt-0.5">{editAuthMap[p.id].empId}</p>
                                   </div>
                                 </div>
                               )}
@@ -874,7 +890,7 @@ export default function PurchasesPage() {
                               </div>
                               <div>
                                 <p className="text-xs font-semibold text-theme-fg">{v.name}</p>
-                                <p className="text-[10px] text-theme-subtle font-mono">VEN-{v.id.slice(0,8).toUpperCase()}</p>
+                                <p className="text-[10px] text-theme-subtle tabular-nums">VEN-{v.id.slice(0,8).toUpperCase()}</p>
                               </div>
                             </div>
                           </td>
@@ -988,20 +1004,25 @@ export default function PurchasesPage() {
                     <p className={cn("text-[9px] font-black uppercase tracking-tighter", editingPurchase ? "text-amber-600" : "text-theme-muted")}>
                       {editingPurchase ? "Authorised By (Edit) *" : "Filing Employee *"}
                     </p>
-                    <select
-                      value={selectedEmployee?.id || ""}
-                      onChange={(e) => {
-                        const emp = employees.find(emp => emp.id === e.target.value);
+                    <Select
+                      value={selectedEmployee?.id || undefined}
+                      onValueChange={(v) => {
+                        const emp = employees.find(emp => emp.id === v);
                         setSelectedEmployee(emp || null);
                       }}
-                      className={cn("text-xs font-black bg-transparent outline-none cursor-pointer transition-colors",
-                        editingPurchase ? "text-amber-600 hover:text-amber-700" : "text-blue-600 hover:text-blue-700")}
                     >
-                      <option value="">Select Employee...</option>
-                      {employees.map(emp => (
-                        <option key={emp.id} value={emp.id}>{emp.name} ({emp.employee_id})</option>
-                      ))}
-                    </select>
+                      <SelectTrigger
+                        className={cn("h-7 border-none bg-transparent shadow-none text-xs font-black px-0",
+                          editingPurchase ? "text-amber-600 hover:text-amber-700" : "text-blue-600 hover:text-blue-700")}
+                      >
+                        <SelectValue placeholder="Select Employee..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {employees.map(emp => (
+                          <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employee_id})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="h-8 w-[1px] bg-theme-border mx-1"/>
                   <User size={18} className={cn("transition-colors", selectedEmployee ? (editingPurchase ? "text-amber-500" : "text-blue-500") : "text-theme-subtle")}/>
@@ -1164,10 +1185,13 @@ export default function PurchasesPage() {
                     <FLabel>Category *</FLabel>
                     <div className="relative">
                       <Tag size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none z-10"/>
-                      <FSelect value={form.category} onChange={v=>setForm({...form,category:v})} className="pl-9">
-                        <option value="">Select category…</option>
-                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                      </FSelect>
+                      <FSelect
+                        value={form.category}
+                        onChange={v => setForm({ ...form, category: v })}
+                        items={CATEGORIES.map(c => ({ label: c, value: c }))}
+                        placeholder="Select category…"
+                        className="pl-9"
+                      />
                     </div>
                     {form.category && (
                       <div className="mt-2">
@@ -1179,7 +1203,7 @@ export default function PurchasesPage() {
                     <FLabel>Amount (₹) *</FLabel>
                     <div className="relative">
                       <IndianRupee size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none"/>
-                      <FInput type="number" value={form.amount} onChange={v=>setForm({...form,amount:v})} placeholder="0.00" className="pl-9 font-mono"/>
+                      <FInput type="number" value={form.amount} onChange={v=>setForm({...form,amount:v})} placeholder="0.00" className="pl-9 tabular-nums"/>
                     </div>
                     {form.amount && Number(form.amount)>0 && <p className="mt-1.5 text-[10px] font-semibold text-red-500">−{formatCurrency(Number(form.amount))} expense</p>}
                   </div>
@@ -1256,7 +1280,7 @@ export default function PurchasesPage() {
               </div>
               <div className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-page px-3 py-1.5">
                 <span className="text-[9px] font-black uppercase tracking-widest text-theme-muted">Receipt #</span>
-                <span className="text-[11px] font-black text-theme-fg font-mono">{receiptNumber}</span>
+                <span className="text-[11px] font-black text-theme-fg tabular-nums">{receiptNumber}</span>
               </div>
               <button onClick={closePaymentModal} className="rounded-lg p-1.5 text-theme-muted hover:bg-theme-raised transition-colors"><X size={16}/></button>
             </div>
@@ -1415,7 +1439,7 @@ export default function PurchasesPage() {
                 <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted mb-4 flex items-center gap-2"><Building2 size={11}/>Business Identity</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2"><FLabel>Vendor / Company Name *</FLabel><FInput value={vendorForm.name} onChange={v=>setVendorForm({...vendorForm,name:v})} placeholder="e.g. AWS India Pvt. Ltd."/></div>
-                  <div><FLabel>Category</FLabel><FSelect value={vendorForm.category} onChange={v=>setVendorForm({...vendorForm,category:v})}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</FSelect></div>
+                  <div><FLabel>Category</FLabel><FSelect value={vendorForm.category} onChange={v=>setVendorForm({...vendorForm,category:v})} items={CATEGORIES.map(c=>({label:c,value:c}))} /></div>
                   <div><FLabel>GSTIN (optional)</FLabel><FInput value={vendorForm.gstin} onChange={v=>setVendorForm({...vendorForm,gstin:v})} placeholder="29ABCDE1234F1Z5"/></div>
                   <div className="col-span-2"><FLabel>Address</FLabel><FInput value={vendorForm.address} onChange={v=>setVendorForm({...vendorForm,address:v})} placeholder="Street, City, State, Pincode"/></div>
                 </div>
@@ -1555,7 +1579,7 @@ export default function PurchasesPage() {
             </div>
             <div className="p-6 space-y-4">
               <div className="rounded-xl border border-theme-border bg-theme-page p-4 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-theme-muted">Bill No.</span><span className="font-mono font-bold text-theme-fg">{sharePurchase.purchase_number}</span></div>
+                <div className="flex justify-between"><span className="text-theme-muted">Bill No.</span><span className="tabular-nums font-bold text-theme-fg">{sharePurchase.purchase_number}</span></div>
                 <div className="flex justify-between"><span className="text-theme-muted">Vendor</span><span className="font-semibold text-theme-fg">{sharePurchase.vendor_name}</span></div>
                 <div className="flex justify-between"><span className="text-theme-muted">Description</span><span className="font-semibold text-theme-fg max-w-[180px] truncate text-right">{sharePurchase.description}</span></div>
                 <div className="flex justify-between"><span className="text-theme-muted">Amount</span><span className="font-black text-red-500">−{formatCurrency(sharePurchase.amount)}</span></div>

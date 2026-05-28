@@ -4,11 +4,39 @@ import { useState, useEffect, useRef } from "react";
 import {
   Upload, Terminal as TerminalIcon, Search, Zap, CheckCircle2, AlertCircle,
   Scan, FileText, User, ChevronRight, Microscope, Loader2, X, BrainCircuit,
-  MoreVertical, Radar, Trash2, RefreshCw
+  Radar, Trash2, RefreshCw
 } from "lucide-react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { useToast } from "@/components/ui/Toast";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -20,30 +48,30 @@ function LogTerminal({ logs }: { logs: string[] }) {
   }, [logs]);
 
   return (
-    <div className="flex flex-col h-full bg-theme-card border border-theme-border rounded-xl overflow-hidden font-mono text-[11px]">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-theme-border bg-theme-raised/60">
+    <div className="flex flex-col h-full bg-card border border-border rounded-xl overflow-hidden tabular-nums text-[11px]">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/50">
         <div className="flex items-center gap-2">
-          <TerminalIcon size={12} className="text-theme-muted" />
-          <span className="text-[10px] font-semibold text-theme-muted uppercase tracking-wider">Analysis Stream</span>
+          <TerminalIcon size={12} className="text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">Analysis Stream</span>
         </div>
         <div className="flex gap-1.5">
           <span className="h-2 w-2 rounded-full bg-emerald-500/40" />
           <span className="h-2 w-2 rounded-full bg-amber-500/40" />
         </div>
       </div>
-      <div ref={ref} className="flex-1 p-3 overflow-y-auto space-y-1 scrollbar-hide">
+      <div ref={ref} className="flex-1 p-3 overflow-y-auto space-y-1 font-mono">
         {logs.length === 0 ? (
-          <span className="text-theme-muted/40 italic">Awaiting scan…</span>
+          <span className="text-muted-foreground/50 italic">Awaiting scan…</span>
         ) : (
           logs.map((log, i) => (
             <div key={i} className="flex gap-2">
-              <span className="text-theme-muted/30 flex-shrink-0 tabular-nums">
+              <span className="text-muted-foreground/40 flex-shrink-0 tabular-nums">
                 {String(i + 1).padStart(2, "0")}
               </span>
               <span className={cn(
                 log.includes("SUCCESS") ? "text-emerald-500" :
-                log.includes("ERROR")   ? "text-rose-500" :
-                "text-theme-fg/70",
+                log.includes("ERROR") ? "text-rose-500" :
+                "text-foreground/70",
               )}>
                 {log}
               </span>
@@ -55,7 +83,6 @@ function LogTerminal({ logs }: { logs: string[] }) {
   );
 }
 
-/* ─── Score Badge ─────────────────────────────────────────────────────────── */
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 const getTimestamp = () => {
   const now = new Date();
@@ -76,7 +103,7 @@ function useRecruitmentRealtime(onUpdate: () => void, onLog: (msg: string | stri
         async (payload: any) => {
           onUpdate();
           if (payload.new && payload.new.processing_status === 'completed') {
-             onLog(`${getTimestamp()} [SYSTEM] Syncing final intelligence for ${payload.new.applicant_name}...`);
+            onLog(`${getTimestamp()} [SYSTEM] Syncing final intelligence for ${payload.new.applicant_name}...`);
           }
         }
       )
@@ -86,14 +113,13 @@ function useRecruitmentRealtime(onUpdate: () => void, onLog: (msg: string | stri
         async (payload: any) => {
           onUpdate();
           if (payload.new) {
-            // Fetch application name for the log
             const { data: app } = await supabase.from('applications').select('applicant_name, applied_cluster_id').eq('application_id', payload.new.application_id).single();
-            
+
             const metrics = payload.new.resume_profile?.metrics || {};
             const score = payload.new.scoring?.match_score || 0;
             const source = payload.new.application_id.startsWith("CAR-") ? "Career Portal" : "Manual Upload";
             const ts = getTimestamp();
-            
+
             const box = [
               `${ts} ------------------------------------------------`,
               `${ts} [AUDIT_SUCCESS]`,
@@ -116,20 +142,20 @@ function useRecruitmentRealtime(onUpdate: () => void, onLog: (msg: string | stri
   }, [onUpdate, onLog]);
 }
 
-/* ─── Components ─────────────────────────────────────────────────────────── */
+/* ─── Score Badge ─────────────────────────────────────────────────────────── */
 function ScoreBadge({ score }: { score: number }) {
   return (
     <div className="flex flex-col items-end">
       <span className={cn(
-        "text-2xl font-black tabular-nums leading-none",
-        score >= 80 ? "text-emerald-500" 
-        : score >= 50 ? "text-amber-500" 
-        : score > 0 ? "text-rose-500"
-        : "text-theme-muted",
+        "text-2xl font-bold tabular-nums leading-none",
+        score >= 80 ? "text-emerald-500"
+          : score >= 50 ? "text-amber-500"
+            : score > 0 ? "text-rose-500"
+              : "text-muted-foreground",
       )}>
         {score}%
       </span>
-      <span className="text-[9px] font-bold text-theme-muted mt-1 uppercase tracking-tighter">Match Score</span>
+      <span className="text-[10px] text-muted-foreground mt-1">Match Score</span>
     </div>
   );
 }
@@ -152,10 +178,9 @@ function CandidateCard({
   onDecision: (id: string, decision: 'accepted' | 'rejected') => void;
   onViewResume: (path: string) => void;
 }) {
-  // Extract analysis from array or single object
   const analysisArr = candidate.talent_analysis;
   const analysis = Array.isArray(analysisArr) ? analysisArr[0] : analysisArr;
-  
+
   const score = analysis?.scoring?.match_score || 0;
   const isComplete = candidate.processing_status === "completed";
   const isScanning = candidate.processing_status === "pending" || candidate.processing_status === "processing";
@@ -163,68 +188,62 @@ function CandidateCard({
   const progressStep = candidate.processing_step || (candidate.processing_status === 'pending' ? 'In Queue' : 'Processing...');
 
   return (
-    <div className="group bg-theme-card border border-theme-border rounded-xl p-4 hover:border-theme-strong hover:shadow-sm transition-all relative overflow-hidden">
-      {/* Scanning Overlay */}
+    <Card className="group p-4 transition-shadow hover:shadow-sm relative overflow-hidden">
       <AnimatePresence>
         {isScanning && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-10 bg-theme-surface/95 backdrop-blur-[1px] flex flex-col items-center justify-center p-4 text-center"
+            className="absolute inset-0 z-10 bg-background/95 backdrop-blur-[1px] flex flex-col items-center justify-center p-4 text-center"
           >
-            <div className="relative mb-3 flex-shrink-0 scale-75 origin-center">
-              <div className="h-12 w-12 rounded-full border-4 border-theme-primary/10 border-t-theme-primary animate-spin" />
-              <Scan size={16} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-theme-primary animate-pulse" />
-            </div>
-            
-            <div className="w-full max-w-[100px] space-y-1.5 flex-shrink-0">
-              <div className="flex items-center justify-between text-[9px] font-bold text-theme-primary tracking-tighter">
-                <span>AI SCAN</span>
-                <span>{progressValue}%</span>
-              </div>
-              <div className="h-1 w-full bg-theme-primary/10 rounded-full overflow-hidden">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progressValue}%` }}
-                  className="h-full bg-theme-primary"
-                />
-              </div>
+            <div className="relative mb-3 flex-shrink-0">
+              <div className="h-10 w-10 rounded-full border-4 border-primary/10 border-t-primary animate-spin" />
+              <Scan size={14} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-primary animate-pulse" />
             </div>
 
-            <p className="text-[9px] font-black uppercase tracking-widest text-theme-primary mt-3 animate-pulse">Processing</p>
-            <p className="text-[8px] text-theme-muted mt-1 leading-none">{progressStep}</p>
-            <button
+            <div className="w-full max-w-[120px] space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] font-medium text-primary">
+                <span>AI Scan</span>
+                <span>{progressValue}%</span>
+              </div>
+              <Progress value={progressValue} className="h-1" />
+            </div>
+
+            <p className="text-xs font-semibold text-primary mt-3">Processing</p>
+            <p className="text-[10px] text-muted-foreground mt-1 leading-none">{progressStep}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3 h-7 text-xs text-rose-500 border-rose-500/30 hover:bg-rose-500 hover:text-white"
               onClick={(e) => { e.stopPropagation(); onCancelStuck(candidate.application_id); }}
-              className="mt-3 flex items-center gap-1 text-[9px] font-bold px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all"
             >
-              <X size={9} /> Cancel
-            </button>
+              <X size={10} /> Cancel
+            </Button>
           </motion.div>
         )}
       </AnimatePresence>
 
       <div className="flex items-start gap-3">
-        {/* Avatar */}
-        <div className="h-10 w-10 rounded-xl bg-theme-raised border border-theme-border flex items-center justify-center flex-shrink-0">
-          <User size={18} className="text-theme-muted" />
+        <div className="h-10 w-10 rounded-lg bg-muted border border-border flex items-center justify-center flex-shrink-0">
+          <User size={18} className="text-muted-foreground" />
         </div>
 
-        {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-semibold text-sm text-theme-fg truncate">{candidate.applicant_name}</p>
-              <p className="text-[11px] text-theme-muted truncate">{candidate.applicant_email}</p>
+              <p className="font-semibold text-sm text-foreground truncate">{candidate.applicant_name}</p>
+              <p className="text-xs text-muted-foreground truncate">{candidate.applicant_email}</p>
             </div>
             <div className="flex-shrink-0">
               {isComplete && score === 0 ? (
                 <div className="flex flex-col items-end">
-                   <div className="flex items-center gap-1.5">
-                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                     <Loader2 size={12} className="animate-spin text-theme-muted" />
-                   </div>
-                   <span className="text-[9px] font-black text-theme-muted mt-1 uppercase tracking-tighter">Syncing Score</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <Loader2 size={12} className="animate-spin text-muted-foreground" />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground mt-1">Syncing score</span>
                 </div>
               ) : (
                 <ScoreBadge score={score} />
@@ -232,306 +251,246 @@ function CandidateCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-theme-primary/10 text-theme-primary border border-theme-primary/20">
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            <Badge variant="outline" className="text-[10px] text-primary border-primary/20 bg-primary/10">
               {candidate.applied_cluster_id}
-            </span>
-            <span className={cn(
-              "text-[9px] font-semibold px-2 py-0.5 rounded-full border",
-              candidate.application_id.startsWith("CAR-")
-                ? "bg-purple-500/10 text-purple-500 border-purple-500/20"
-                : "bg-blue-500/10 text-blue-500 border-blue-500/20",
-            )}>
+            </Badge>
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[10px]",
+                candidate.application_id.startsWith("CAR-")
+                  ? "text-purple-500 border-purple-500/20 bg-purple-500/10"
+                  : "text-blue-500 border-blue-500/20 bg-blue-500/10",
+              )}
+            >
               {candidate.application_id.startsWith("CAR-") ? "Career Path" : "Manual"}
-            </span>
-            <span className={cn(
-              "text-[9px] font-semibold px-2 py-0.5 rounded-full border",
-              isComplete
-                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                : "bg-theme-raised text-theme-muted border-theme-border",
-            )}>
+            </Badge>
+            <Badge
+              variant={isComplete ? "outline" : "secondary"}
+              className={cn("text-[10px]", isComplete && "text-emerald-500 border-emerald-500/20 bg-emerald-500/10")}
+            >
               {isComplete ? "Verified" : "Pending"}
-            </span>
+            </Badge>
 
             {candidate.decision !== 'pending' && (
-              <span className={cn(
-                "text-[9px] font-black px-2 py-0.5 rounded-full border uppercase tracking-tighter",
-                candidate.decision === 'accepted'
-                  ? "bg-emerald-500 text-white border-emerald-600"
-                  : "bg-rose-500 text-white border-rose-600",
-              )}>
+              <Badge className={cn("text-[10px] capitalize", candidate.decision === 'accepted' ? "bg-emerald-500 hover:bg-emerald-500/90" : "bg-rose-500 hover:bg-rose-500/90", "text-white")}>
                 {candidate.decision}
-              </span>
+              </Badge>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-theme-border">
-        <div className="flex items-center gap-1.5 text-[10px] text-theme-muted">
-          <span className="font-mono">ID: {candidate.application_id.substring(0, 8)}</span>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+        <span className="text-xs text-muted-foreground tabular-nums">ID: {candidate.application_id.substring(0, 8)}</span>
+        <div className="flex items-center gap-1">
           {isComplete && candidate.processing_status === 'completed' && (
-            <div className="flex items-center gap-1.5 border-r border-theme-border pr-2 mr-1">
-              <button 
+            <div className="flex items-center gap-1 border-r border-border pr-1 mr-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs text-emerald-600 border-emerald-500/30 hover:bg-emerald-500 hover:text-white disabled:opacity-40"
                 onClick={() => onDecision(candidate.application_id, 'accepted')}
                 disabled={candidate.decision !== 'pending'}
                 title={candidate.decision !== 'pending' ? "Decision already made" : "Accept & Send Selection Mail"}
-                className="flex items-center gap-1.5 text-[10px] font-black px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all shadow-sm disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-emerald-500/10 disabled:hover:text-emerald-500"
               >
-                <CheckCircle2 size={12} strokeWidth={2.5} /> ACCEPT
-              </button>
-              <button 
+                <CheckCircle2 size={12} /> Accept
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs text-rose-600 border-rose-500/30 hover:bg-rose-500 hover:text-white disabled:opacity-40"
                 onClick={() => onDecision(candidate.application_id, 'rejected')}
                 disabled={candidate.decision !== 'pending'}
                 title={candidate.decision !== 'pending' ? "Decision already made" : "Reject & Send Rejection Mail"}
-                className="flex items-center gap-1.5 text-[10px] font-black px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all shadow-sm disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-rose-500/10 disabled:hover:text-rose-500"
               >
-                <X size={12} strokeWidth={2.5} /> REJECT
-              </button>
+                <X size={12} /> Reject
+              </Button>
             </div>
           )}
-          
-          <button
-            onClick={() => onRescan(candidate.application_id)}
-            title="Rescan Resume"
-            className="p-1.5 rounded-lg text-theme-muted hover:text-indigo-500 hover:bg-indigo-500/10 transition-colors"
-          >
+
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-indigo-500" onClick={() => onRescan(candidate.application_id)} title="Rescan resume">
             <RefreshCw size={14} />
-          </button>
-          <button
-            onClick={() => onDelete(candidate.application_id)}
-            title="Delete Candidate"
-            className="p-1.5 rounded-lg text-theme-muted hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-          >
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-rose-500" onClick={() => onDelete(candidate.application_id)} title="Delete candidate">
             <Trash2 size={14} />
-          </button>
-          <button
-            onClick={() => onViewResume(candidate.resume_file_path)}
-            title="View Resume"
-            className="p-1.5 rounded-lg text-theme-muted hover:text-theme-primary hover:bg-theme-primary/10 transition-colors"
-          >
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => onViewResume(candidate.resume_file_path)} title="View resume">
             <FileText size={14} />
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs ml-1"
             onClick={() => onSelect(candidate)}
             disabled={!isComplete}
-            className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-theme-raised border border-theme-border hover:border-theme-strong hover:text-theme-primary transition-all disabled:opacity-40 disabled:cursor-not-allowed ml-2"
           >
             Full Analysis <ChevronRight size={12} />
-          </button>
+          </Button>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
 /* ─── Analysis Drawer ─────────────────────────────────────────────────────── */
-function AnalysisDrawer({ 
-  candidateId, 
-  allCandidates, 
-  onClose, 
-  onRescan,
+function AnalysisDrawer({
+  candidateId,
+  allCandidates,
+  onClose,
   onViewResume
-}: { 
-  candidateId: string | null; 
-  allCandidates: any[]; 
-  onClose: () => void; 
-  onRescan: (id: string) => void;
+}: {
+  candidateId: string | null;
+  allCandidates: any[];
+  onClose: () => void;
   onViewResume: (path: string) => void;
 }) {
   const candidate = allCandidates.find(c => c.application_id === candidateId);
-  if (!candidate) return null;
 
-  const analysisArr = candidate.talent_analysis;
+  const analysisArr = candidate?.talent_analysis;
   const analysis = Array.isArray(analysisArr) ? analysisArr[0] : analysisArr;
-  
+
   const score = analysis?.scoring?.match_score || 0;
   const breakdown = analysis?.scoring?.breakdown || {};
-  
-  // Backward compatibility mapping
+
   const pros: string[] = analysis?.recommendations?.pros || [];
   const cons: string[] = analysis?.gap_analysis?.cons || [];
   const matchedSkills: string[] = (analysis?.recommendations?.matched_skills || []).filter((s: string) => s.toLowerCase() !== 'none');
   const missingSkills: string[] = (analysis?.gap_analysis?.missing_skills || []).filter((s: string) => s.toLowerCase() !== 'none');
   const questions: any[] = analysis?.interview_questions || [];
   const profile = analysis?.resume_profile || {};
-  
-  // Handle old structure vs new structure
+
   const summary = profile.summary || analysis?.gemma_raw_response?.summary || "No summary provided";
   const overview = profile.overview || summary;
   const education = profile.education || profile.education_match || "Education audit data pending.";
   const projects = profile.projects || "Project deep-dive pending.";
   const experience = profile.experience || "Experience tenure audit pending.";
   const achievements = profile.achievements || "Achievement quantification pending.";
-  
-  const [activeTab, setActiveTab] = useState<'overview' | 'skills' | 'details' | 'questions'>('overview');
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  if (!candidate) return null;
 
   return (
-    <>
-      <div 
-        className={cn(
-          "fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] transition-opacity",
-          candidateId ? "opacity-100" : "opacity-0 pointer-events-none"
-        )}
-        onClick={onClose}
-      />
-      
-      <motion.div
-        initial={{ x: '100%' }}
-        animate={{ x: candidateId ? 0 : '100%' }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="fixed top-0 right-0 h-screen w-full max-w-lg bg-theme-surface border-l border-theme-border shadow-2xl z-[101] flex flex-col overflow-hidden"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-theme-border flex-shrink-0 bg-theme-card">
+    <Sheet open={!!candidateId} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="right" className="w-full sm:max-w-lg p-0 gap-0">
+        <SheetHeader className="flex-row items-center justify-between gap-3 space-y-0 border-b border-border px-6 py-4">
           <div>
-            <p className="font-bold text-base text-theme-fg uppercase tracking-tight">Intelligence Audit Report</p>
-            <p className="text-[11px] text-theme-muted mt-0.5 font-mono uppercase tracking-widest">Gemma-4 Cognitive Output</p>
+            <SheetTitle className="text-base">Intelligence Audit Report</SheetTitle>
+            <SheetDescription className="text-xs">Gemma-4 Cognitive Output</SheetDescription>
           </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => onViewResume(candidate.resume_file_path)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-theme-primary text-white text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all"
-            >
-              <FileText size={12} /> View Resume
-            </button>
-            <button onClick={onClose} className="p-2 rounded-xl hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all">
-              <X size={20} />
-            </button>
-          </div>
-        </div>
+          <Button
+            type="button"
+            size="sm"
+            className="mr-8"
+            onClick={() => onViewResume(candidate.resume_file_path)}
+          >
+            <FileText size={12} /> View Resume
+          </Button>
+        </SheetHeader>
 
-        {/* Navigation Tabs */}
-        <div className="flex items-center px-6 py-2 border-b border-theme-border bg-theme-card gap-4">
-          {[
-            { id: 'overview', label: 'Overview', icon: Radar },
-            { id: 'skills', label: 'Skill Matrix', icon: BrainCircuit },
-            { id: 'details', label: 'Deep Dive', icon: FileText },
-            { id: 'questions', label: 'Interview', icon: Zap },
-          ].map((tab: any) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center gap-2 py-2 text-[10px] font-black uppercase tracking-widest transition-all border-b-2",
-                activeTab === tab.id ? "text-theme-primary border-theme-primary" : "text-theme-muted border-transparent hover:text-theme-fg"
-              )}
-            >
-              <tab.icon size={12} /> {tab.label}
-            </button>
-          ))}
-        </div>
+        <Tabs defaultValue="overview" className="flex flex-col flex-1 overflow-hidden">
+          <TabsList className="mx-6 mt-3 grid grid-cols-4">
+            <TabsTrigger value="overview" className="text-xs gap-1.5"><Radar size={12} /> Overview</TabsTrigger>
+            <TabsTrigger value="skills" className="text-xs gap-1.5"><BrainCircuit size={12} /> Skills</TabsTrigger>
+            <TabsTrigger value="details" className="text-xs gap-1.5"><FileText size={12} /> Deep Dive</TabsTrigger>
+            <TabsTrigger value="questions" className="text-xs gap-1.5"><Zap size={12} /> Interview</TabsTrigger>
+          </TabsList>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
-          
-          {activeTab === 'overview' && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              {/* Identity Hub */}
-              <div className="flex items-center gap-4 p-5 bg-theme-card border border-theme-border rounded-2xl shadow-sm">
-                <div className="h-16 w-16 rounded-2xl bg-theme-raised border border-theme-border flex items-center justify-center flex-shrink-0">
-                  <User size={32} className="text-theme-muted" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-xl text-theme-fg">{candidate.applicant_name}</p>
-                  <p className="text-xs text-theme-muted truncate">{candidate.applicant_email}</p>
-                  <div className="flex items-center gap-3 mt-3">
-                    <ScoreBadge score={score} />
-                    <span className="text-[10px] font-black px-3 py-1 rounded-lg bg-theme-primary/10 text-theme-primary border border-theme-primary/20 uppercase tracking-tighter">
-                      {analysis?.scoring?.decision || "Pending"}
-                    </span>
+          <div className="flex-1 overflow-y-auto p-6">
+            <TabsContent value="overview" className="space-y-6 mt-0">
+              <Card>
+                <CardContent className="flex items-center gap-4 p-5">
+                  <div className="h-16 w-16 rounded-xl bg-muted border border-border flex items-center justify-center flex-shrink-0">
+                    <User size={32} className="text-muted-foreground" />
                   </div>
-                </div>
-              </div>
-
-              {/* Match Breakdown Bars */}
-              <div className="p-5 bg-theme-card border border-theme-border rounded-2xl space-y-4">
-                <p className="section-label uppercase tracking-widest font-black text-[10px] text-theme-muted mb-4">Strategic Match Reliability</p>
-                {[
-                  { label: "Technical Skills", value: breakdown.skills || 0, color: "bg-indigo-500", weight: "40%" },
-                  { label: "Experience", value: breakdown.experience || 0, color: "bg-blue-500", weight: "30%" },
-                  { label: "Projects", value: breakdown.projects || 0, color: "bg-emerald-500", weight: "20%" },
-                  { label: "Education", value: breakdown.education || 0, color: "bg-amber-500", weight: "10%" },
-                ].map((item) => (
-                  <div key={item.label} className="space-y-1.5">
-                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
-                      <span className="text-theme-fg">{item.label} <span className="text-[8px] text-theme-muted">({item.weight})</span></span>
-                      <span className="text-theme-muted">{item.value}%</span>
-                    </div>
-                    <div className="h-1.5 bg-theme-raised rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${item.value}%` }}
-                        className={cn("h-full rounded-full", item.color)} 
-                      />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-xl text-foreground">{candidate.applicant_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{candidate.applicant_email}</p>
+                    <div className="flex items-center gap-3 mt-3">
+                      <ScoreBadge score={score} />
+                      <Badge variant="outline" className="text-primary border-primary/20 bg-primary/10 capitalize">
+                        {analysis?.scoring?.decision || "Pending"}
+                      </Badge>
                     </div>
                   </div>
-                ))}
-              </div>
+                </CardContent>
+              </Card>
 
-              {/* Summary */}
+              <Card>
+                <CardContent className="p-5 space-y-4">
+                  <p className="text-xs font-semibold text-muted-foreground">Strategic Match Reliability</p>
+                  {[
+                    { label: "Technical Skills", value: breakdown.skills || 0, color: "bg-indigo-500", weight: "40%" },
+                    { label: "Experience", value: breakdown.experience || 0, color: "bg-blue-500", weight: "30%" },
+                    { label: "Projects", value: breakdown.projects || 0, color: "bg-emerald-500", weight: "20%" },
+                    { label: "Education", value: breakdown.education || 0, color: "bg-amber-500", weight: "10%" },
+                  ].map((item) => (
+                    <div key={item.label} className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-medium text-foreground">{item.label} <span className="text-[10px] text-muted-foreground">({item.weight})</span></span>
+                        <span className="text-muted-foreground tabular-nums">{item.value}%</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${item.value}%` }}
+                          className={cn("h-full rounded-full", item.color)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
               <div className="space-y-2">
-                <p className="section-label text-theme-fg">Executive Summary</p>
-                <p className="text-sm text-theme-fg leading-relaxed bg-theme-card p-4 rounded-xl border border-theme-border italic">
-                  "{summary}"
+                <p className="text-xs font-semibold text-foreground">Executive Summary</p>
+                <p className="text-sm text-foreground leading-relaxed bg-muted/40 p-4 rounded-lg border border-border italic">
+                  &ldquo;{summary}&rdquo;
                 </p>
               </div>
 
-              {/* Pros / Cons Highlights */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl space-y-3">
-                  <p className="section-label text-emerald-500 flex items-center gap-2"><CheckCircle2 size={12} /> Strengths</p>
-                  <div className="space-y-2">
-                    {pros.length > 0 ? pros.map((p, i) => (
-                      <p key={i} className="text-[11px] text-theme-fg leading-snug">• {p}</p>
-                    )) : <p className="text-[11px] text-theme-muted italic">No specific strengths listed.</p>}
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-lg space-y-2">
+                  <p className="text-xs font-semibold text-emerald-600 flex items-center gap-2"><CheckCircle2 size={12} /> Strengths</p>
+                  {pros.length > 0 ? pros.map((p, i) => (
+                    <p key={i} className="text-xs text-foreground leading-snug">• {p}</p>
+                  )) : <p className="text-xs text-muted-foreground italic">No specific strengths listed.</p>}
                 </div>
-                <div className="p-4 bg-rose-500/5 border border-rose-500/20 rounded-2xl space-y-3">
-                  <p className="section-label text-rose-500 flex items-center gap-2"><AlertCircle size={12} /> Gaps</p>
-                  <div className="space-y-2">
-                    {cons.length > 0 ? cons.map((c, i) => (
-                      <p key={i} className="text-[11px] text-theme-fg leading-snug">• {c}</p>
-                    )) : <p className="text-[11px] text-theme-muted italic">No significant gaps identified.</p>}
-                  </div>
+                <div className="p-4 bg-rose-500/5 border border-rose-500/20 rounded-lg space-y-2">
+                  <p className="text-xs font-semibold text-rose-600 flex items-center gap-2"><AlertCircle size={12} /> Gaps</p>
+                  {cons.length > 0 ? cons.map((c, i) => (
+                    <p key={i} className="text-xs text-foreground leading-snug">• {c}</p>
+                  )) : <p className="text-xs text-muted-foreground italic">No significant gaps identified.</p>}
                 </div>
               </div>
-            </motion.div>
-          )}
+            </TabsContent>
 
-          {activeTab === 'skills' && (
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-               <div className="space-y-4">
-                  <p className="section-label flex items-center gap-2"><CheckCircle2 size={12} className="text-emerald-500" /> Matched Skills</p>
-                  <div className="flex flex-wrap gap-2">
-                    {matchedSkills.length > 0 ? matchedSkills.map(s => (
-                      <span key={s} className="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[10px] font-bold uppercase tracking-tight">{s}</span>
-                    )) : <p className="text-xs text-theme-muted italic">No specific skill matches identified.</p>}
-                  </div>
-               </div>
+            <TabsContent value="skills" className="space-y-6 mt-0">
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-foreground flex items-center gap-2"><CheckCircle2 size={12} className="text-emerald-500" /> Matched Skills</p>
+                <div className="flex flex-wrap gap-2">
+                  {matchedSkills.length > 0 ? matchedSkills.map(s => (
+                    <Badge key={s} variant="outline" className="text-emerald-600 border-emerald-500/20 bg-emerald-500/10">{s}</Badge>
+                  )) : <p className="text-xs text-muted-foreground italic">No specific skill matches identified.</p>}
+                </div>
+              </div>
 
-               <div className="space-y-4 pt-4 border-t border-theme-border">
-                  <p className="section-label flex items-center gap-2"><AlertCircle size={12} className="text-rose-500" /> Missing Critical Skills</p>
-                  <div className="flex flex-wrap gap-2">
-                    {missingSkills.length > 0 ? missingSkills.map(s => (
-                      <span key={s} className="px-3 py-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-lg text-[10px] font-bold uppercase tracking-tight">{s}</span>
-                    )) : <p className="text-xs text-theme-muted italic">No critical skill gaps found.</p>}
-                  </div>
-               </div>
-            </motion.div>
-          )}
+              <Separator />
 
-          {activeTab === 'details' && (
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-foreground flex items-center gap-2"><AlertCircle size={12} className="text-rose-500" /> Missing Critical Skills</p>
+                <div className="flex flex-wrap gap-2">
+                  {missingSkills.length > 0 ? missingSkills.map(s => (
+                    <Badge key={s} variant="outline" className="text-rose-600 border-rose-500/20 bg-rose-500/10">{s}</Badge>
+                  )) : <p className="text-xs text-muted-foreground italic">No critical skill gaps found.</p>}
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="details" className="space-y-6 mt-0">
               {[
                 { label: "Professional Overview", value: overview, icon: User },
                 { label: "Education & Academy", value: education, icon: Microscope },
@@ -539,59 +498,59 @@ function AnalysisDrawer({
                 { label: "Work Experience", value: experience, icon: FileText },
                 { label: "Impact & Achievements", value: achievements, icon: Radar },
               ].map((item) => (
-                <div key={item.label} className="space-y-3">
-                  <p className="section-label flex items-center gap-2"><item.icon size={12} /> {item.label}</p>
-                  <div className="p-4 bg-theme-card border border-theme-border rounded-xl">
-                    <p className="text-xs text-theme-fg leading-relaxed whitespace-pre-wrap">
+                <div key={item.label} className="space-y-2">
+                  <p className="text-xs font-semibold text-foreground flex items-center gap-2"><item.icon size={12} /> {item.label}</p>
+                  <div className="p-4 bg-muted/40 border border-border rounded-lg">
+                    <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
                       {item.value || "No detailed data extracted for this section."}
                     </p>
                   </div>
                 </div>
               ))}
-            </motion.div>
-          )}
+            </TabsContent>
 
-          {activeTab === 'questions' && (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-              <p className="section-label flex items-center gap-2 text-theme-primary">
-                <BrainCircuit size={14} /> AI-Generated Tricky Interview Questions
+            <TabsContent value="questions" className="space-y-4 mt-0">
+              <p className="text-xs font-semibold text-primary flex items-center gap-2">
+                <BrainCircuit size={14} /> AI-Generated Interview Questions
               </p>
-              <p className="text-[10px] text-theme-muted uppercase tracking-widest bg-theme-primary/5 p-3 rounded-lg border border-theme-primary/10">
-                These questions are specifically tailored by Gemma to probe weaknesses and verify complex claims in this resume.
+              <p className="text-xs text-muted-foreground bg-primary/5 p-3 rounded-lg border border-primary/10">
+                These questions are tailored by Gemma to probe weaknesses and verify complex claims in this resume.
               </p>
-              <div className="space-y-4 mt-6">
+              <div className="space-y-4">
                 {questions.length > 0 ? questions.map((q: any, i: number) => (
-                  <div key={i} className="p-5 bg-theme-card border border-theme-border rounded-2xl space-y-3 hover:border-theme-primary/30 transition-all group">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-theme-primary uppercase tracking-widest">TRICKY QUESTION {i + 1}</span>
-                      <div className="h-6 w-6 rounded-full bg-theme-raised flex items-center justify-center text-theme-muted group-hover:bg-theme-primary group-hover:text-white transition-colors">
-                        <Zap size={10} />
+                  <Card key={i} className="group transition-colors hover:border-primary/30">
+                    <CardContent className="p-5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-primary">Tricky Question {i + 1}</span>
+                        <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                          <Zap size={10} />
+                        </div>
                       </div>
-                    </div>
-                    <p className="text-sm font-bold text-theme-fg leading-snug">{q.question}</p>
-                    <div className="pt-3 border-t border-theme-border">
-                      <p className="text-[10px] text-theme-muted italic"><span className="font-bold text-theme-fg uppercase not-italic mr-2">Audit Rationale:</span> {q.reason}</p>
-                    </div>
-                  </div>
+                      <p className="text-sm font-medium text-foreground leading-snug">{q.question}</p>
+                      <Separator />
+                      <p className="text-xs text-muted-foreground italic">
+                        <span className="font-semibold text-foreground not-italic mr-2">Audit Rationale:</span> {q.reason}
+                      </p>
+                    </CardContent>
+                  </Card>
                 )) : candidate?.processing_status === "completed" ? (
                   <div className="py-20 text-center space-y-3">
-                    <BrainCircuit size={32} className="mx-auto text-theme-muted opacity-30" />
-                    <p className="text-xs text-theme-muted">No interview questions were generated.</p>
-                    <p className="text-[10px] text-theme-muted/60">Use the Rescan button to regenerate a full analysis.</p>
+                    <BrainCircuit size={32} className="mx-auto text-muted-foreground opacity-30" />
+                    <p className="text-xs text-muted-foreground">No interview questions were generated.</p>
+                    <p className="text-[10px] text-muted-foreground/60">Use the Rescan button to regenerate a full analysis.</p>
                   </div>
                 ) : (
                   <div className="py-20 text-center space-y-3">
-                    <Loader2 size={32} className="mx-auto text-theme-muted animate-spin" />
-                    <p className="text-xs text-theme-muted">Generating intelligence questions...</p>
+                    <Loader2 size={32} className="mx-auto text-muted-foreground animate-spin" />
+                    <p className="text-xs text-muted-foreground">Generating intelligence questions…</p>
                   </div>
                 )}
               </div>
-            </motion.div>
-          )}
-
-        </div>
-      </motion.div>
-    </>
+            </TabsContent>
+          </div>
+        </Tabs>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -606,20 +565,15 @@ function ResumePreview({ path, onClose }: { path: string | null; onClose: () => 
     }
   }, [path]);
 
-  if (!path || !url) return null;
-
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-10 bg-black/80 backdrop-blur-md">
-      <div className="relative w-full h-full max-w-5xl bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 bg-theme-card border-b border-theme-border">
-          <p className="text-sm font-bold text-theme-fg uppercase tracking-widest">Resume Document Preview</p>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all">
-            <X size={24} />
-          </button>
-        </div>
-        <iframe src={url} className="w-full flex-1" />
-      </div>
-    </div>
+    <Dialog open={!!path} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-5xl h-[85vh] !grid-rows-[auto_1fr] !grid p-0 gap-0 overflow-hidden">
+        <DialogHeader className="border-b border-border px-6 py-4">
+          <DialogTitle className="text-sm">Resume Document Preview</DialogTitle>
+        </DialogHeader>
+        {url && <iframe src={url} className="w-full h-full" />}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -635,7 +589,6 @@ export default function ATSScannerPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [resumePath, setResumePath] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const { showToast } = useToast();
 
   const cancelScan = () => {
     abortRef.current?.abort();
@@ -659,7 +612,7 @@ export default function ATSScannerPage() {
         .select(`*, applications(applicant_name)`)
         .order("created_at", { ascending: false })
         .limit(5);
-      
+
       if (data) {
         const history = data.map(item => {
           const metrics = item.resume_profile?.metrics || {};
@@ -688,8 +641,8 @@ export default function ATSScannerPage() {
 
   const handleDecision = async (id: string, decision: 'accepted' | 'rejected') => {
     try {
-      showToast(`${decision.toUpperCase()} - Processing automation...`, "info");
-      
+      toast.info(`${decision.toUpperCase()} — processing automation…`);
+
       const res = await fetch("/api/admin/recruitment/decision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -699,17 +652,16 @@ export default function ATSScannerPage() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
 
-      showToast(`Candidate ${decision}. Email sent!`, "success");
+      toast.success(`Candidate ${decision}. Email sent!`);
       fetchApplications();
     } catch (err: any) {
-      showToast(err.message, "error");
+      toast.error(err.message);
     }
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedCluster) return;
-    // Reset input so same file can be re-uploaded
     e.target.value = "";
 
     setScanning(true);
@@ -763,16 +715,16 @@ export default function ATSScannerPage() {
 
       await fetchApplications();
       setSelectedId(generatedAppId);
-      showToast("Intelligence report generated", "success");
+      toast.success("Intelligence report generated");
     } catch (err: any) {
       if (err.name === "AbortError") {
         setLogs(prev => [...prev, "CANCELLED: Scan aborted by user."]);
-        showToast("Scan cancelled", "info");
+        toast.info("Scan cancelled");
         await supabase.from("applications").delete().eq("application_id", generatedAppId);
         await fetchApplications();
       } else {
         setLogs(prev => [...prev, "ERROR: " + err.message]);
-        showToast(err.message, "error");
+        toast.error(err.message);
         await supabase.from("applications").delete().eq("application_id", generatedAppId);
       }
     } finally {
@@ -817,7 +769,7 @@ export default function ATSScannerPage() {
       if (!pending || pending.length === 0) {
         setLogs(prev => [...prev, "INFO: No pending candidates with resume text found.", "SUCCESS: Queue is clear."]);
         setProgress(100);
-        showToast("No pending candidates to process", "info");
+        toast.info("No pending candidates to process");
         return;
       }
 
@@ -849,22 +801,22 @@ export default function ATSScannerPage() {
 
       if (abort.signal.aborted) {
         setLogs(prev => [...prev, "CANCELLED: Batch scan aborted by user."]);
-        showToast("Scan cancelled", "info");
+        toast.info("Scan cancelled");
       } else {
         setProgress(100);
         setLogs(prev => [...prev, "DATA: Synchronizing intelligence reports…"]);
-        showToast(`Batch scan complete — ${pending.length} candidate(s) processed`, "success");
+        toast.success(`Batch scan complete — ${pending.length} candidate(s) processed`);
       }
 
       await fetchApplications();
     } catch (err: any) {
       if (err.name === "AbortError") {
         setLogs(prev => [...prev, "CANCELLED: Scan aborted by user."]);
-        showToast("Scan cancelled", "info");
+        toast.info("Scan cancelled");
         await fetchApplications();
       } else {
         setLogs(prev => [...prev, "ERROR: " + err.message]);
-        showToast(err.message, "error");
+        toast.error(err.message);
       }
     } finally {
       abortRef.current = null;
@@ -877,9 +829,9 @@ export default function ATSScannerPage() {
     try {
       await supabase.from("applications").update({ processing_status: "failed" }).eq("application_id", appId);
       await fetchApplications();
-      showToast("Scan cancelled — hit Rescan to retry", "info");
+      toast.info("Scan cancelled — hit Rescan to retry");
     } catch (err: any) {
-      showToast(err.message, "error");
+      toast.error(err.message);
     }
   };
 
@@ -888,23 +840,21 @@ export default function ATSScannerPage() {
     try {
       const { error } = await supabase.from("applications").delete().eq("application_id", appId);
       if (error) throw error;
-      showToast("Candidate deleted", "success");
+      toast.success("Candidate deleted");
       fetchApplications();
     } catch (err: any) {
-      showToast(err.message, "error");
+      toast.error(err.message);
     }
   };
 
   const handleRescan = async (appId: string) => {
     try {
-      showToast("Re-analysis initiated…", "info");
+      toast.info("Re-analysis initiated…");
 
-      // Clear old analysis and mark as pending so the card shows the scanning overlay
       await supabase.from("talent_analysis").delete().eq("application_id", appId);
       await supabase.from("applications").update({ processing_status: "pending" }).eq("application_id", appId);
       await fetchApplications();
 
-      // Call AI directly — no PM2 polling
       const res = await fetch("/api/admin/recruitment/process-application", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -916,10 +866,9 @@ export default function ATSScannerPage() {
 
       await fetchApplications();
       setSelectedId(appId);
-      showToast("Re-analysis complete", "success");
+      toast.success("Re-analysis complete");
     } catch (err: any) {
-      showToast(err.message, "error");
-      // Reset status back so user can retry
+      toast.error(err.message);
       await supabase.from("applications").update({ processing_status: "failed" }).eq("application_id", appId);
       await fetchApplications();
     }
@@ -939,88 +888,77 @@ export default function ATSScannerPage() {
       actions={
         <div className="flex items-center gap-2">
           {scanning && (
-            <button
-              onClick={cancelScan}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20 text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all"
-            >
+            <Button variant="outline" size="sm" className="text-rose-500 border-rose-500/30 hover:bg-rose-500 hover:text-white" onClick={cancelScan}>
               <X size={13} /> Cancel
-            </button>
+            </Button>
           )}
-          <button
-            onClick={startScan}
-            disabled={scanning}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {scanning
-              ? <Loader2 size={13} className="animate-spin" />
-              : <Zap size={13} fill="currentColor" />
-            }
+          <Button size="sm" onClick={startScan} disabled={scanning}>
+            {scanning ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} fill="currentColor" />}
             {scanning ? "Scanning…" : "Start Batch Scan"}
-          </button>
+          </Button>
         </div>
       }
     >
       <div className="space-y-6">
-
         {/* Status bar */}
-        <div className="flex items-center justify-between p-4 bg-theme-card border border-theme-border rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-theme-primary/10 border border-theme-primary/20 flex items-center justify-center">
-              <Scan size={16} className="text-theme-primary" />
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <Scan size={16} className="text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">ATS Engine Online</p>
+                <p className="text-xs text-muted-foreground">{candidates.length} candidates loaded · real-time sync active</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-theme-fg">ATS Engine Online</p>
-              <p className="text-[11px] text-theme-muted">{candidates.length} candidates loaded · real-time sync active</p>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-medium text-emerald-500">Live</span>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[11px] font-medium text-emerald-500">Live</span>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-
           {/* Left: upload + terminal */}
           <div className="lg:col-span-2 flex flex-col gap-4">
-
-            {/* Cluster Selection */}
-            <div className="p-4 bg-theme-card border border-theme-border rounded-xl space-y-3">
-              <label className="text-[11px] font-semibold text-theme-muted uppercase tracking-wider block">Target Job Cluster</label>
-              <select
-                value={selectedCluster}
-                onChange={(e) => setSelectedCluster(e.target.value)}
-                className="w-full bg-theme-raised border border-theme-border rounded-lg px-3 py-2 text-sm text-theme-fg focus:outline-none focus:border-theme-primary transition-colors"
-              >
-                <option value="">-- Select a Job Cluster --</option>
-                {jobClusters.map(c => (
-                  <option key={c.cluster_id} value={c.cluster_id}>
-                    {c.job_title_variants?.[0] || c.cluster_id}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Cluster selection */}
+            <Card>
+              <CardContent className="p-4 space-y-2">
+                <Label className="text-xs">Target Job Cluster</Label>
+                <Select value={selectedCluster || undefined} onValueChange={setSelectedCluster}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select a job cluster…" /></SelectTrigger>
+                  <SelectContent>
+                    {jobClusters.map(c => (
+                      <SelectItem key={c.cluster_id} value={c.cluster_id}>
+                        {c.job_title_variants?.[0] || c.cluster_id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
 
             {/* Upload zone */}
             <div className={cn(
-              "relative bg-theme-card border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-4 text-center transition-all group overflow-hidden",
-              selectedCluster ? "border-theme-border hover:border-theme-primary/40 hover:bg-theme-raised/50 cursor-pointer" : "border-theme-border/50 opacity-50 cursor-not-allowed"
+              "relative bg-card border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-4 text-center transition-colors group overflow-hidden",
+              selectedCluster ? "border-border hover:border-primary/40 hover:bg-muted/50 cursor-pointer" : "border-border/50 opacity-50 cursor-not-allowed"
             )}>
               <div className={cn(
-                "h-14 w-14 rounded-xl border flex items-center justify-center transition-all",
-                selectedCluster ? "bg-theme-raised border-theme-border group-hover:border-theme-primary/30 group-hover:bg-theme-primary/5" : "bg-theme-raised/50 border-theme-border/50"
+                "h-14 w-14 rounded-xl border flex items-center justify-center transition-colors",
+                selectedCluster ? "bg-muted border-border group-hover:border-primary/30 group-hover:bg-primary/5" : "bg-muted/50 border-border/50"
               )}>
-                <Upload size={24} className={cn("transition-colors", selectedCluster ? "text-theme-muted group-hover:text-theme-primary" : "text-theme-muted/50")} />
+                <Upload size={24} className={cn("transition-colors", selectedCluster ? "text-muted-foreground group-hover:text-primary" : "text-muted-foreground/50")} />
               </div>
               <div>
-                <p className="font-semibold text-sm text-theme-fg">
+                <p className="font-semibold text-sm text-foreground">
                   {selectedCluster ? "Drop resumes here" : "Select a cluster first"}
                 </p>
-                <p className="text-[11px] text-theme-muted mt-1">PDF, DOCX · max 10MB each</p>
+                <p className="text-xs text-muted-foreground mt-1">PDF, DOCX · max 10MB each</p>
               </div>
-              <button disabled={!selectedCluster} className="text-[11px] font-semibold px-4 py-2 rounded-lg bg-theme-raised border border-theme-border hover:border-theme-strong hover:text-theme-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed relative z-10">
+              <Button type="button" variant="outline" size="sm" disabled={!selectedCluster} className="relative z-10">
                 Browse Files
-              </button>
+              </Button>
               {selectedCluster && (
                 <input
                   type="file"
@@ -1031,28 +969,22 @@ export default function ATSScannerPage() {
               )}
             </div>
 
-            {/* Progress bar — shown when scanning */}
+            {/* Progress */}
             {scanning && (
-              <div className="p-4 bg-theme-card border border-theme-border rounded-xl space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-semibold text-theme-fg">Scan progress</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-medium text-theme-muted tabular-nums">{Math.round(progress)}%</span>
-                    <button
-                      onClick={cancelScan}
-                      className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-500 border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all"
-                    >
-                      <X size={10} /> Stop
-                    </button>
+              <Card>
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-foreground">Scan progress</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground tabular-nums">{Math.round(progress)}%</span>
+                      <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 text-rose-500 border-rose-500/30 hover:bg-rose-500 hover:text-white" onClick={cancelScan}>
+                        <X size={10} /> Stop
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <div className="h-1.5 bg-theme-raised rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-theme-primary rounded-full transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
+                  <Progress value={progress} className="h-1.5" />
+                </CardContent>
+              </Card>
             )}
 
             {/* Terminal */}
@@ -1063,29 +995,27 @@ export default function ATSScannerPage() {
 
           {/* Right: candidate list */}
           <div className="lg:col-span-3 flex flex-col gap-4">
-            {/* Search + heading */}
             <div className="flex items-center gap-3">
               <div className="relative flex-1">
-                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
-                <input
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search candidates…"
-                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-theme-border bg-theme-surface text-sm text-theme-fg placeholder:text-theme-muted focus:outline-none focus:border-theme-strong transition-colors"
+                  className="pl-9"
                 />
               </div>
-              <span className="text-[11px] text-theme-muted whitespace-nowrap">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
                 {filtered.length} result{filtered.length !== 1 ? "s" : ""}
               </span>
             </div>
 
-            {/* Cards */}
-            <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-22rem)] scrollbar-hide">
+            <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-22rem)]">
               {filtered.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
-                  <Microscope size={32} className="text-theme-muted opacity-30" />
-                  <p className="text-sm font-semibold text-theme-fg">No candidates found</p>
-                  <p className="text-[11px] text-theme-muted">Run a batch scan or adjust your search.</p>
+                <div className="flex flex-col items-center justify-center py-20 gap-3 text-center rounded-xl border border-dashed border-border bg-card">
+                  <Microscope size={32} className="text-muted-foreground opacity-40" />
+                  <p className="text-sm font-semibold text-foreground">No candidates found</p>
+                  <p className="text-xs text-muted-foreground">Run a batch scan or adjust your search.</p>
                 </div>
               ) : (
                 filtered.map((c) => (
@@ -1107,29 +1037,15 @@ export default function ATSScannerPage() {
       </div>
 
       {/* Analysis drawer */}
-      <AnimatePresence>
-        {selectedId && (
-          <AnalysisDrawer 
-            key="analysis-drawer" 
-            candidateId={selectedId} 
-            allCandidates={candidates}
-            onClose={() => setSelectedId(null)} 
-            onRescan={handleRescan}
-            onViewResume={(path) => setResumePath(path)}
-          />
-        )}
-      </AnimatePresence>
+      <AnalysisDrawer
+        candidateId={selectedId}
+        allCandidates={candidates}
+        onClose={() => setSelectedId(null)}
+        onViewResume={(path) => setResumePath(path)}
+      />
 
       {/* Resume Preview */}
-      <AnimatePresence>
-        {resumePath && (
-          <ResumePreview 
-            key="resume-preview"
-            path={resumePath} 
-            onClose={() => setResumePath(null)} 
-          />
-        )}
-      </AnimatePresence>
+      <ResumePreview path={resumePath} onClose={() => setResumePath(null)} />
     </DashboardShell>
   );
 }

@@ -49,6 +49,58 @@ export async function syncDomainFromZoho(): Promise<string | null> {
   return org?.org_domain || null;
 }
 
+// ── License check: is a Zoho mailbox seat available? ─────────────────────────
+export interface MailboxLicense {
+  used:      number | null;
+  allowed:   number | null;
+  available: number | null;
+  canCreate: boolean;
+  source:    "zoho" | "unknown" | "not_connected";
+}
+
+export async function checkMailboxLicense(): Promise<MailboxLicense> {
+  const org   = await getOrgConfig();
+  const token = await getActiveToken();
+  const orgId = org?.org_id || org?.zoid;
+
+  if (!token || !orgId) {
+    // Can't verify — don't hard-block; the actual create will surface a Zoho error.
+    return { used: null, allowed: null, available: null, canCreate: true, source: "not_connected" };
+  }
+
+  try {
+    // Used seats = current org accounts
+    const accRes  = await fetch(`${ZOHO_MAIL_API}/organization/${orgId}/accounts`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    });
+    const accJson = await accRes.json();
+    const accounts: any[] = accJson?.data || [];
+    const used = Array.isArray(accounts) ? accounts.length : null;
+
+    // Allowed seats — field name varies across Zoho plans, so probe several.
+    let allowed: number | null = null;
+    try {
+      const orgRes  = await fetch(`${ZOHO_MAIL_API}/organization/${orgId}`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      });
+      const orgJson = await orgRes.json();
+      const d: any  = orgJson?.data || {};
+      const cand    = d.allowedUsers ?? d.allowedAccounts ?? d.noOfSubscription
+                   ?? d.licenseCount ?? d.planUserLimit ?? d.userLimit ?? null;
+      allowed = typeof cand === "number" ? cand : (cand != null ? parseInt(String(cand)) : null);
+      if (Number.isNaN(allowed as number)) allowed = null;
+    } catch {}
+
+    const available = allowed != null && used != null ? Math.max(0, allowed - used) : null;
+    // Only block when we can confidently say seats are full.
+    const canCreate = available == null ? true : available > 0;
+
+    return { used, allowed, available, canCreate, source: "zoho" };
+  } catch {
+    return { used: null, allowed: null, available: null, canCreate: true, source: "unknown" };
+  }
+}
+
 // ── Build email address from full name + domain ───────────────────────────────
 function buildEmail(name: string, domain: string): string {
   const parts = name.trim().toLowerCase().split(/\s+/);
@@ -220,14 +272,14 @@ export async function provisionZohoMailbox(params: {
     );
   }
 
-  // ── Audit log ────────────────────────────────────────────────────────────────
+  // ── Audit log (non-blocking) ──────────────────────────────────────────────────
   await supabase.from("audit_logs").insert({
     user_id:     params.employeeId,
     action:      "mailbox_provisioned",
     target_type: "mailbox",
     target_id:   zohoEmail,
     metadata:    { zoho_user_id: zohoUserId, zoho_account_id: zohoAccountId, domain },
-  }).catch(() => {});
+  }).then(undefined, () => {});
 
   return { zoho_email: zohoEmail, zoho_user_id: zohoUserId, zoho_account_id: zohoAccountId };
 }

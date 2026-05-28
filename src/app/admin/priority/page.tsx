@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge, statusBadgeVariant } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Badge, statusBadgeVariant } from "@/components/ui/BadgeLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import axios from "axios";
 import {

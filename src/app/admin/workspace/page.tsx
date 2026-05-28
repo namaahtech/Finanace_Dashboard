@@ -7,14 +7,25 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import {
   BookOpen, Table2, Presentation, StickyNote, Plus, Clock,
-  Pin, LayoutTemplate, ArrowRight, FileText, ChevronRight,
-  Sparkles, Folder, Loader2
+  Pin, LayoutTemplate, Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import axios from "axios";
 import { supabase } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 dayjs.extend(relativeTime);
 
@@ -185,28 +196,30 @@ export default function WorkspaceHubPage() {
           {(Object.keys(TYPE_CONFIG) as (keyof typeof TYPE_CONFIG)[]).map((type) => {
             const cfg = TYPE_CONFIG[type];
             return (
-              <div key={type} className="group relative bg-theme-card border border-theme-border rounded-xl p-4 flex flex-col gap-3 hover:border-theme-strong hover:shadow-sm transition-all cursor-pointer">
-                <Link href={cfg.href} className="absolute inset-0 z-10 rounded-xl" />
+              <Card key={type} className="group relative gap-3 p-4 hover:border-foreground/20 hover:shadow-sm transition-all cursor-pointer">
+                <Link href={cfg.href} className="absolute inset-0 z-10 rounded-xl" aria-label={cfg.label} />
                 <div className="flex items-start justify-between">
                   <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0", cfg.bg)}>
                     {cfg.emoji}
                   </div>
-                  <span className={cn("text-sm font-black tabular-nums", cfg.text)}>
-                    {loading ? "—" : counts[type]}
+                  <span className={cn("text-base font-semibold tabular-nums", cfg.text)}>
+                    {loading ? <Skeleton className="h-5 w-6" /> : counts[type]}
                   </span>
                 </div>
                 <div>
-                  <p className="font-semibold text-sm text-theme-fg">{cfg.label}</p>
-                  <p className="text-[11px] text-theme-muted mt-0.5 leading-snug">{cfg.desc}</p>
+                  <p className="font-semibold text-sm text-foreground">{cfg.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{cfg.desc}</p>
                 </div>
-                <button
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={(e) => { e.preventDefault(); createNew(type); }}
                   disabled={creating}
-                  className={cn("relative z-20 flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg w-fit transition-all hover:opacity-80", cfg.bg, cfg.text)}
+                  className={cn("relative z-20 w-fit", cfg.bg, cfg.text, "hover:opacity-80")}
                 >
-                  <Plus size={11} /> New
-                </button>
-              </div>
+                  <Plus /> New
+                </Button>
+              </Card>
             );
           })}
         </div>
@@ -214,21 +227,26 @@ export default function WorkspaceHubPage() {
         {/* Pinned */}
         {pinned.length > 0 && (
           <div className="space-y-3">
-            <p className="section-label flex items-center gap-2"><Pin size={10} fill="currentColor" /> Pinned · {pinned.length}</p>
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Pin size={11} fill="currentColor" /> Pinned · {pinned.length}
+            </p>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {pinned.map((item) => {
                 const cfg = TYPE_CONFIG[item.type];
                 return (
-                  <Link key={item.id} href={itemHref(item)} target="_blank"
-                    className="group flex items-start gap-3 bg-theme-card border border-theme-border rounded-xl p-3.5 hover:border-theme-strong hover:shadow-sm transition-all">
-                    <span className="text-lg flex-shrink-0 mt-0.5">{item.icon || cfg.emoji}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-theme-fg truncate group-hover:text-theme-primary transition-colors">{item.title}</p>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full", cfg.bg, cfg.text)}>{cfg.label.replace(/s$/, "")}</span>
-                        <span className="text-[10px] text-theme-muted">{dayjs(item.last_edited_at).fromNow()}</span>
+                  <Link key={item.id} href={itemHref(item)} target="_blank" className="group block">
+                    <Card className="p-3.5 gap-0 hover:border-foreground/20 hover:shadow-sm transition-all flex-row items-start">
+                      <span className="text-lg flex-shrink-0 mt-0.5 mr-3">{item.icon || cfg.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">{item.title}</p>
+                        <div className="flex items-center justify-between mt-1.5 gap-2">
+                          <Badge variant="secondary" className={cn("text-[9px] px-1.5 py-0 font-medium", cfg.bg, cfg.text, "border-transparent")}>
+                            {cfg.label.replace(/s$/, "")}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">{dayjs(item.last_edited_at).fromNow()}</span>
+                        </div>
                       </div>
-                    </div>
+                    </Card>
                   </Link>
                 );
               })}
@@ -238,71 +256,98 @@ export default function WorkspaceHubPage() {
 
         {/* Recent */}
         <div className="space-y-3">
-          <p className="section-label flex items-center gap-2"><Clock size={10} /> Recent</p>
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <Clock size={11} /> Recent
+          </p>
 
           {loading ? (
-            <div className="space-y-2">
-              {[...Array(5)].map((_, i) => <div key={i} className="h-12 rounded-xl bg-theme-card border border-theme-border animate-pulse" />)}
-            </div>
+            <Card className="overflow-hidden p-0 gap-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="pl-4">Name</TableHead>
+                    <TableHead className="hidden md:table-cell">Type</TableHead>
+                    <TableHead className="hidden lg:table-cell">Owner</TableHead>
+                    <TableHead className="pr-4 text-right">Edited</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="pl-4">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-4 w-4" />
+                          <Skeleton className="h-3 w-48" />
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-16 rounded-full" /></TableCell>
+                      <TableCell className="hidden lg:table-cell"><Skeleton className="h-3 w-24" /></TableCell>
+                      <TableCell className="pr-4 text-right"><Skeleton className="h-3 w-16 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
           ) : recent.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-4 text-center bg-theme-card border border-dashed border-theme-border rounded-xl">
-              <LayoutTemplate size={32} className="text-theme-muted opacity-30" />
+            <Card className="border-dashed py-12 items-center justify-center text-center gap-3">
+              <LayoutTemplate size={28} className="text-muted-foreground opacity-30 mx-auto" />
               <div>
-                <p className="font-semibold text-sm text-theme-fg">Workspace is empty</p>
-                <p className="text-xs text-theme-muted mt-1">Create your first doc, sheet, presentation or note.</p>
+                <p className="font-semibold text-sm text-foreground">Workspace is empty</p>
+                <p className="text-xs text-muted-foreground mt-1">Create your first doc, sheet, presentation or note.</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-center">
                 {(Object.keys(TYPE_CONFIG) as (keyof typeof TYPE_CONFIG)[]).map((type) => {
                   const cfg = TYPE_CONFIG[type];
                   return (
-                    <button key={type} onClick={() => createNew(type)}
-                      className={cn("text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5", cfg.bg, cfg.text)}>
-                      {cfg.emoji} {cfg.label.replace(/s$/, "")}
-                    </button>
+                    <Button key={type} size="sm" variant="outline" onClick={() => createNew(type)}>
+                      <span>{cfg.emoji}</span> {cfg.label.replace(/s$/, "")}
+                    </Button>
                   );
                 })}
               </div>
-            </div>
+            </Card>
           ) : (
-            <div className="bg-theme-card border border-theme-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-theme-border bg-theme-raised/60">
-                    <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-theme-muted w-1/2">Name</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-theme-muted hidden md:table-cell">Type</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-theme-muted hidden lg:table-cell">Owner</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-theme-muted">Edited</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-theme-border">
+            <Card className="overflow-hidden p-0 gap-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="pl-4">Name</TableHead>
+                    <TableHead className="hidden md:table-cell">Type</TableHead>
+                    <TableHead className="hidden lg:table-cell">Owner</TableHead>
+                    <TableHead className="pr-4 text-right">Edited</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {recent.map((item) => {
                     const cfg = TYPE_CONFIG[item.type];
                     return (
-                      <tr key={item.id} className="hover:bg-theme-raised/50 transition-colors group cursor-pointer">
-                        <td className="px-4 py-3">
+                      <TableRow key={item.id} className="cursor-pointer group">
+                        <TableCell className="pl-4">
                           <Link href={itemHref(item)} target="_blank"
                             onClick={() => { setNavigatingId(item.id); setTimeout(() => setNavigatingId(null), 2000); }}
                             className="flex items-center gap-3">
                             <span className="flex items-center justify-center w-5 flex-shrink-0">
                               {navigatingId === item.id
-                                ? <Loader2 size={14} className="animate-spin text-theme-primary" />
+                                ? <Loader2 size={14} className="animate-spin text-primary" />
                                 : <span className="text-base leading-none">{item.icon || cfg.emoji}</span>}
                             </span>
-                            <span className="font-medium text-sm text-theme-fg truncate group-hover:text-theme-primary transition-colors">{item.title}</span>
+                            <span className="font-medium text-sm text-foreground truncate group-hover:text-primary transition-colors">{item.title}</span>
                             {item.is_pinned && <Pin size={10} className="text-amber-500 flex-shrink-0" fill="currentColor" />}
                           </Link>
-                        </td>
-                        <td className="px-4 py-3 hidden md:table-cell">
-                          <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full", cfg.bg, cfg.text)}>{cfg.label.replace(/s$/, "")}</span>
-                        </td>
-                        <td className="px-4 py-3 hidden lg:table-cell text-xs text-theme-muted">{item.owner?.name ?? "—"}</td>
-                        <td className="px-4 py-3 text-right text-xs text-theme-muted">{dayjs(item.last_edited_at).fromNow()}</td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <Badge variant="secondary" className={cn("text-[10px] font-medium", cfg.bg, cfg.text, "border-transparent")}>
+                            {cfg.label.replace(/s$/, "")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{item.owner?.name ?? "—"}</TableCell>
+                        <TableCell className="pr-4 text-right text-xs text-muted-foreground">{dayjs(item.last_edited_at).fromNow()}</TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Card>
           )}
         </div>
       </div>

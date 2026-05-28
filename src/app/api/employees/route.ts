@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { provisionZohoMailbox, generateTempPassword } from "@/lib/zoho-provisioning";
+import { provisionZohoMailbox, generateTempPassword, checkMailboxLicense } from "@/lib/zoho-provisioning";
 
 export async function GET() {
   const supabase = getSupabaseAdmin();
@@ -28,6 +28,16 @@ export async function POST(req: NextRequest) {
 
     if (!name || !email || !role) {
       return NextResponse.json({ error: "name, email, and role are required." }, { status: 400 });
+    }
+
+    // ── 0. License gate ────────────────────────────────────────────────────────
+    // Don't create an employee/auth user if there's no Zoho mailbox seat to give them.
+    const license = await checkMailboxLicense();
+    if (!license.canCreate) {
+      return NextResponse.json({
+        error: `No Zoho mailbox licenses available (${license.used ?? "?"}/${license.allowed ?? "?"} seats used). Add seats in Zoho before onboarding a new employee.`,
+        license,
+      }, { status: 402 });
     }
 
     // ── 1. Generate employee_id ───────────────────────────────────────────────

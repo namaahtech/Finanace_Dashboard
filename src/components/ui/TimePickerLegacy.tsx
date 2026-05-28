@@ -105,7 +105,7 @@ export function TimePicker({ value, onChange, disabled = false }: TimePickerProp
           disabled={disabled}
           className={cn(
             "w-full h-11 px-3 rounded-lg border transition-all flex items-center justify-between",
-            "font-mono text-sm font-semibold",
+            "tabular-nums text-sm font-semibold",
             disabled
               ? "bg-theme-page/50 border-theme-border/50 text-theme-muted cursor-not-allowed"
               : "bg-theme-page border-theme-border hover:border-theme-primary/50 text-theme-fg",

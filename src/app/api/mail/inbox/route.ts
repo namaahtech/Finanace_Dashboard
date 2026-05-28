@@ -27,14 +27,28 @@ export async function GET(req: NextRequest) {
   if (sync || !cached?.length) {
     const token = await getActiveToken();
     if (token) {
-      const { data: config } = await supabase
-        .from("zoho_config")
-        .select("admin_account_id")
-        .maybeSingle();
+      // Option A: read the logged-in employee's OWN mailbox via the org token.
+      // Resolve their zoho_account_id; fall back to the org admin account only if unset.
+      let accountId: string | null = null;
+      if (employeeId) {
+        const { data: emp } = await supabase
+          .from("employees")
+          .select("zoho_account_id")
+          .eq("id", employeeId)
+          .maybeSingle();
+        accountId = emp?.zoho_account_id || null;
+      }
+      if (!accountId) {
+        const { data: config } = await supabase
+          .from("zoho_config")
+          .select("admin_account_id")
+          .maybeSingle();
+        accountId = config?.admin_account_id || null;
+      }
 
-      if (config?.admin_account_id) {
+      if (accountId) {
         try {
-          const zohoRes = await zohoGet(token, `/accounts/${config.admin_account_id}/messages/view`, {
+          const zohoRes = await zohoGet(token, `/accounts/${accountId}/messages/view`, {
             folder,
             limit:  String(limit),
             start:  String(start),
@@ -45,7 +59,8 @@ export async function GET(req: NextRequest) {
           if (zohoRes?.data?.length) {
             const rows = zohoRes.data.map((m: any) => ({
               zoho_message_id: m.messageId,
-              zoho_account_id: config.admin_account_id,
+              zoho_account_id: accountId,
+              employee_id:     employeeId || null,
               folder,
               subject:         m.subject || "(no subject)",
               from_address:    m.fromAddress || "",

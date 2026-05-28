@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
 
 interface OrgNode {

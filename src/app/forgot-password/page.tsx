@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import axios from "axios";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { Mail, ArrowLeft, Activity, CheckCircle2 } from "lucide-react";
 
 export default function ForgotPasswordPage() {

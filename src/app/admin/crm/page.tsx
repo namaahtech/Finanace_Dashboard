@@ -29,7 +29,7 @@ import {
 import { useState, useEffect, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { validateGSTIN, extractPANFromGSTIN } from "@/lib/gst";
 import { AlertTriangle } from "lucide-react";
 import { 

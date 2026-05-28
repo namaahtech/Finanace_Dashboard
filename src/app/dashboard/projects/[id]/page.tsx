@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { ProjectKanban } from "@/components/projects/ProjectKanban";
 import { useApi } from "@/hooks/useApi";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import Link from "next/link";
 

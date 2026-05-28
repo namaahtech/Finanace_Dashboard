@@ -23,10 +23,17 @@ import {
 import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { validateGSTIN, extractPANFromGSTIN } from "@/lib/gst";
 import { AlertTriangle } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const formatRupee = (amount: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -397,9 +404,14 @@ export default function CRMClientsPage() {
                     {/* Status */}
                     <td className="px-4 py-3 border-r border-black/[0.04]">
                       {isEditing ? (
-                        <select value={editValues.status || "Active"} onChange={(e) => setEditValues({ ...editValues, status: e.target.value as ConvertedClient["status"] })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10">
-                          <option>Active</option><option>Pending</option><option>Churned</option>
-                        </select>
+                        <Select value={editValues.status || "Active"} onValueChange={(v) => setEditValues({ ...editValues, status: v as ConvertedClient["status"] })}>
+                          <SelectTrigger className="h-7 text-[11px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Active">Active</SelectItem>
+                            <SelectItem value="Pending">Pending</SelectItem>
+                            <SelectItem value="Churned">Churned</SelectItem>
+                          </SelectContent>
+                        </Select>
                       ) : (
                         <span className={cn("px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tight", STATUS_STYLES[client.status])}>{client.status}</span>
                       )}
@@ -408,9 +420,14 @@ export default function CRMClientsPage() {
                     {/* Tier */}
                     <td className="px-4 py-3 border-r border-black/[0.04]">
                       {isEditing ? (
-                        <select value={editValues.tier || "Standard"} onChange={(e) => setEditValues({ ...editValues, tier: e.target.value as ConvertedClient["tier"] })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10">
-                          <option>Standard</option><option>Key Account</option><option>Strategic</option>
-                        </select>
+                        <Select value={editValues.tier || "Standard"} onValueChange={(v) => setEditValues({ ...editValues, tier: v as ConvertedClient["tier"] })}>
+                          <SelectTrigger className="h-7 text-[11px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Standard">Standard</SelectItem>
+                            <SelectItem value="Key Account">Key Account</SelectItem>
+                            <SelectItem value="Strategic">Strategic</SelectItem>
+                          </SelectContent>
+                        </Select>
                       ) : (
                         <span className={cn("px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tight", TIER_STYLES[client.tier])}>{client.tier}</span>
                       )}
@@ -505,14 +522,24 @@ export default function CRMClientsPage() {
                     <input placeholder="Employee Name" value={newForm.empName} onChange={(e) => setNewForm({ ...newForm, empName: e.target.value })} className="bg-transparent text-[12px] font-bold outline-none border-b border-black/10 w-full placeholder:text-black/20" />
                   </td>
                   <td className="px-4 py-3 border-r border-black/[0.04]">
-                    <select value={newForm.status} onChange={(e) => setNewForm({ ...newForm, status: e.target.value as ConvertedClient["status"] })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 w-full">
-                      <option>Active</option><option>Pending</option><option>Churned</option>
-                    </select>
+                    <Select value={newForm.status} onValueChange={(v) => setNewForm({ ...newForm, status: v as ConvertedClient["status"] })}>
+                      <SelectTrigger className="h-7 text-[11px] w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Pending">Pending</SelectItem>
+                        <SelectItem value="Churned">Churned</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </td>
                   <td className="px-4 py-3 border-r border-black/[0.04]">
-                    <select value={newForm.tier} onChange={(e) => setNewForm({ ...newForm, tier: e.target.value as ConvertedClient["tier"] })} className="bg-transparent text-[11px] font-bold outline-none border-b border-black/10 w-full">
-                      <option>Standard</option><option>Key Account</option><option>Strategic</option>
-                    </select>
+                    <Select value={newForm.tier} onValueChange={(v) => setNewForm({ ...newForm, tier: v as ConvertedClient["tier"] })}>
+                      <SelectTrigger className="h-7 text-[11px] w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Standard">Standard</SelectItem>
+                        <SelectItem value="Key Account">Key Account</SelectItem>
+                        <SelectItem value="Strategic">Strategic</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </td>
                   <td className="px-4 py-3 border-r border-black/[0.04]">
                     <span className="text-[11px] font-bold text-black/20 italic">Today</span>

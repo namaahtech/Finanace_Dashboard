@@ -139,7 +139,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
     try {
       await sendMail(emp.email, `Account Credentials Resent - ${config?.company_name || "Namaah Nexus"}`, `
-        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+        <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
           <div style="background-color: #0f172a; color: #ffffff; padding: 32px 20px; text-align: center;">
             <h1 style="margin:0; letter-spacing: 4px; font-size: 24px; font-weight: 800; text-transform: uppercase;">${config?.company_name || "NAMAAH PULSE"}</h1>
             <p style="margin-top: 8px; opacity: 0.8; font-size: 14px;">Credentials Recovery Service</p>

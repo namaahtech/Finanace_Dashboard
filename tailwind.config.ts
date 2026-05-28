@@ -10,13 +10,61 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Plus Jakarta Sans", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
-        /* ── Theme-aware surface tokens ─────────────────────
-           These map to CSS vars so dark/light is automatic.
-           Use: bg-theme-page, text-theme-fg, border-theme, etc.
-        ────────────────────────────────────────────────── */
+        /* ── shadcn/ui tokens (pure shadcn, no theme bridge) ─ */
+        border:      "var(--border)",
+        input:       "var(--input)",
+        ring:        "var(--ring)",
+        background:  "var(--background)",
+        foreground:  "var(--foreground)",
+        primary: {
+          DEFAULT:     "var(--primary)",
+          foreground:  "var(--primary-foreground)",
+        },
+        secondary: {
+          DEFAULT:     "var(--secondary)",
+          foreground:  "var(--secondary-foreground)",
+        },
+        destructive: {
+          DEFAULT:     "var(--destructive)",
+          foreground:  "var(--destructive-foreground, var(--background))",
+        },
+        muted: {
+          DEFAULT:     "var(--muted)",
+          foreground:  "var(--muted-foreground)",
+        },
+        accent: {
+          DEFAULT:     "var(--accent)",
+          foreground:  "var(--accent-foreground)",
+        },
+        popover: {
+          DEFAULT:     "var(--popover)",
+          foreground:  "var(--popover-foreground)",
+        },
+        card: {
+          DEFAULT:     "var(--card)",
+          foreground:  "var(--card-foreground)",
+        },
+        chart: {
+          "1": "var(--chart-1)",
+          "2": "var(--chart-2)",
+          "3": "var(--chart-3)",
+          "4": "var(--chart-4)",
+          "5": "var(--chart-5)",
+        },
+        sidebar: {
+          DEFAULT: "var(--sidebar)",
+          foreground: "var(--sidebar-foreground)",
+          primary: "var(--sidebar-primary)",
+          "primary-foreground": "var(--sidebar-primary-foreground)",
+          accent: "var(--sidebar-accent)",
+          "accent-foreground": "var(--sidebar-accent-foreground)",
+          border: "var(--sidebar-border)",
+          ring: "var(--sidebar-ring)",
+        },
+        /* ── Legacy theme tokens (kept until *Legacy.tsx is gone) ── */
         theme: {
           page:    "hsl(var(--bg))",
           surface: "hsl(var(--surface))",
@@ -25,15 +73,15 @@ const config: Config = {
           fg:      "hsl(var(--fg))",
           muted:   "hsl(var(--fg-muted))",
           subtle:  "hsl(var(--fg-subtle))",
-          border:  "hsl(var(--border))",
+          border:  "var(--border)",
           strong:  "hsl(var(--border-strong))",
-          primary: "hsl(var(--primary))",
-          ring:    "hsl(var(--ring))",
+          primary: "var(--primary)",
+          ring:    "var(--ring)",
           input:   "hsl(var(--input-bg))",
           "input-border": "hsl(var(--input-border))",
           /* sidebar */
           "sidebar-bg":     "hsl(var(--sidebar-bg))",
-          "sidebar-border": "hsl(var(--sidebar-border))",
+          "sidebar-border": "var(--sidebar-border)",
           "sidebar-active": "hsl(var(--sidebar-active-bg))",
           "sidebar-active-fg": "hsl(var(--sidebar-active-fg))",
           "sidebar-hover":  "hsl(var(--sidebar-hover-bg))",
@@ -64,10 +112,27 @@ const config: Config = {
       },
       borderRadius: {
         DEFAULT: "var(--radius)",
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+      keyframes: {
+        "accordion-down": {
+          from: { height: "0" },
+          to:   { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to:   { height: "0" },
+        },
+      },
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up":   "accordion-up 0.2s ease-out",
       },
     },
   },
-  plugins: [],
+  plugins: [require("tailwindcss-animate")],
 };
 
 export default config;

@@ -2,20 +2,32 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard, CalendarDays, TrendingUp, Wallet, FileText, Zap, Users,
   Settings, LogOut, Sun, Moon, ChevronRight, Building2,
   GitBranch, Receipt, CreditCard, Tag, PiggyBank, Handshake,
   MessageSquare, CalendarClock, IndianRupee,
   Shield, RefreshCw, Mail, Ticket,
-  Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder, User,
+  Network, Briefcase, BarChart3, ClipboardList, Folder, User,
   BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award,
-  Inbox, PenLine, Send, Paperclip, Layers, KeyRound,
+  Inbox, PenLine, Send, Paperclip, Layers, KeyRound, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import {
+  Sidebar as ShadcnSidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -23,15 +35,13 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.ElementType;
-  moduleKey: string; // must match role_permissions.module_key in DB
+  moduleKey: string;
 };
 type NavSection = { title: string; items: NavItem[] };
 
 // ─── MASTER NAV ───────────────────────────────────────────────
 // Single source of truth for ALL possible routes in the app.
 // The DB (role_permissions) controls which items are visible per role.
-// Admin enables/disables any module for any role from /admin/permissions.
-// When a module is enabled, the FULL existing page renders — no code changes needed.
 
 const MASTER_NAV: NavSection[] = [
   {
@@ -154,42 +164,30 @@ const MASTER_NAV: NavSection[] = [
 // ─── Role badge styles ────────────────────────────────────────
 
 const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
-  admin:     { label: "Admin",          cls: "bg-purple-500/10 text-purple-500" },
-  dept_lead: { label: "Dept Lead",      cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-  team_lead: { label: "Team Lead",      cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
-  employee:  { label: "Employee",       cls: "bg-theme-raised text-theme-muted" },
-  intern:    { label: "Intern",         cls: "bg-indigo-500/10 text-indigo-500" },
+  admin:     { label: "Admin",     cls: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
+  dept_lead: { label: "Dept Lead", cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
+  team_lead: { label: "Team Lead", cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  employee:  { label: "Employee",  cls: "bg-muted text-muted-foreground" },
+  intern:    { label: "Intern",    cls: "bg-indigo-500/10 text-indigo-500" },
 };
 
 // ─── Sidebar component ────────────────────────────────────────
 
-interface SidebarProps {
-  collapsed?: boolean;
-  onToggle?: () => void;
-}
-
-export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
+export function Sidebar() {
   const { user, permissions, logout } = useAuth();
-  const pathname  = usePathname();
+  const pathname = usePathname();
   const { theme, setTheme } = useTheme();
-  const navRef    = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
 
   const roleInfo = ROLE_BADGE[user?.role ?? "employee"] ?? ROLE_BADGE.employee;
 
   // ── Permission filtering ──────────────────────────────────
-  // Uses MASTER_NAV so ANY module enabled in DB will show up, regardless of role.
-  // - permissions null  → permissions still loading (AuthProvider ensures this is very brief)
-  //                       show all items as safe fallback (DashboardShell loading state hides the flash)
-  // - perm not found    → module not in DB for this role → hidden
-  // - perm.can_view     → respect the DB value
   const sections: NavSection[] = MASTER_NAV
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => {
-        // While permissions are loading, hide all (DashboardShell loading state handles the wait)
         if (!permissions) return false;
         const perm = permissions[item.moduleKey];
-        // No DB row for this module/role = not enabled = hidden
         if (!perm) return false;
         return perm.can_view;
       }),
@@ -204,7 +202,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
     }
   }, []);
 
-  const handleScroll = (e: React.UIEvent<HTMLElement>) => {
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     sessionStorage.setItem("sidebar-scroll", e.currentTarget.scrollTop.toString());
   };
 
@@ -224,129 +222,177 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
     return false;
   };
 
+  // ── Accordion section state — only one open at a time ──
+  const activeSectionTitle = useMemo(() => {
+    for (const s of sections) {
+      if (s.items.some((i) => isActive(i.href))) return s.title;
+    }
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections, pathname]);
+
+  const [openSection, setOpenSection] = useState<string | null | undefined>(undefined);
+  const hydrated = useRef(false);
+
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    try {
+      const raw = sessionStorage.getItem("sidebar-open-section");
+      if (raw !== null) setOpenSection(JSON.parse(raw));
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
+
+  const toggleSection = (title: string) => {
+    setOpenSection((prev) => {
+      const current = prev === undefined ? activeSectionTitle : prev;
+      const next = current === title ? null : title;
+      try {
+        sessionStorage.setItem("sidebar-open-section", JSON.stringify(next));
+      } catch {
+        // ignore quota errors
+      }
+      return next;
+    });
+  };
+
+  const isSectionOpen = (title: string) => {
+    const current = openSection === undefined ? activeSectionTitle : openSection;
+    return current === title;
+  };
+
   return (
-    <aside className={cn(
-      "relative flex h-screen flex-col flex-shrink-0 transition-all duration-300 ease-in-out z-50",
-      "bg-sidebar/95 backdrop-blur-xl border-r border-sidebar shadow-2xl shadow-black/10",
-      collapsed ? "w-[72px]" : "w-64"
-    )}>
-      {/* Header */}
-      <div className={cn(
-        "flex h-[60px] items-center border-b border-sidebar transition-all duration-300",
-        collapsed ? "justify-center px-0" : "justify-between px-5"
-      )}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-theme-primary text-white font-black text-sm">
+    <ShadcnSidebar collapsible="icon" className="border-none">
+      <SidebarHeader className="border-none">
+        <div className="flex items-center gap-2.5 px-2 py-2">
+          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
             N
           </div>
-          {!collapsed && (
-            <span className="text-sm font-bold text-theme-fg tracking-tight truncate">
-              Namaah Nexus
-            </span>
-          )}
+          <span className="text-sm font-semibold tracking-tight truncate group-data-[collapsible=icon]:hidden">
+            Namaah Nexus
+          </span>
         </div>
-        {!collapsed && (
-          <button
-            onClick={onToggle}
-            className="p-1.5 rounded-md hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-colors"
-          >
-            <ChevronLeft size={15} strokeWidth={2.5} />
-          </button>
-        )}
-      </div>
+      </SidebarHeader>
 
-      {/* Expand button when collapsed */}
-      {collapsed && (
-        <button
-          onClick={onToggle}
-          className="absolute -right-3 top-[82px] z-20 flex h-6 w-6 items-center justify-center rounded-full bg-theme-surface border border-theme-border text-theme-muted hover:text-theme-fg shadow-sm transition-all"
-        >
-          <ChevronRight size={12} strokeWidth={2.5} />
-        </button>
-      )}
+      <SidebarContent ref={navRef} onScroll={handleScroll} className="gap-0">
+        {sections.map((section, sectionIdx) => {
+          const open = isSectionOpen(section.title);
+          const sectionHasActive = section.items.some((i) => isActive(i.href));
+          return (
+            <SidebarGroup
+              key={section.title}
+              className={cn(
+                "py-1.5",
+                sectionIdx > 0 && "border-t border-sidebar-border group-data-[collapsible=icon]:border-t-0"
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => toggleSection(section.title)}
+                aria-expanded={open}
+                className="group/label group-data-[collapsible=icon]:hidden flex w-full items-center justify-between px-2 py-1.5 rounded-md hover:bg-sidebar-accent/60 transition-colors"
+              >
+                <SidebarGroupLabel asChild>
+                  <span
+                    className={cn(
+                      "text-[10px] font-bold uppercase tracking-wider transition-colors",
+                      sectionHasActive ? "text-foreground" : "text-muted-foreground group-hover/label:text-foreground"
+                    )}
+                  >
+                    {section.title}
+                  </span>
+                </SidebarGroupLabel>
+                <ChevronDown
+                  size={11}
+                  strokeWidth={2.5}
+                  className={cn(
+                    "transition-transform duration-200",
+                    open ? "rotate-0 text-foreground" : "-rotate-90 text-muted-foreground",
+                    sectionHasActive && !open && "text-primary"
+                  )}
+                />
+              </button>
+              <SidebarGroupContent
+                className={cn(
+                  "mt-0.5",
+                  !open && "group-data-[state=expanded]:hidden"
+                )}
+              >
+                <SidebarMenu className="gap-0.5">
+                  {section.items.map(({ href, label, icon: Icon }) => {
+                    const active = isActive(href);
+                    return (
+                      <SidebarMenuItem key={href}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={active}
+                          tooltip={label}
+                          className={cn(
+                            "relative h-9 text-[13px] rounded-md transition-colors",
+                            "data-[active=true]:bg-sidebar-accent data-[active=true]:text-foreground data-[active=true]:font-semibold",
+                            !active && "text-foreground/70 font-medium hover:bg-sidebar-accent/50 hover:text-foreground"
+                          )}
+                        >
+                          <Link href={href} scroll={false}>
+                            {active && (
+                              <span
+                                aria-hidden
+                                className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary"
+                              />
+                            )}
+                            <Icon className="size-4 shrink-0" />
+                            <span className="truncate">{label}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          );
+        })}
+      </SidebarContent>
 
-      {/* Nav */}
-      <nav
-        ref={navRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5 scrollbar-hide"
-      >
-        {sections.map((section) => (
-          <div key={section.title}>
-            {!collapsed && (
-              <p className="section-label px-2 mb-2">{section.title}</p>
-            )}
-            <ul className="space-y-0.5">
-              {section.items.map(({ href, label, icon: Icon }) => {
-                const active = isActive(href);
-                return (
-                  <li key={href}>
-                    <Link
-                      href={href}
-                      scroll={false}
-                      title={collapsed ? label : undefined}
-                      className={cn(
-                        "flex items-center rounded-lg transition-all duration-150",
-                        collapsed ? "h-10 w-10 mx-auto justify-center" : "gap-2.5 px-3 py-2",
-                        active
-                          ? "bg-theme-primary/10 text-theme-primary"
-                          : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg"
-                      )}
-                    >
-                      <Icon size={15} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
-                      {!collapsed && (
-                        <span className="truncate text-sm font-medium">{label}</span>
-                      )}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+      <SidebarFooter className="gap-2 border-t border-sidebar-border">
+        {/* User card */}
+        <div className="group-data-[collapsible=icon]:hidden rounded-lg bg-sidebar-accent/50 border border-sidebar-border px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <p className="text-xs font-semibold text-foreground truncate">{user?.name ?? "—"}</p>
+            <span className={cn(
+              "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0",
+              roleInfo.cls
+            )}>
+              {roleInfo.label}
+            </span>
           </div>
-        ))}
-      </nav>
+          <p className="text-[10px] text-muted-foreground truncate">{user?.email ?? "—"}</p>
+        </div>
 
-      {/* Footer */}
-      <div className="border-t border-sidebar p-3 space-y-2">
-        {!collapsed && (
-          <div className="rounded-xl bg-gradient-to-br from-theme-raised/80 to-theme-raised/30 border border-theme-border/50 px-3 py-3 shadow-sm mb-2 group">
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-              <p className="text-xs font-bold text-theme-fg truncate group-hover:text-theme-primary transition-colors">{user?.name ?? "—"}</p>
-              <span className={cn(
-                "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0 shadow-sm",
-                roleInfo.cls
-              )}>
-                {roleInfo.label}
-              </span>
-            </div>
-            <p className="text-[10px] text-theme-muted truncate font-medium opacity-70 italic">{user?.email ?? "—"}</p>
-          </div>
-        )}
-        <div className={cn("flex gap-2", collapsed && "flex-col items-center")}>
+        {/* Theme toggle + Logout */}
+        <div className="flex gap-1.5 group-data-[collapsible=icon]:flex-col">
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className={cn(
-              "flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs text-theme-muted hover:text-theme-fg hover:bg-theme-raised transition-colors",
-              collapsed ? "w-10 h-10" : "flex-1"
-            )}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8"
             title={theme === "dark" ? "Light mode" : "Dark mode"}
           >
             {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-            {!collapsed && (theme === "dark" ? "Light" : "Dark")}
+            <span className="group-data-[collapsible=icon]:hidden">
+              {theme === "dark" ? "Light" : "Dark"}
+            </span>
           </button>
           <button
             onClick={() => logout()}
-            className={cn(
-              "flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs text-red-500 hover:bg-red-500/10 transition-colors",
-              collapsed ? "w-10 h-10" : "flex-1"
-            )}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs text-destructive hover:bg-destructive/10 transition-colors group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8"
             title="Logout"
           >
             <LogOut size={14} />
-            {!collapsed && "Logout"}
+            <span className="group-data-[collapsible=icon]:hidden">Logout</span>
           </button>
         </div>
-      </div>
-    </aside>
+      </SidebarFooter>
+    </ShadcnSidebar>
   );
 }

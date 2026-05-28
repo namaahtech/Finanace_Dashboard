@@ -1,8 +1,8 @@
 ﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/BadgeLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { formatCurrency, cn } from "@/lib/utils";
 import {
   IndianRupee,
@@ -17,7 +17,14 @@ import {
 import { useState, useEffect } from "react";
 
 import { useApi } from "@/hooks/useApi";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { usePermission } from "@/hooks/usePermission";
 
 interface PayrollRecord {
@@ -136,28 +143,18 @@ export default function PayrollPage() {
       subtitle={`Salary disbursement for ${MONTHS[month - 1]} ${year}`}
       actions={
         <div className="flex items-center gap-2">
-          {/* Month selector */}
-          <div className="relative">
-            <select
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              className="h-8 appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-xs font-semibold text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
-            >
-              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-            </select>
-            <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted" />
-          </div>
-          {/* Year selector */}
-          <div className="relative">
-            <select
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              className="h-8 appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-xs font-semibold text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
-            >
-              {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-            <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted" />
-          </div>
+          <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+            <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {MONTHS.map((m, i) => <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+            <SelectTrigger className="h-8 w-[90px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {YEARS.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
           {canExport && (
             <Button variant="secondary" size="sm">
               <Download size={13} className="mr-1.5" /> Export

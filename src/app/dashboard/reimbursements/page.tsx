@@ -2,10 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge, statusBadgeVariant } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Badge, statusBadgeVariant } from "@/components/ui/BadgeLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import axios from "axios";
 import {
   Receipt,
@@ -156,17 +163,16 @@ export default function ReimbursementsPage() {
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Category</label>
-                  <select
-                    className="field"
-                    value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  >
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c.charAt(0).toUpperCase() + c.slice(1)}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c.charAt(0).toUpperCase() + c.slice(1)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Amount (₹)</label>

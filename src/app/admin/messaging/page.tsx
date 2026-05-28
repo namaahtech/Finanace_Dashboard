@@ -60,7 +60,7 @@ function MessageItem({
         {isFirst ? (
           <Avatar name={msg.sender_name} size="sm" />
         ) : (
-          <span className="text-[9px] text-theme-subtle font-mono opacity-0 group-hover:opacity-100 transition-opacity block text-center pt-1">
+          <span className="text-[9px] text-theme-subtle tabular-nums opacity-0 group-hover:opacity-100 transition-opacity block text-center pt-1">
             {format(new Date(msg.created_at), "HH:mm")}
           </span>
         )}

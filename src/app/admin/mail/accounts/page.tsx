@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { cn } from "@/lib/utils";
 import {
   Mail, Users, Plus, Search, RefreshCw, Check, X, Loader2,
@@ -231,7 +231,7 @@ export default function MailAccountsPage() {
           <div className="flex items-center gap-2">
             <Globe size={13} className="text-theme-muted" />
             <span className="text-xs text-theme-muted">Active domain:</span>
-            <span className="text-xs font-mono font-bold text-theme-primary bg-theme-primary/10 px-2 py-0.5 rounded-full">
+            <span className="text-xs tabular-nums font-bold text-theme-primary bg-theme-primary/10 px-2 py-0.5 rounded-full">
               @{zohoDomain}
             </span>
           </div>
@@ -330,7 +330,7 @@ export default function MailAccountsPage() {
                         </td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-theme-fg">{u.email}</span>
+                            <span className="text-xs tabular-nums text-theme-fg">{u.email}</span>
                             <button
                               onClick={() => copyEmail(u.email)}
                               className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all"
@@ -343,7 +343,7 @@ export default function MailAccountsPage() {
                           <span className="text-xs text-theme-muted capitalize">{u.role}</span>
                         </td>
                         <td className="px-5 py-3">
-                          <span className="text-xs font-mono text-theme-muted">@{u.domain}</span>
+                          <span className="text-xs tabular-nums text-theme-muted">@{u.domain}</span>
                         </td>
                         <td className="px-5 py-3 text-center">
                           <span className={cn(
@@ -424,7 +424,7 @@ export default function MailAccountsPage() {
                         </td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-theme-fg">{account.email_address}</span>
+                            <span className="text-xs tabular-nums text-theme-fg">{account.email_address}</span>
                             <button
                               onClick={() => copyEmail(account.email_address)}
                               className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all"
@@ -435,7 +435,7 @@ export default function MailAccountsPage() {
                         </td>
                         <td className="px-5 py-3">
                           {account.zoho_account_id ? (
-                            <span className="flex items-center gap-1.5 text-xs text-theme-muted font-mono">
+                            <span className="flex items-center gap-1.5 text-xs text-theme-muted tabular-nums">
                               <Zap size={11} className="text-blue-500" />
                               {account.zoho_account_id.slice(0, 16)}…
                             </span>
@@ -470,7 +470,7 @@ export default function MailAccountsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-theme-fg">Create Zoho Mail Account</p>
-                  <p className="text-xs text-theme-muted">Domain: <span className="font-mono text-theme-primary">@{zohoDomain}</span></p>
+                  <p className="text-xs text-theme-muted">Domain: <span className="tabular-nums text-theme-primary">@{zohoDomain}</span></p>
                 </div>
               </div>
               <button onClick={closeModal}
@@ -529,10 +529,10 @@ export default function MailAccountsPage() {
                       value={customEmail}
                       onChange={e => setCustomEmail(e.target.value)}
                       placeholder={`firstname.lastname@${zohoDomain}`}
-                      className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-sm font-mono text-theme-fg outline-none focus:border-theme-primary transition-all"
+                      className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-sm tabular-nums text-theme-fg outline-none focus:border-theme-primary transition-all"
                     />
                   ) : (
-                    <div className="h-10 px-3 flex items-center rounded-xl border border-theme-border/50 bg-theme-raised text-sm font-mono text-theme-fg">
+                    <div className="h-10 px-3 flex items-center rounded-xl border border-theme-border/50 bg-theme-raised text-sm tabular-nums text-theme-fg">
                       {customEmail || "—"}
                     </div>
                   )}

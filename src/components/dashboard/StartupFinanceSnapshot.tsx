@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { Building2, ArrowUpRight, ArrowDownRight, Sparkles, Gauge, Pencil } from "lucide-react";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/CardLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { formatCurrency } from "@/lib/utils";
 
 interface StartupFinanceSnapshotProps {

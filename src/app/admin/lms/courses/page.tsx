@@ -10,11 +10,18 @@ import {
   LayoutGrid, PenLine, Loader2, X, Check,
   Archive, Globe, FilePen, AlertCircle, RefreshCw
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DragDropContext,
   Droppable,
@@ -558,15 +565,14 @@ export default function ManageCoursesPage() {
                   <label className="text-[10px] font-black uppercase tracking-widest text-theme-muted block mb-1.5">
                     Category
                   </label>
-                  <select
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    className="w-full bg-theme-page border border-theme-border rounded-xl px-4 py-2.5 text-sm text-theme-fg focus:outline-none focus:ring-2 focus:ring-theme-primary/40"
-                  >
-                    {["Engineering", "Sales", "HR", "Finance", "Operations", "Security", "Leadership"].map((c) => (
-                      <option key={c}>{c}</option>
-                    ))}
-                  </select>
+                  <Select value={newCategory} onValueChange={setNewCategory}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["Engineering", "Sales", "HR", "Finance", "Operations", "Security", "Leadership"].map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-end gap-2 pb-0.5">
                   <Button

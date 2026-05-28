@@ -8,10 +8,17 @@ import {
   Star, RefreshCw, Copy, AlertCircle, Palette,
   Trophy, ChevronRight, BadgeCheck, Hash, Filter
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -160,25 +167,21 @@ function GrantModal({
         <div className="p-6 space-y-4">
           <div>
             <label className="text-xs font-semibold text-theme-muted block mb-1.5">Employee</label>
-            <select
-              value={empId}
-              onChange={e => setEmpId(e.target.value)}
-              className="w-full bg-theme-page border border-theme-border rounded-xl px-3 py-2.5 text-sm text-theme-fg focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500/50 transition-all"
-            >
-              <option value="">Select employee…</option>
-              {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </select>
+            <Select value={empId || undefined} onValueChange={setEmpId}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select employee…" /></SelectTrigger>
+              <SelectContent>
+                {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <label className="text-xs font-semibold text-theme-muted block mb-1.5">Course</label>
-            <select
-              value={courseId}
-              onChange={e => setCourseId(e.target.value)}
-              className="w-full bg-theme-page border border-theme-border rounded-xl px-3 py-2.5 text-sm text-theme-fg focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500/50 transition-all"
-            >
-              <option value="">Select course…</option>
-              {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-            </select>
+            <Select value={courseId || undefined} onValueChange={setCourseId}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select course…" /></SelectTrigger>
+              <SelectContent>
+                {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -541,7 +544,7 @@ export default function CertificationsManagerPage() {
                           <td className="px-5 py-3">
                             <button
                               onClick={() => copyHash(cert.hash)}
-                              className="group/h flex items-center gap-1.5 font-mono text-[10px] text-theme-muted bg-theme-raised border border-theme-border rounded-md px-2 py-1 hover:border-theme-primary/40 hover:text-theme-fg transition-all"
+                              className="group/h flex items-center gap-1.5 tabular-nums text-[10px] text-theme-muted bg-theme-raised border border-theme-border rounded-md px-2 py-1 hover:border-theme-primary/40 hover:text-theme-fg transition-all"
                             >
                               <Hash size={9} />
                               {cert.hash.slice(0, 14)}…
@@ -668,7 +671,7 @@ export default function CertificationsManagerPage() {
                           {" "}earned a certificate for{" "}
                           <span className="font-semibold">{cert.course}</span>
                         </p>
-                        <p className="text-[10px] text-theme-muted mt-0.5 font-mono">{cert.hash}</p>
+                        <p className="text-[10px] text-theme-muted mt-0.5 tabular-nums">{cert.hash}</p>
                       </div>
                       <div className="text-[10px] text-theme-muted flex-shrink-0">{fmtDate(cert.date)}</div>
                       <Badge variant="success" className="text-[9px] flex-shrink-0">Valid</Badge>

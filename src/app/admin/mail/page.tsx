@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
 import Link from "next/link";
 import { cn } from "@/lib/utils";

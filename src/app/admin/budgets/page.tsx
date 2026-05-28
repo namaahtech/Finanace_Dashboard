@@ -1,7 +1,14 @@
 ﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/ButtonLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency, cn } from "@/lib/utils";
 import {
   BarChart3, Search, IndianRupee, TrendingUp, TrendingDown,
@@ -513,37 +520,31 @@ export default function BudgetsPage() {
               ))}
             </div>
             <div className="flex items-center gap-2">
-              {/* Year filter */}
-              <div className="relative">
-                <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
-                  className="h-8 appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-xs font-semibold text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer">
-                  <option value="">All Years</option>
-                  {YEARS.map(y => <option key={y} value={String(y)}>{y}</option>)}
-                </select>
-                <ChevronDown size={11} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted" />
-              </div>
-              {/* Scope filter */}
-              <div className="relative">
-                <select value={filterScope} onChange={e => setFilterScope(e.target.value)}
-                  className="h-8 appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-xs font-semibold text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer">
-                  <option value="">All Scopes</option>
-                  <option value="department">Department</option>
-                  <option value="team">Team</option>
-                  <option value="company">Company</option>
-                </select>
-                <ChevronDown size={11} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted" />
-              </div>
-              {/* Status filter */}
-              <div className="relative">
-                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                  className="h-8 appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-xs font-semibold text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer">
-                  <option value="">All Status</option>
-                  <option value="active">Active</option>
-                  <option value="draft">Draft</option>
-                  <option value="closed">Closed</option>
-                </select>
-                <ChevronDown size={11} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted" />
-              </div>
+              <Select value={filterYear || "all"} onValueChange={(v) => setFilterYear(v === "all" ? "" : v)}>
+                <SelectTrigger className="h-8 w-[120px]"><SelectValue placeholder="Year" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Years</SelectItem>
+                  {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterScope || "all"} onValueChange={(v) => setFilterScope(v === "all" ? "" : v)}>
+                <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="Scope" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Scopes</SelectItem>
+                  <SelectItem value="department">Department</SelectItem>
+                  <SelectItem value="team">Team</SelectItem>
+                  <SelectItem value="company">Company</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterStatus || "all"} onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}>
+                <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search budgets…"
@@ -599,7 +600,7 @@ export default function BudgetsPage() {
                         <td className="px-5 py-3">
                           <div>
                             <p className="text-xs font-semibold text-theme-fg">{b.name}</p>
-                            <p className="text-[10px] text-theme-subtle font-mono">{b.budget_number}</p>
+                            <p className="text-[10px] text-theme-subtle tabular-nums">{b.budget_number}</p>
                           </div>
                         </td>
                         <td className="px-5 py-3">
@@ -678,20 +679,18 @@ export default function BudgetsPage() {
               <div className="border-b border-theme-border bg-theme-page px-5 py-3">
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-semibold text-theme-muted">Budget:</span>
-                  <div className="relative">
-                    <select
-                      value={allocBudget?.id || ""}
-                      onChange={e => {
-                        const b = budgets.find(x => x.id === e.target.value);
-                        if (b) { setAllocBudget(b); setSelectedBudget(b); fetchAllocations(b.id); }
-                      }}
-                      className="h-7 appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-xs font-semibold text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
-                    >
-                      <option value="">— Select a budget —</option>
-                      {budgets.map(b => <option key={b.id} value={b.id}>{b.name} ({b.budget_number})</option>)}
-                    </select>
-                    <ChevronDown size={11} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted" />
-                  </div>
+                  <Select
+                    value={allocBudget?.id || ""}
+                    onValueChange={(v) => {
+                      const b = budgets.find(x => x.id === v);
+                      if (b) { setAllocBudget(b); setSelectedBudget(b); fetchAllocations(b.id); }
+                    }}
+                  >
+                    <SelectTrigger className="h-7 w-[280px]"><SelectValue placeholder="— Select a budget —" /></SelectTrigger>
+                    <SelectContent>
+                      {budgets.map(b => <SelectItem key={b.id} value={b.id}>{b.name} ({b.budget_number})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                   {allocBudget && (
                     <span className="text-xs text-theme-muted">
                       Total: <span className="font-bold text-theme-fg">{formatCurrency(allocBudget.total_amount)}</span>
@@ -710,13 +709,12 @@ export default function BudgetsPage() {
                 <>
                   {/* Add allocation row */}
                   <div className="flex items-center gap-2 border-b border-theme-border bg-theme-raised/30 px-5 py-3">
-                    <div className="relative flex-shrink-0">
-                      <select value={newAllocCat} onChange={e => setNewAllocCat(e.target.value)}
-                        className="h-7 appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-xs font-semibold text-theme-fg outline-none cursor-pointer">
-                        {ALLOC_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                      <ChevronDown size={11} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted" />
-                    </div>
+                    <Select value={newAllocCat} onValueChange={setNewAllocCat}>
+                      <SelectTrigger className="h-7 w-[160px] flex-shrink-0"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ALLOC_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                     <input value={newAllocLabel} onChange={e => setNewAllocLabel(e.target.value)} placeholder="Line-item label (optional)"
                       className="h-7 flex-1 rounded-lg border border-theme-border bg-theme-raised px-3 text-xs text-theme-fg outline-none focus:border-theme-strong" />
                     <input value={newAllocAmt} onChange={e => setNewAllocAmt(e.target.value)} placeholder="Amount" type="number" min={0}
@@ -764,7 +762,7 @@ export default function BudgetsPage() {
                             <td className="px-5 py-3 text-xs text-theme-muted">{a.label || <span className="text-theme-subtle italic">—</span>}</td>
                             <td className="px-5 py-3 text-xs text-theme-muted">
                               {a.subscriptions
-                                ? <span className="font-medium text-theme-fg">{a.subscriptions.name} <span className="text-theme-subtle font-mono">{a.subscriptions.sub_number}</span></span>
+                                ? <span className="font-medium text-theme-fg">{a.subscriptions.name} <span className="text-theme-subtle tabular-nums">{a.subscriptions.sub_number}</span></span>
                                 : <span className="text-theme-subtle italic">—</span>}
                             </td>
                             <td className="px-5 py-3 text-right text-xs font-bold text-theme-fg">{formatCurrency(a.allocated)}</td>
@@ -893,24 +891,22 @@ export default function BudgetsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Fiscal Year</label>
-                    <div className="relative">
-                      <select value={fYear} onChange={e => setFYear(e.target.value)}
-                        className="h-9 w-full appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer">
-                        {YEARS.map(y => <option key={y} value={String(y)}>{y}</option>)}
-                      </select>
-                      <ChevronDown size={12} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted" />
-                    </div>
+                    <Select value={fYear} onValueChange={setFYear}>
+                      <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Month (opt.)</label>
-                    <div className="relative">
-                      <select value={fMonth} onChange={e => setFMonth(e.target.value)}
-                        className="h-9 w-full appearance-none rounded-lg border border-theme-border bg-theme-raised pl-3 pr-7 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer">
-                        <option value="">Full Year</option>
-                        {MONTHS.map((m, i) => <option key={m} value={String(i + 1)}>{m.slice(0,3)}</option>)}
-                      </select>
-                      <ChevronDown size={12} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted" />
-                    </div>
+                    <Select value={fMonth || "all"} onValueChange={(v) => setFMonth(v === "all" ? "" : v)}>
+                      <SelectTrigger className="h-9 w-full"><SelectValue placeholder="Full Year" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Full Year</SelectItem>
+                        {MONTHS.map((m, i) => <SelectItem key={m} value={String(i + 1)}>{m.slice(0,3)}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div>

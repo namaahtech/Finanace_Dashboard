@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import {

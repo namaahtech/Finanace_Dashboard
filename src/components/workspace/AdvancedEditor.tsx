@@ -32,6 +32,15 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import React, { useState, useEffect, useRef } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface AdvancedEditorProps {
   content: string;
@@ -399,56 +408,59 @@ export function AdvancedEditor({ content, onChange, onSave, className, hideToolb
 
           {/* TYPOGRAPHY TOOLS */}
           <div className="flex items-center gap-1.5 px-2 py-1 bg-theme-page/50 rounded-xl border border-theme-border/50 shadow-inner">
-            <select 
-              onChange={(e) => editor.chain().focus().setMark('textStyle', { fontFamily: e.target.value }).run()}
-              className="bg-theme-surface text-[11px] font-bold text-theme-fg outline-none hover:border-emerald-500/50 p-1.5 rounded-lg border border-theme-border transition-all cursor-pointer min-w-[120px] shadow-sm"
-              value={editor.getAttributes('textStyle').fontFamily || ""}
+            <Select
+              value={editor.getAttributes('textStyle').fontFamily || "default"}
+              onValueChange={(v) => {
+                const family = v === "default" ? "" : v;
+                editor.chain().focus().setMark('textStyle', { fontFamily: family }).run();
+              }}
             >
-              <option value="">Default Font</option>
-              <optgroup label="Sans Serif">
-                <option value="'Inter', sans-serif">Inter</option>
-                <option value="'Roboto', sans-serif">Roboto</option>
-                <option value="'Open Sans', sans-serif">Open Sans</option>
-                <option value="'Montserrat', sans-serif">Montserrat</option>
-                <option value="'Outfit', sans-serif">Outfit</option>
-                <option value="'Poppins', sans-serif">Poppins</option>
-                <option value="'Lato', sans-serif">Lato</option>
-              </optgroup>
-              <optgroup label="Serif">
-                <option value="'Playfair Display', serif">Playfair Display</option>
-                <option value="'Merriweather', serif">Merriweather</option>
-                <option value="'Lora', serif">Lora</option>
-                <option value="'Libre Baskerville', serif">Baskerville</option>
-              </optgroup>
-              <optgroup label="Monospace">
-                <option value="'Fira Code', monospace">Fira Code</option>
-                <option value="'Source Code Pro', monospace">Source Code</option>
-                <option value="'JetBrains Mono', monospace">JetBrains</option>
-              </optgroup>
-              <optgroup label="Creative">
-                <option value="'Dancing Script', cursive">Handwriting</option>
-                <option value="'Pacifico', cursive">Pacifico</option>
-                <option value="'Righteous', cursive">Righteous</option>
-              </optgroup>
-            </select>
+              <SelectTrigger className="h-8 w-[130px] text-[11px]"><SelectValue placeholder="Default Font" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default Font</SelectItem>
+                <SelectGroup>
+                  <SelectLabel>Sans Serif</SelectLabel>
+                  <SelectItem value="'Inter', sans-serif">Inter</SelectItem>
+                  <SelectItem value="'Roboto', sans-serif">Roboto</SelectItem>
+                  <SelectItem value="'Open Sans', sans-serif">Open Sans</SelectItem>
+                  <SelectItem value="'Montserrat', sans-serif">Montserrat</SelectItem>
+                  <SelectItem value="'Outfit', sans-serif">Outfit</SelectItem>
+                  <SelectItem value="'Poppins', sans-serif">Poppins</SelectItem>
+                  <SelectItem value="'Lato', sans-serif">Lato</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel>Serif</SelectLabel>
+                  <SelectItem value="'Playfair Display', serif">Playfair Display</SelectItem>
+                  <SelectItem value="'Merriweather', serif">Merriweather</SelectItem>
+                  <SelectItem value="'Lora', serif">Lora</SelectItem>
+                  <SelectItem value="'Libre Baskerville', serif">Baskerville</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel>Monospace</SelectLabel>
+                  <SelectItem value="'Fira Code', monospace">Fira Code</SelectItem>
+                  <SelectItem value="'Source Code Pro', monospace">Source Code</SelectItem>
+                  <SelectItem value="'JetBrains Mono', monospace">JetBrains</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel>Creative</SelectLabel>
+                  <SelectItem value="'Dancing Script', cursive">Handwriting</SelectItem>
+                  <SelectItem value="'Pacifico', cursive">Pacifico</SelectItem>
+                  <SelectItem value="'Righteous', cursive">Righteous</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
 
-            <select 
-              onChange={(e) => editor.chain().focus().setMark('textStyle', { fontSize: e.target.value }).run()}
-              className="bg-theme-surface text-[11px] font-bold text-theme-fg outline-none hover:border-emerald-500/50 p-1.5 rounded-lg border border-theme-border transition-all cursor-pointer w-[70px] shadow-sm"
+            <Select
               value={editor.getAttributes('textStyle').fontSize || ""}
+              onValueChange={(v) => editor.chain().focus().setMark('textStyle', { fontSize: v }).run()}
             >
-              <option value="">Size</option>
-              <option value="12px">12px</option>
-              <option value="14px">14px</option>
-              <option value="16px">16px</option>
-              <option value="18px">18px</option>
-              <option value="20px">20px</option>
-              <option value="24px">24px</option>
-              <option value="32px">32px</option>
-              <option value="40px">40px</option>
-              <option value="48px">48px</option>
-              <option value="64px">64px</option>
-            </select>
+              <SelectTrigger className="h-8 w-[80px] text-[11px]"><SelectValue placeholder="Size" /></SelectTrigger>
+              <SelectContent>
+                {["12px", "14px", "16px", "18px", "20px", "24px", "32px", "40px", "48px", "64px"].map(sz =>
+                  <SelectItem key={sz} value={sz}>{sz}</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="w-px h-6 bg-theme-border mx-1" />
@@ -550,29 +562,30 @@ export function AdvancedEditor({ content, onChange, onSave, className, hideToolb
           {/* FORMATTING SECTION (Visible on selection) */}
           {editor.state.selection.from !== editor.state.selection.to && (
             <div className="flex items-center gap-1 pr-2 mr-1 border-r border-theme-border/50">
-              <select 
-                onChange={(e) => editor.chain().focus().setMark('textStyle', { fontFamily: e.target.value }).run()}
-                className="bg-theme-surface text-[10px] font-bold text-theme-fg outline-none hover:border-emerald-500/50 p-1 rounded-lg border border-theme-border transition-all cursor-pointer min-w-[90px]"
+              <Select
                 value={editor.getAttributes('textStyle').fontFamily || ""}
+                onValueChange={(v) => editor.chain().focus().setMark('textStyle', { fontFamily: v }).run()}
               >
-                <option value="">Font</option>
-                <option value="'Inter', sans-serif">Inter</option>
-                <option value="'Playfair Display', serif">Playfair</option>
-                <option value="'Fira Code', monospace">Fira</option>
-                <option value="'Dancing Script', cursive">Hand</option>
-              </select>
+                <SelectTrigger className="h-7 w-[100px] text-[10px]"><SelectValue placeholder="Font" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="'Inter', sans-serif">Inter</SelectItem>
+                  <SelectItem value="'Playfair Display', serif">Playfair</SelectItem>
+                  <SelectItem value="'Fira Code', monospace">Fira</SelectItem>
+                  <SelectItem value="'Dancing Script', cursive">Hand</SelectItem>
+                </SelectContent>
+              </Select>
 
-              <select 
-                onChange={(e) => editor.chain().focus().setMark('textStyle', { fontSize: e.target.value }).run()}
-                className="bg-theme-surface text-[10px] font-bold text-theme-fg outline-none hover:border-emerald-500/50 p-1 rounded-lg border border-theme-border transition-all cursor-pointer w-[55px]"
+              <Select
                 value={editor.getAttributes('textStyle').fontSize || ""}
+                onValueChange={(v) => editor.chain().focus().setMark('textStyle', { fontSize: v }).run()}
               >
-                <option value="">Size</option>
-                <option value="14px">14</option>
-                <option value="18px">18</option>
-                <option value="24px">24</option>
-                <option value="32px">32</option>
-              </select>
+                <SelectTrigger className="h-7 w-[65px] text-[10px]"><SelectValue placeholder="Size" /></SelectTrigger>
+                <SelectContent>
+                  {["14px", "18px", "24px", "32px"].map(sz =>
+                    <SelectItem key={sz} value={sz}>{sz.replace("px", "")}</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
 
               <div className="w-px h-4 bg-theme-border mx-1" />
 

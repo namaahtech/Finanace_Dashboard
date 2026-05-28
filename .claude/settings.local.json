@@ -21,7 +21,19 @@
       "Bash(netstat -tuln)",
       "Bash(curl -s http://localhost:3007/api/kpi/calculate?employeeId=test)",
       "Bash(year=2026 2>&1)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(npx tailwindcss *)",
+      "Bash(grep -cE '<__TRACKED_VAR__\\\\b' /Users/devacc/Finanace_Dashboard/src/app/admin/users/page.tsx)",
+      "Bash(sed -i '' 's|import { useToast } from \"@/components/ui/ToastLegacy\";|import { toast } from \"sonner\";|g' /Users/devacc/Finanace_Dashboard/src/app/admin/users/page.tsx)",
+      "Bash(sed -i '' '/const { showToast } = useToast\\(\\);/d' /Users/devacc/Finanace_Dashboard/src/app/admin/users/page.tsx)",
+      "Bash(sed -i '' -E 's|showToast\\\\\\(\\(.*\\),[[:space:]]*\"success\"\\\\\\)|toast.success\\(\\\\1\\)|g' /Users/devacc/Finanace_Dashboard/src/app/admin/users/page.tsx)",
+      "Bash(sed -i '' -E 's|showToast\\\\\\(\\(.*\\),[[:space:]]*'\\\\''success'\\\\''\\\\\\)|toast.success\\(\\\\1\\)|g' /Users/devacc/Finanace_Dashboard/src/app/admin/users/page.tsx)",
+      "Bash(sed -i '' -E 's|showToast\\\\\\(\\(.*\\),[[:space:]]*\"error\"\\\\\\)|toast.error\\(\\\\1\\)|g' /Users/devacc/Finanace_Dashboard/src/app/admin/users/page.tsx)",
+      "Bash(grep -cE '<__TRACKED_VAR__\\\\b' /Users/devacc/Finanace_Dashboard/src/app/admin/shifts/page.tsx)",
+      "Bash(grep -cE '<__TRACKED_VAR__\\\\b' /Users/devacc/Finanace_Dashboard/src/app/admin/org-chart/page.tsx)",
+      "Bash(grep -nB1 -A4 \"function SidebarInset\" /Users/devacc/Finanace_Dashboard/src/components/ui/sidebar.tsx)",
+      "Bash(awk -F= '/CLIQ/ {print $1}' .env.local)",
+      "Bash(sed -n '1,60p' src/app/admin/messaging/page.tsx)"
     ]
   }
 }

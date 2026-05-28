@@ -195,7 +195,7 @@ function TopBar({ roomId, isAdmin, onLeave }: { roomId: string; isAdmin: boolean
             Interview in progress — you are being recorded
           </span>
         )}
-        <span className="text-zinc-300 text-sm font-mono tabular-nums">{timer}</span>
+        <span className="text-zinc-300 text-sm tabular-nums">{timer}</span>
         <button
           onClick={onLeave}
           className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 active:bg-red-700 text-white text-xs font-semibold transition-colors"

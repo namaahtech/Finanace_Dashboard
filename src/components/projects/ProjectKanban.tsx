@@ -7,8 +7,15 @@ import { cn } from "@/lib/utils";
 import { GripHorizontal, Calendar, User, AlertCircle, CheckCircle2, X, Send, ShieldCheck, MessageSquare, ExternalLink, Clock, Plus, ListTodo } from "lucide-react";
 import dayjs from "dayjs";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useToast } from "@/components/ui/Toast";
-import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui/ToastLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Task {
   id: string;
@@ -719,20 +726,21 @@ function BreakdownModal({ task, onClose, onSuccess }: { task: Task; onClose: () 
                       }}
                       className="w-full h-9 bg-theme-page border border-theme-border rounded-lg px-3 text-xs font-bold text-theme-fg outline-none focus:border-theme-primary"
                     />
-                    <select 
-                      value={s.assignee_id}
-                      onChange={(e) => {
+                    <Select
+                      value={s.assignee_id || undefined}
+                      onValueChange={(v) => {
                         const newS = [...subtasks];
-                        newS[i].assignee_id = e.target.value;
+                        newS[i].assignee_id = v;
                         setSubtasks(newS);
                       }}
-                      className="w-full h-9 bg-theme-page border border-theme-border rounded-lg px-3 text-[10px] font-black uppercase text-theme-muted outline-none focus:border-theme-primary"
                     >
-                      <option value="">Assign Member...</option>
-                      {employees.map(e => (
-                        <option key={e.id} value={e.id}>{e.name} ({e.role})</option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full h-9 text-[10px]"><SelectValue placeholder="Assign Member..." /></SelectTrigger>
+                      <SelectContent>
+                        {employees.map(e => (
+                          <SelectItem key={e.id} value={e.id}>{e.name} ({e.role})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <button 
                     onClick={() => removeSubtask(i)}

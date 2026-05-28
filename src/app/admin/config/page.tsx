@@ -6,7 +6,14 @@ import { useAuth } from "@/components/layout/AuthProvider";
 import { formatCurrency, cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Settings, ShieldAlert, Save, TrendingUp, IndianRupee, Layers,
   Briefcase, Mail, Bell, Lock, AlertCircle, RefreshCw,
@@ -392,27 +399,27 @@ export default function AdminConfigPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className={LabelCls}>Industry Type</label>
-                        <div className="relative">
-                          <select className={InputCls + " appearance-none cursor-pointer"}>
-                            <option>Technology</option>
-                            <option>Finance</option>
-                            <option>Healthcare</option>
-                            <option>Manufacturing</option>
-                          </select>
-                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/30 pointer-events-none" />
-                        </div>
+                        <Select>
+                          <SelectTrigger className={InputCls}><SelectValue placeholder="Technology" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Technology">Technology</SelectItem>
+                            <SelectItem value="Finance">Finance</SelectItem>
+                            <SelectItem value="Healthcare">Healthcare</SelectItem>
+                            <SelectItem value="Manufacturing">Manufacturing</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div>
                         <label className={LabelCls}>Company Size</label>
-                        <div className="relative">
-                          <select className={InputCls + " appearance-none cursor-pointer"}>
-                            <option>1-50 Employees</option>
-                            <option>51-200 Employees</option>
-                            <option>201-500 Employees</option>
-                            <option>500+ Employees</option>
-                          </select>
-                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/30 pointer-events-none" />
-                        </div>
+                        <Select>
+                          <SelectTrigger className={InputCls}><SelectValue placeholder="1-50 Employees" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1-50 Employees">1-50 Employees</SelectItem>
+                            <SelectItem value="51-200 Employees">51-200 Employees</SelectItem>
+                            <SelectItem value="201-500 Employees">201-500 Employees</SelectItem>
+                            <SelectItem value="500+ Employees">500+ Employees</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                     <div>
@@ -570,24 +577,21 @@ export default function AdminConfigPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div>
                       <label className={LabelCls}>Available Payout Pool (&#8377;)</label>
-                      <input type="number" value={n("payout_pool_amount")} onChange={(e) => setForm({ ...form, payout_pool_amount: parseFloat(e.target.value) })} className={cn(InputCls, "font-mono tracking-tight")} />
+                      <input type="number" value={n("payout_pool_amount")} onChange={(e) => setForm({ ...form, payout_pool_amount: parseFloat(e.target.value) })} className={cn(InputCls, "tabular-nums tracking-tight")} />
                     </div>
                     <div>
                       <label className={LabelCls}>System Payout Status</label>
-                      <div className="relative">
-                        <select
-                          value={form.payout_capacity}
-                          onChange={(e) => setForm({ ...form, payout_capacity: e.target.value as Config["payout_capacity"] })}
-                          className={cn(InputCls, "appearance-none cursor-pointer uppercase tracking-widest text-[11px]")}
-                        >
-                          <option value="HIGH">Good — High Funds</option>
-                          <option value="MODERATE">Warning — Medium Funds</option>
-                          <option value="LOW">Critical — Low Funds</option>
-                        </select>
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-black/30 pointer-events-none">
-                          <ChevronDown size={14} />
-                        </div>
-                      </div>
+                      <Select
+                        value={form.payout_capacity}
+                        onValueChange={(v) => setForm({ ...form, payout_capacity: v as Config["payout_capacity"] })}
+                      >
+                        <SelectTrigger className={InputCls}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="HIGH">Good — High Funds</SelectItem>
+                          <SelectItem value="MODERATE">Warning — Medium Funds</SelectItem>
+                          <SelectItem value="LOW">Critical — Low Funds</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
@@ -706,7 +710,7 @@ export default function AdminConfigPage() {
                   </div>
                   <div>
                     <label className={LabelCls}>SMTP Port</label>
-                    <input type="number" value={form.smtp_port || 587} onChange={e => setForm({ ...form, smtp_port: parseInt(e.target.value) || 587 })} className={cn(InputCls, "font-mono")} />
+                    <input type="number" value={form.smtp_port || 587} onChange={e => setForm({ ...form, smtp_port: parseInt(e.target.value) || 587 })} className={cn(InputCls, "tabular-nums")} />
                   </div>
                   <div>
                     <label className={LabelCls}>Email Address Username</label>
@@ -734,16 +738,16 @@ export default function AdminConfigPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
                   <div>
                     <label className={LabelCls}>VAPID Public Key</label>
-                    <input type="text" value={systemState.fcmVapid} onChange={e => setSystemState(p => ({...p, fcmVapid: e.target.value}))} className={cn(InputCls, "font-mono")} />
+                    <input type="text" value={systemState.fcmVapid} onChange={e => setSystemState(p => ({...p, fcmVapid: e.target.value}))} className={cn(InputCls, "tabular-nums")} />
                   </div>
                   <div>
                     <label className={LabelCls}>FCM Sender ID</label>
-                    <input type="text" value={systemState.fcmSender} onChange={e => setSystemState(p => ({...p, fcmSender: e.target.value}))} className={cn(InputCls, "font-mono")} />
+                    <input type="text" value={systemState.fcmSender} onChange={e => setSystemState(p => ({...p, fcmSender: e.target.value}))} className={cn(InputCls, "tabular-nums")} />
                   </div>
                 </div>
                 <div>
                   <label className={LabelCls}>FCM Server Key</label>
-                  <input type="password" value={systemState.fcmKey} onChange={e => setSystemState(p => ({...p, fcmKey: e.target.value}))} className={cn(InputCls, "font-mono tracking-[0.2em]")} />
+                  <input type="password" value={systemState.fcmKey} onChange={e => setSystemState(p => ({...p, fcmKey: e.target.value}))} className={cn(InputCls, "tabular-nums tracking-[0.2em]")} />
                 </div>
               </section>
             </div>
@@ -850,13 +854,13 @@ export default function AdminConfigPage() {
                                       <input type="text" inputMode="numeric"
                                         value={toIndianDisplay(editSlabForm.min_target ?? slab.min_target)}
                                         onChange={e => setEditSlabForm(p => ({ ...p, min_target: Number(fromIndianInput(e.target.value)) || 0 }))}
-                                        className="w-28 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-xs font-bold font-mono text-black/80 outline-none focus:border-black/20" />
+                                        className="w-28 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-xs font-bold tabular-nums text-black/80 outline-none focus:border-black/20" />
                                     </td>
                                     <td className="py-3 pr-3">
                                       <input type="text" inputMode="numeric" placeholder="Unlimited"
                                         value={toIndianDisplay(editSlabForm.max_target ?? (slab.max_target ?? ""))}
                                         onChange={e => { const v = fromIndianInput(e.target.value); setEditSlabForm(p => ({ ...p, max_target: v ? Number(v) : null })); }}
-                                        className="w-28 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-xs font-bold font-mono text-black/80 outline-none focus:border-black/20" />
+                                        className="w-28 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-xs font-bold tabular-nums text-black/80 outline-none focus:border-black/20" />
                                     </td>
                                     <td className="py-3 pr-3">
                                       <input type="number" step="0.1" value={editSlabForm.commission_percent ?? slab.commission_percent} onChange={e => setEditSlabForm(p => ({ ...p, commission_percent: Number(e.target.value) }))}
@@ -879,10 +883,10 @@ export default function AdminConfigPage() {
                                       <span className="text-[12px] font-black text-black/80">{slab.name}</span>
                                     </td>
                                     <td className="py-4 pr-4">
-                                      <span className="font-mono text-[12px] font-bold text-black/60">₹{slab.min_target.toLocaleString("en-IN")}</span>
+                                      <span className="tabular-nums text-[12px] font-bold text-black/60">₹{slab.min_target.toLocaleString("en-IN")}</span>
                                     </td>
                                     <td className="py-4 pr-4">
-                                      <span className="font-mono text-[12px] font-bold text-black/60">
+                                      <span className="tabular-nums text-[12px] font-bold text-black/60">
                                         {slab.max_target ? `₹${slab.max_target.toLocaleString("en-IN")}` : <span className="text-black/30 text-[10px] uppercase tracking-widest font-black">Unlimited</span>}
                                       </span>
                                     </td>
@@ -929,7 +933,7 @@ export default function AdminConfigPage() {
                               value={toIndianDisplay(slabForm.min_target)}
                               onChange={e => setSlabForm(p => ({ ...p, min_target: fromIndianInput(e.target.value) }))}
                               placeholder="0"
-                              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[13px] font-bold font-mono text-black/80 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all" />
+                              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[13px] font-bold tabular-nums text-black/80 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all" />
                           </div>
                           <div>
                             <label className="text-[10px] font-black text-black/50 uppercase tracking-widest mb-1.5 block">Max Target (₹)</label>
@@ -937,13 +941,13 @@ export default function AdminConfigPage() {
                               value={toIndianDisplay(slabForm.max_target)}
                               onChange={e => setSlabForm(p => ({ ...p, max_target: fromIndianInput(e.target.value) }))}
                               placeholder="Leave blank = unlimited"
-                              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[13px] font-bold font-mono text-black/80 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all" />
+                              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[13px] font-bold tabular-nums text-black/80 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all" />
                           </div>
                           <div>
                             <label className="text-[10px] font-black text-black/50 uppercase tracking-widest mb-1.5 block">Commission %</label>
                             <input required type="number" step="0.1" min="0.1" max="100" value={slabForm.commission_percent} onChange={e => setSlabForm(p => ({ ...p, commission_percent: e.target.value }))}
                               placeholder="e.g. 5"
-                              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[13px] font-bold font-mono text-black/80 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all" />
+                              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[13px] font-bold tabular-nums text-black/80 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all" />
                           </div>
                         </div>
                         <div className="flex items-center gap-3 pt-2">

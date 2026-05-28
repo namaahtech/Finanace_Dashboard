@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import {
@@ -12,7 +12,14 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -173,13 +180,25 @@ function FInput({ value, onChange, placeholder, type = "text", className = "", d
   return <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
     className={cn("w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-fg transition-all placeholder:text-theme-subtle disabled:opacity-50", className)} />;
 }
-function FSelect({ value, onChange, children, className = "" }: {
-  value: string; onChange: (v: string) => void; children: React.ReactNode; className?: string;
+function FSelect({ value, onChange, items, placeholder, className = "" }: {
+  value: string;
+  onChange: (v: string) => void;
+  items: { label: string; value: string }[];
+  placeholder?: string;
+  className?: string;
 }) {
-  return <select value={value} onChange={e => onChange(e.target.value)}
-    className={cn("w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-fg transition-all", className)}>
-    {children}
-  </select>;
+  return (
+    <Select value={value || undefined} onValueChange={onChange}>
+      <SelectTrigger className={cn("w-full", className)}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((it) => (
+          <SelectItem key={it.value} value={it.value}>{it.label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 function monthlyCost(sub: Subscription) {
@@ -646,7 +665,7 @@ export default function SubscriptionsPage() {
                                   <p className="text-xs font-semibold text-theme-fg">{s.name}</p>
                                   {s.website_url && <a href={s.website_url} target="_blank" rel="noreferrer" className="text-theme-subtle hover:text-sky-500 transition-colors"><ExternalLink size={10} /></a>}
                                 </div>
-                                <p className="text-[10px] text-theme-subtle font-mono">{s.sub_number}</p>
+                                <p className="text-[10px] text-theme-subtle tabular-nums">{s.sub_number}</p>
                               </div>
                             </div>
                           </td>
@@ -671,7 +690,7 @@ export default function SubscriptionsPage() {
                                     style={{ width: `${Math.min(100, (usedSeats / s.total_seats) * 100)}%` }} />
                                 </div>
                               </div>
-                              <span className="text-[11px] text-theme-muted font-mono">{usedSeats}/{s.total_seats}</span>
+                              <span className="text-[11px] text-theme-muted tabular-nums">{usedSeats}/{s.total_seats}</span>
                             </div>
                           </td>
                           {/* Monthly Cost */}
@@ -794,7 +813,7 @@ export default function SubscriptionsPage() {
                               </div>
                               <div>
                                 <p className="text-xs font-semibold text-theme-fg">{sub.name}</p>
-                                <p className="text-[10px] text-theme-subtle font-mono">{sub.sub_number}</p>
+                                <p className="text-[10px] text-theme-subtle tabular-nums">{sub.sub_number}</p>
                               </div>
                             </div>
                           </td>
@@ -817,7 +836,7 @@ export default function SubscriptionsPage() {
                               <p className="text-xs font-semibold text-theme-fg">{a.department_name || "—"}</p>
                             )}
                           </td>
-                          <td className="px-5 py-3 text-xs font-mono text-theme-muted">{a.seats_allocated}</td>
+                          <td className="px-5 py-3 text-xs tabular-nums text-theme-muted">{a.seats_allocated}</td>
                           <td className="px-5 py-3 text-xs text-theme-muted truncate max-w-[160px]">{a.access_email || "—"}</td>
                           <td className="px-5 py-3">
                             {a.credentials_sent ? (
@@ -915,7 +934,7 @@ export default function SubscriptionsPage() {
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-xs font-semibold text-theme-fg truncate">{e.name}</p>
-                                  <p className="text-[10px] text-theme-muted font-mono">{e.employee_id} · {e.department}</p>
+                                  <p className="text-[10px] text-theme-muted tabular-nums">{e.employee_id} · {e.department}</p>
                                 </div>
                               </button>
                             ))}
@@ -927,7 +946,7 @@ export default function SubscriptionsPage() {
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Authorized</span>
-                            <span className="text-[10px] text-theme-subtle font-mono">{subForm.filed_by_emp_id}</span>
+                            <span className="text-[10px] text-theme-subtle tabular-nums">{subForm.filed_by_emp_id}</span>
                           </div>
                           <p className="text-sm font-bold text-theme-fg leading-tight truncate">{subForm.filed_by_name}</p>
                           <p className="text-[10px] text-theme-muted">{subForm.filed_by_desig} · {subForm.filed_by_dept}</p>
@@ -1027,9 +1046,11 @@ export default function SubscriptionsPage() {
                       </div>
                       <div>
                         <FLabel>Category</FLabel>
-                        <FSelect value={subForm.category} onChange={v => setSubForm(f => ({ ...f, category: v }))}>
-                          {SUB_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                        </FSelect>
+                        <FSelect
+                          value={subForm.category}
+                          onChange={v => setSubForm(f => ({ ...f, category: v }))}
+                          items={SUB_CATEGORIES.map(c => ({ label: c, value: c }))}
+                        />
                       </div>
                     </div>
 
@@ -1077,18 +1098,22 @@ export default function SubscriptionsPage() {
                       <div>
                         <FLabel>Cost per Seat *</FLabel>
                         <div className="flex">
-                          <select value={subForm.currency} onChange={e => setSubForm(f => ({ ...f, currency: e.target.value }))}
-                            className="h-[38px] w-[72px] rounded-l-lg border border-theme-border border-r-0 bg-theme-raised px-2 text-xs font-bold text-theme-fg outline-none focus:border-theme-strong transition-all flex-shrink-0">
-                            {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
-                          </select>
-                          <FInput type="number" value={subForm.cost_per_seat} onChange={v => setSubForm(f => ({ ...f, cost_per_seat: v }))} placeholder="0.00" className="rounded-l-none font-mono" />
+                          <Select value={subForm.currency} onValueChange={v => setSubForm(f => ({ ...f, currency: v }))}>
+                            <SelectTrigger className="h-[38px] w-[80px] rounded-r-none border-r-0 flex-shrink-0 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <FInput type="number" value={subForm.cost_per_seat} onChange={v => setSubForm(f => ({ ...f, cost_per_seat: v }))} placeholder="0.00" className="rounded-l-none tabular-nums" />
                         </div>
                       </div>
                       <div>
                         <FLabel>Total Seats *</FLabel>
                         <div className="relative">
                           <Users size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
-                          <FInput type="number" value={subForm.total_seats} onChange={v => setSubForm(f => ({ ...f, total_seats: v }))} placeholder="1" className="pl-9 font-mono" />
+                          <FInput type="number" value={subForm.total_seats} onChange={v => setSubForm(f => ({ ...f, total_seats: v }))} placeholder="1" className="pl-9 tabular-nums" />
                         </div>
                       </div>
                     </div>
@@ -1121,13 +1146,12 @@ export default function SubscriptionsPage() {
                       <div className="rounded-xl border border-theme-border bg-theme-page p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <p className="text-[10px] font-black uppercase tracking-widest text-theme-muted">Cost Analysis</p>
-                          <div className="relative">
-                            <select value={displayCurrency} onChange={(e) => setDisplayCurrency(e.target.value)}
-                              className="h-6 appearance-none rounded-md border border-theme-border bg-theme-raised pl-2 pr-6 text-[10px] font-bold text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer">
-                              {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>)}
-                            </select>
-                            <ChevronDown size={9} className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-theme-muted" />
-                          </div>
+                          <Select value={displayCurrency} onValueChange={setDisplayCurrency}>
+                            <SelectTrigger className="h-7 w-[120px] text-[10px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.code} ({c.symbol})</SelectItem>)}
+                            </SelectContent>
+                          </Select>
                         </div>
 
                         <div className="space-y-2 text-xs">
@@ -1147,7 +1171,7 @@ export default function SubscriptionsPage() {
                               <>
                                 <div className="flex justify-between text-theme-muted">
                                   <span>Unit Price</span>
-                                  <span className="font-semibold text-theme-fg font-mono">{base.symbol}{costPerSeatBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                  <span className="font-semibold text-theme-fg tabular-nums">{base.symbol}{costPerSeatBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 </div>
                                 <div className="flex justify-between text-theme-muted">
                                   <span>Seats</span>
@@ -1158,7 +1182,7 @@ export default function SubscriptionsPage() {
                                   <div className="rounded-lg bg-theme-raised p-2.5 text-[10px] space-y-1.5 border border-theme-border/50">
                                     <div className="flex justify-between text-theme-subtle">
                                       <span>FX Rate (Frankfurter)</span>
-                                      <span className="font-mono font-semibold text-theme-muted">1 {base.code} = {rate.toFixed(4)} {target.code}</span>
+                                      <span className="tabular-nums font-semibold text-theme-muted">1 {base.code} = {rate.toFixed(4)} {target.code}</span>
                                     </div>
                                     <div className="flex justify-between">
                                       <span className="text-theme-muted">Converted Monthly</span>
@@ -1254,10 +1278,12 @@ export default function SubscriptionsPage() {
                   <div className="grid grid-cols-2 gap-5">
                     <div>
                       <FLabel>Department *</FLabel>
-                      <FSelect value={assignDept} onChange={v => { setAssignDept(v); setAssignTeamId(""); }}>
-                        <option value="">Select department…</option>
-                        {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                      </FSelect>
+                      <FSelect
+                        value={assignDept}
+                        onChange={v => { setAssignDept(v); setAssignTeamId(""); }}
+                        items={departments.map(d => ({ label: d, value: d }))}
+                        placeholder="Select department…"
+                      />
                       {assignDept && (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {employees.filter(e => e.department === assignDept).slice(0, 6).map(e => (
@@ -1269,10 +1295,12 @@ export default function SubscriptionsPage() {
                     </div>
                     <div>
                       <FLabel>Team (optional)</FLabel>
-                      <FSelect value={assignTeamId} onChange={setAssignTeamId}>
-                        <option value="">All teams in dept</option>
-                        {filteredTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </FSelect>
+                      <FSelect
+                        value={assignTeamId}
+                        onChange={setAssignTeamId}
+                        items={filteredTeams.map(t => ({ label: t.name, value: t.id }))}
+                        placeholder="All teams in dept"
+                      />
                     </div>
                   </div>
                   <div>
@@ -1315,7 +1343,7 @@ export default function SubscriptionsPage() {
                       <div>
                         <p className="text-sm font-black text-theme-fg">{selectedAssignEmp.name}</p>
                         <p className="text-[11px] text-theme-muted">{selectedAssignEmp.designation} · {selectedAssignEmp.department}</p>
-                        <p className="text-[10px] text-sky-600 font-mono mt-0.5">{selectedAssignEmp.email}</p>
+                        <p className="text-[10px] text-sky-600 tabular-nums mt-0.5">{selectedAssignEmp.email}</p>
                       </div>
                     </div>
                   )}
@@ -1324,7 +1352,7 @@ export default function SubscriptionsPage() {
 
               {/* Seats + credentials */}
               <div className="grid grid-cols-3 gap-4">
-                <div><FLabel>Seats Allocated</FLabel><div className="relative"><Users size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" /><FInput type="number" value={assignSeats} onChange={setAssignSeats} className="pl-9 font-mono" /></div></div>
+                <div><FLabel>Seats Allocated</FLabel><div className="relative"><Users size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" /><FInput type="number" value={assignSeats} onChange={setAssignSeats} className="pl-9 tabular-nums" /></div></div>
                 <div className="col-span-2"><FLabel>Access Login / Username</FLabel><div className="relative"><Shield size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" /><FInput value={assignLogin} onChange={setAssignLogin} placeholder="login@company.com or username" className="pl-9" /></div></div>
               </div>
               <div><FLabel>Access Note (optional)</FLabel><div className="relative"><StickyNote size={13} className="absolute left-3 top-3 text-theme-muted pointer-events-none" /><textarea value={assignNote} onChange={e => setAssignNote(e.target.value)} placeholder="Any extra instructions, temp password, etc…" rows={2} className="w-full rounded-lg border border-theme-border bg-theme-page pl-9 pr-3 py-2 text-sm text-theme-fg outline-none focus:border-blue-500 transition-all resize-none placeholder:text-theme-subtle" /></div></div>
@@ -1337,7 +1365,7 @@ export default function SubscriptionsPage() {
                     <div className="flex items-center gap-2 text-xs">
                       <MailCheck size={12} className="text-emerald-500 flex-shrink-0" />
                       <span className="font-semibold text-theme-fg">{selectedAssignEmp.name}</span>
-                      <span className="text-theme-muted font-mono">→ {selectedAssignEmp.email}</span>
+                      <span className="text-theme-muted tabular-nums">→ {selectedAssignEmp.email}</span>
                     </div>
                   )}
                   {assignType === "dept_team" && assignDept && (
@@ -1345,7 +1373,7 @@ export default function SubscriptionsPage() {
                       <div key={e.id} className="flex items-center gap-2 text-xs">
                         <MailCheck size={12} className="text-emerald-500 flex-shrink-0" />
                         <span className="font-semibold text-theme-fg">{e.name}</span>
-                        <span className="text-theme-muted font-mono">→ {e.email}</span>
+                        <span className="text-theme-muted tabular-nums">→ {e.email}</span>
                       </div>
                     ))
                   )}

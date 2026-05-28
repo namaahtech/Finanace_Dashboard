@@ -3,11 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { formatCurrency, getYearRange, cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   FileText,
   ChevronDown,
@@ -192,48 +199,36 @@ export default function AdminPayslipsPage() {
                 {/* Employee */}
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Employee</label>
-                  <div className="relative">
-                    <select
-                      value={selectedEmp}
-                      onChange={(e) => setSelectedEmp(e.target.value)}
-                      className="w-full appearance-none rounded-lg border border-theme-border bg-theme-page pl-3 pr-8 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
-                    >
-                      <option value="">All employees</option>
+                  <Select value={selectedEmp || "all"} onValueChange={(v) => setSelectedEmp(v === "all" ? "" : v)}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="All employees" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All employees</SelectItem>
                       {employees.map((e) => (
-                        <option key={e.id || e._id} value={e.id || e._id}>{e.name} — {e.employeeId}</option>
+                        <SelectItem key={e.id || e._id} value={e.id || e._id || ""}>{e.name} — {e.employeeId}</SelectItem>
                       ))}
-                    </select>
-                    <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-muted" />
-                  </div>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* Month / Year */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Month</label>
-                    <div className="relative">
-                      <select
-                        value={genMonth}
-                        onChange={(e) => setGenMonth(Number(e.target.value))}
-                        className="w-full appearance-none rounded-lg border border-theme-border bg-theme-page pl-3 pr-8 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
-                      >
-                        {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                      </select>
-                      <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-muted" />
-                    </div>
+                    <Select value={String(genMonth)} onValueChange={(v) => setGenMonth(Number(v))}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {MONTHS.map((m) => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Year</label>
-                    <div className="relative">
-                      <select
-                        value={genYear}
-                        onChange={(e) => setGenYear(Number(e.target.value))}
-                        className="w-full appearance-none rounded-lg border border-theme-border bg-theme-page pl-3 pr-8 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
-                      >
-                        {getYearRange().map((y) => <option key={y} value={y}>{y}</option>)}
-                      </select>
-                      <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-muted" />
-                    </div>
+                    <Select value={String(genYear)} onValueChange={(v) => setGenYear(Number(v))}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {getYearRange().map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 

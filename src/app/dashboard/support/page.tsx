@@ -1,9 +1,9 @@
 "use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge, statusBadgeVariant } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { useToast } from "@/components/ui/Toast";
+import { Badge, statusBadgeVariant } from "@/components/ui/BadgeLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { cn, formatDate } from "@/lib/utils";
@@ -20,7 +20,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/Select";
+} from "@/components/ui/select";
 
 // ─── Types ───────────────────────────────────────────────────
 interface TicketRow {
@@ -572,7 +572,7 @@ export default function SupportHubPage() {
                         <UserCheck size={12} className="text-emerald-500" /> {getDynamicAssignLabel(targetRole)}
                       </label>
                       <Select value={assigneeId} onValueChange={setAssigneeId} disabled={!targetRole || loadingEmp}>
-                        <SelectTrigger className="w-full h-11 rounded-xl bg-theme-raised/30 border-theme-border font-bold" loading={isFetchingRole || loadingEmp}>
+                        <SelectTrigger className="w-full h-11 rounded-xl bg-theme-raised/30 border-theme-border font-bold">
                           <SelectValue placeholder={
                             loadingEmp 
                               ? "Connecting…" 

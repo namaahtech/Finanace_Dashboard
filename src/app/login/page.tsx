@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { Mail, Lock, ShieldCheck, ArrowRight, Eye, EyeOff } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
-import { useToast } from "@/components/ui/Toast";
+import { Badge } from "@/components/ui/BadgeLegacy";
+import { useToast } from "@/components/ui/ToastLegacy";
 
 export default function LoginPage() {
   const { user, loading: authLoading, login } = useAuth();

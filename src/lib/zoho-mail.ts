@@ -1,98 +1,25 @@
-import { getSupabaseAdmin } from "@/lib/supabase";
+import {
+  ZOHO_API,
+  buildZohoOAuthUrl,
+  exchangeCodeForTokens,
+  getZohoToken,
+  refreshAccessToken,
+} from "@/lib/zoho-auth";
 
-const ZOHO_ACCOUNTS_URL = process.env.ZOHO_ACCOUNTS_URL || "https://accounts.zoho.in";
-const ZOHO_MAIL_API_URL = process.env.ZOHO_MAIL_API_URL || "https://mail.zoho.in/api";
+const ZOHO_MAIL_API_URL = ZOHO_API.mail;
 
-// ── Token management ─────────────────────────────────────────
+// ── Token management (unified — see zoho-auth.ts) ────────────
+// Mail uses the single shared connection. These re-exports keep existing
+// call sites working while the token/OAuth logic lives in one place.
 
-export async function getActiveToken(): Promise<string | null> {
-  const supabase = getSupabaseAdmin();
-  const { data: config } = await supabase
-    .from("zoho_config")
-    .select("id, access_token, refresh_token, token_expiry, client_id, client_secret, is_connected")
-    .eq("is_connected", true)
-    .maybeSingle();
+export { exchangeCodeForTokens, refreshAccessToken };
 
-  if (!config?.access_token) return null;
+/** @deprecated use getZohoToken() from "@/lib/zoho-auth" — kept for back-compat. */
+export const getActiveToken = getZohoToken;
 
-  const expiresAt = config.token_expiry ? new Date(config.token_expiry) : null;
-  const soonExpires = expiresAt && expiresAt <= new Date(Date.now() + 5 * 60 * 1000);
-
-  if (soonExpires && config.refresh_token) {
-    const refreshed = await refreshAccessToken(
-      config.client_id,
-      config.client_secret,
-      config.refresh_token
-    );
-    if (refreshed?.access_token) {
-      await supabase.from("zoho_config").update({
-        access_token: refreshed.access_token,
-        token_expiry: new Date(Date.now() + (refreshed.expires_in || 3600) * 1000).toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq("id", config.id);
-      return refreshed.access_token;
-    }
-    return null;
-  }
-
-  return config.access_token;
-}
-
-export async function refreshAccessToken(
-  clientId: string,
-  clientSecret: string,
-  refreshToken: string
-): Promise<any> {
-  const res = await fetch(`${ZOHO_ACCOUNTS_URL}/oauth/v2/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: "refresh_token",
-    }),
-  });
-  return res.json();
-}
-
-export async function exchangeCodeForTokens(
-  clientId: string,
-  clientSecret: string,
-  code: string,
-  redirectUri: string
-): Promise<any> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-  try {
-    const res = await fetch(`${ZOHO_ACCOUNTS_URL}/oauth/v2/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      signal: controller.signal,
-      body: new URLSearchParams({
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: redirectUri,
-        grant_type: "authorization_code",
-      }),
-    });
-    return res.json();
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
+/** Mail connect URL — now requests the unified scope set (Mail + Calendar + …). */
 export function buildOAuthUrl(clientId: string, redirectUri: string): string {
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: clientId,
-    scope: "ZohoMail.messages.ALL,ZohoMail.accounts.ALL,ZohoMail.organization.ALL,ZohoMail.folders.ALL",
-    redirect_uri: redirectUri,
-    access_type: "offline",
-    prompt: "consent",
-  });
-  return `${ZOHO_ACCOUNTS_URL}/oauth/v2/auth?${params.toString()}`;
+  return buildZohoOAuthUrl(clientId, redirectUri);
 }
 
 // ── HTTP helpers ─────────────────────────────────────────────

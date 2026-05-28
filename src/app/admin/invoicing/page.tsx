@@ -1,9 +1,16 @@
 "use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { useToast } from "@/components/ui/Toast";
+import { Badge } from "@/components/ui/BadgeLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { useToast } from "@/components/ui/ToastLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { usePermission } from "@/hooks/usePermission";
@@ -513,10 +520,12 @@ function InvoiceSettingsModal({ onClose, initial }: { onClose: (saved?: InvoiceS
                   <SInput value={form.default_due_days} onChange={v => set("default_due_days", Number(v))} placeholder="30" type="number" />
                 </SField>
                 <SField label="Default GST Rate (%)">
-                  <select value={form.default_gst_rate} onChange={e => set("default_gst_rate", Number(e.target.value))}
-                    className="h-9 w-full rounded-xl border border-theme-border bg-theme-page px-3 text-xs text-theme-fg outline-none focus:border-blue-500 transition-all">
-                    {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
-                  </select>
+                  <Select value={String(form.default_gst_rate)} onValueChange={(v) => set("default_gst_rate", Number(v))}>
+                    <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {GST_RATES.map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </SField>
               </div>
               <SField label="Default Place of Supply">
@@ -667,7 +676,7 @@ function A4Invoice({ inv, items, id = "a4-invoice" }: {
         width: PX.h,
         height: PX.v,
         backgroundColor: "#fff",
-        fontFamily: "'Segoe UI', Arial, sans-serif",
+        fontFamily: "'Inter', Arial, sans-serif",
         color: "#1a1a2e",
         fontSize: "11px",
         display: "flex",
@@ -1589,10 +1598,12 @@ function InvoiceModal({ onClose, onSaved, clients, projects, teams, settings }: 
                               className="w-full bg-transparent outline-none text-center text-theme-fg text-xs" />
                           </td>
                           <td className="px-2 py-1.5">
-                            <select value={item.gst_rate} onChange={e => updateItem(item.id, "gst_rate", Number(e.target.value))}
-                              className="w-full bg-theme-page border border-theme-border rounded-lg px-1.5 py-1 text-xs text-theme-fg outline-none text-center">
-                              {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
-                            </select>
+                            <Select value={String(item.gst_rate)} onValueChange={(v) => updateItem(item.id, "gst_rate", Number(v))}>
+                              <SelectTrigger className="h-7 w-full text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {GST_RATES.map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+                              </SelectContent>
+                            </Select>
                           </td>
                           <td className="px-2 py-1.5">
                             <input type="number" value={item.rate} min={0}
@@ -2272,7 +2283,7 @@ export default function InvoicingPage() {
                         <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
                           <FileText size={13} className="text-blue-600" />
                         </div>
-                        <span className="text-xs font-bold text-theme-fg font-mono">{inv.invoice_number}</span>
+                        <span className="text-xs font-bold text-theme-fg tabular-nums">{inv.invoice_number}</span>
                       </div>
                     </td>
                     <td className="px-5 py-3 text-xs font-semibold text-theme-fg">{inv.clients?.name || "—"}</td>

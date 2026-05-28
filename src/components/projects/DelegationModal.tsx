@@ -6,9 +6,9 @@ import {
   UserCircle2, ShieldCheck, ChevronRight, Target, Zap,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
-import { MultiSelect } from "@/components/ui/MultiSelect";
-import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui/ToastLegacy";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
 import dayjs from "dayjs";
 

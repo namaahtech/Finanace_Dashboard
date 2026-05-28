@@ -8,6 +8,13 @@ import {
   UserPlus, AlertCircle, Calendar, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import dayjs from "dayjs";
 
 interface AuditLog {
@@ -103,16 +110,15 @@ export default function AuditLogPage() {
           </div>
           <div className="relative">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-muted" />
-            <select
-              value={actionFilter}
-              onChange={e => { setActionFilter(e.target.value); setPage(0); }}
-              className="h-11 pl-9 pr-4 rounded-xl border border-theme-border bg-theme-card text-sm text-theme-fg focus:outline-none focus:border-indigo-500 appearance-none cursor-pointer"
-            >
-              <option value="">All Actions</option>
-              {Object.entries(ACTION_META).map(([k, m]) => (
-                <option key={k} value={k}>{m.label}</option>
-              ))}
-            </select>
+            <Select value={actionFilter || "all"} onValueChange={(v) => { setActionFilter(v === "all" ? "" : v); setPage(0); }}>
+              <SelectTrigger className="h-11 w-[200px]"><SelectValue placeholder="All Actions" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Actions</SelectItem>
+                {Object.entries(ACTION_META).map(([k, m]) => (
+                  <SelectItem key={k} value={k}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

@@ -1,9 +1,9 @@
 "use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge, statusBadgeVariant } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { useToast } from "@/components/ui/Toast";
+import { Badge, statusBadgeVariant } from "@/components/ui/BadgeLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { cn, formatDate } from "@/lib/utils";
@@ -21,7 +21,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/Select";
+} from "@/components/ui/select";
 
 // ─── Types ───────────────────────────────────────────────────
 interface TicketRow {
@@ -606,7 +606,7 @@ export default function AdminSupportPage() {
                       <div className="space-y-1.5">
                         <label className="text-[9px] font-black text-theme-muted uppercase tracking-tighter px-1">{getDynamicAssignLabel(reAssignRole)}</label>
                         <Select value={reAssigneeId} onValueChange={setReAssigneeId} disabled={!reAssignRole || loadingEmp || selectedTicket.status === 'resolved' || selectedTicket.status === 'closed'}>
-                          <SelectTrigger className="h-10 rounded-xl bg-theme-surface font-bold text-[11px] disabled:opacity-50" loading={loadingEmp}><SelectValue placeholder="Select..." /></SelectTrigger>
+                          <SelectTrigger className="h-10 rounded-xl bg-theme-surface font-bold text-[11px] disabled:opacity-50"><SelectValue placeholder={loadingEmp ? "Loading…" : "Select..."} /></SelectTrigger>
                           <SelectContent>
                              {filteredEmployees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
                           </SelectContent>
