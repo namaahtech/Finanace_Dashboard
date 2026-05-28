@@ -103,7 +103,8 @@ export default function CalendarPage() {
   const [saving,  setSaving]  = useState(false);
   const [form,    setForm]    = useState(emptyForm);
 
-  const isAdmin = ["admin", "dept_lead"].includes(user?.role || "");
+  // "Manager view" — admin sees everything; a dept_lead employee also gets it.
+  const isAdmin = user?.role === "admin" || !!user?.is_dept_lead;
 
   const fetchEvents = useCallback(async () => {
     if (!user?.id) return;

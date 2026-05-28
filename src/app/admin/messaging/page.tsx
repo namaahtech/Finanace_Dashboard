@@ -9,7 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { useChannels, useMessaging, usePresence, type Channel, type Message } from "@/hooks/useMessaging";
-import { useAuth } from "@/components/layout/AuthProvider";
+import { useAuth, getDashboardForRole, type Role } from "@/components/layout/AuthProvider";
 import { usePermission } from "@/hooks/usePermission";
 import { useRouter } from "next/navigation";
 import { useNotifications } from "@/components/layout/NotificationProvider";
@@ -126,12 +126,7 @@ export default function AdminMessagingPage() {
 
   useEffect(() => {
     if (user && user.role !== "admin" && canView === false) {
-      router.replace(
-        user.role === "team_lead" ? "/team-lead/dashboard"
-        : user.role === "dept_lead" ? "/department-lead/dashboard"
-        : user.role === "employee" || user.role === "intern" ? "/dashboard"
-        : "/admin"
-      );
+      router.replace(getDashboardForRole(user.role as Role));
     }
   }, [canView, user, router]);
   const { channels, loading: chLoading, refetch: refetchChannels } = useChannels(true);

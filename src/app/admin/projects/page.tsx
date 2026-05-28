@@ -136,6 +136,8 @@ interface Employee {
   role: string;
   department: string;
   team_id?: string;
+  is_dept_lead?: boolean;
+  is_team_lead?: boolean;
 }
 
 const PHASE_CONFIG: Record<ProjectPhase, { label: string; bg: string; text: string; border: string; icon: any; variant: any }> = {
@@ -461,7 +463,7 @@ export default function AdminProjectsPage() {
   
   // Filter managers based on department
   const filteredManagers = employees.filter(emp => {
-    const isManagerRole = emp.role === 'dept_lead' || emp.role === 'admin';
+    const isManagerRole = emp.role === 'admin' || emp.is_dept_lead || emp.is_team_lead;
     if (!isManagerRole) return false;
     
     if (!form.department_id) return true;
@@ -707,7 +709,7 @@ export default function AdminProjectsPage() {
                   >
                     Open Board
                   </button>
-                  {(user?.role === 'dept_lead' || user?.role === 'admin') && (
+                  {(user?.role === 'admin' || user?.is_dept_lead) && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setDelegationProject(p); }}
                       className="flex-1 rounded-lg border border-theme-border px-3 py-1.5 text-xs font-semibold text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-all text-center"

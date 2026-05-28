@@ -201,7 +201,7 @@ export default function OrgChartPage() {
           .filter((t: any) => t.parent_id === parentId && t.type !== "company")
           .map((t: any) => {
             const leadEmp = employees.find((e: any) => e.id === t.lead_id)
-                         || employees.find((e: any) => e.team_id === t.id && (e.role === 'team_lead' || e.role === 'dept_lead' || e.role === 'manager'));
+                         || employees.find((e: any) => e.team_id === t.id && (e.is_team_lead || e.is_dept_lead));
             const teamEmps = employees
               .filter((e: any) => (e.team_id === t.id || (t.type === "department" && e.department === t.name && !e.team_id)) && (!leadEmp || e.id !== leadEmp.id))
               .map((e: any) => ({

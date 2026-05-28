@@ -95,6 +95,7 @@ export default function AuditLogPage() {
 
   return (
     <DashboardShell
+      moduleKey="audit_log"
       title="Audit Log"
       subtitle="All system events — logins, provisioning, offboarding, and changes."
       actions={

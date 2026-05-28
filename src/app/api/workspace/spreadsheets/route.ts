@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     const userId = searchParams.get("userId");
     const userRole = searchParams.get("userRole");
     const projectId = searchParams.get("projectId");
-    const isAdmin = ["admin", "dept_lead"].includes(userRole || "");
+    const isAdmin = userRole === "admin";
 
     if (!userId && !projectId) {
       return NextResponse.json({ spreadsheets: [] });

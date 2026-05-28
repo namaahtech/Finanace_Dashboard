@@ -99,16 +99,15 @@ interface User {
 }
 
 const ROLE_BADGE: Record<string, string> = {
-  employee:  "bg-muted text-muted-foreground border-transparent",
-  team_lead: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent",
-  dept_lead: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-transparent",
-  admin:     "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-transparent",
-  intern:    "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-transparent",
-  sales:     "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-transparent",
+  employee: "bg-muted text-muted-foreground border-transparent",
+  hr:       "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-transparent",
+  accounts: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent",
+  admin:    "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-transparent",
+  intern:   "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-transparent",
 };
 const COMMISSION_BADGE = "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-transparent";
 const ROLE_LABEL: Record<string, string> = {
-  employee: "Employee", team_lead: "Team Lead", dept_lead: "Department Lead", admin: "Admin", intern: "Intern", sales: "Sales",
+  employee: "Employee", hr: "HR", accounts: "Accounts", admin: "Admin", intern: "Intern",
 };
 
 function getInitials(name: string) {
@@ -545,7 +544,7 @@ export default function AdminUsersPage() {
       }
 
       const isSales = form.role === "sales";
-      const VALID_ROLES = ["admin", "dept_lead", "team_lead", "employee", "intern"];
+      const VALID_ROLES = ["admin", "hr", "accounts", "employee", "intern"];
       const safeRole = isSales ? "employee" : (VALID_ROLES.includes(form.role) ? form.role : "employee");
 
       const payload = {
@@ -958,7 +957,7 @@ export default function AdminUsersPage() {
                       options={[
                         ...Object.entries(ROLE_LABEL)
                           .filter(([v]) => {
-                            const validRoles = ["admin","dept_lead","team_lead","employee","intern"];
+                            const validRoles = ["admin", "hr", "accounts", "employee", "intern"];
                             const allowed = assignableRoles.filter(r => validRoles.includes(r));
                             return (allowed.length === 0 || allowed.includes(v)) && v !== "sales";
                           })

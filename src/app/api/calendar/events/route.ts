@@ -80,8 +80,9 @@ export async function GET(req: NextRequest) {
       .order("start_time", { ascending: true })
       .limit(limit);
 
-    // Show statutory to admin + dept_lead; personal + dept to others
-    const isManager = ["admin", "dept_lead"].includes(empRole);
+    // Show statutory + cross-dept events to admin + HR. Phase 5 will check
+    // is_dept_lead/is_team_lead via DB lookup (currently only role is in scope).
+    const isManager = ["admin", "hr"].includes(empRole);
     if (!isManager) {
       const filters = [`calendar_type.eq.statutory`, `created_by.eq.${userId}`];
       if (empDept) filters.push(`and(calendar_type.eq.department,department.eq.${empDept})`);

@@ -144,39 +144,45 @@ export default function AttendancePage() {
         if (error) throw error;
         if (data && !data.success) { showToast(data.error, "error"); return; }
       } else {
-        // 1. Determine hierarchy target roles based on the employee's current role
-        let searchRoles: string[] = [];
-        if (["intern", "employee"].includes(user.role)) {
-          searchRoles = ["team_lead", "dept_lead"];
-        } else if (user.role === "team_lead") {
-          searchRoles = ["dept_lead"];
-        }
-
+        // Leave approver hierarchy (new model uses manager flags, not roles):
+        //   regular employee/intern → look for team_lead in same dept, then dept_lead
+        //   team_lead (is_team_lead=true) → escalate to dept_lead
+        //   dept_lead (is_dept_lead=true) → escalate to admin
         targetId = user.id;
         targetRole = "hr";
         let foundLead = false;
 
-        // 2. Try to find the immediate superior in their own department
-        if (searchRoles.length > 0) {
+        if (!user.is_team_lead && !user.is_dept_lead) {
+          // Look for a team_lead or dept_lead in the same department
+          const { data: leads } = await supabase.from("employees")
+            .select("id, role, is_team_lead, is_dept_lead")
+            .eq("department", user.department)
+            .or("is_team_lead.eq.true,is_dept_lead.eq.true")
+            .limit(1);
+          if (leads && leads.length > 0) {
+            targetId = leads[0].id;
+            targetRole = leads[0].is_dept_lead ? "dept_lead" : "team_lead";
+            foundLead = true;
+          }
+        } else if (user.is_team_lead && !user.is_dept_lead) {
+          // Escalate to a dept_lead in the same department
           const { data: leads } = await supabase.from("employees")
             .select("id, role")
             .eq("department", user.department)
-            .in("role", searchRoles)
+            .eq("is_dept_lead", true)
             .limit(1);
-
           if (leads && leads.length > 0) {
             targetId = leads[0].id;
-            targetRole = leads[0].role;
+            targetRole = "dept_lead";
             foundLead = true;
           }
         }
 
-        // 3. Escalation fallback if no direct lead exists, or if user is already a manager/hr
+        // Final fallback: admin
         if (!foundLead) {
-          const fallbackRole = (user.role === "dept_lead" || user.role === "admin") ? "admin" : "admin";
           const { data: admins } = await supabase.from("employees")
             .select("id, role")
-            .eq("role", fallbackRole)
+            .eq("role", "admin")
             .limit(1);
 
           if (admins && admins.length > 0) {

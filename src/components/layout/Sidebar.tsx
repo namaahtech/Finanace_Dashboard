@@ -176,11 +176,11 @@ const MASTER_NAV: NavSection[] = [
 
 function roleBadge(role?: string) {
   const map: Record<string, { label: string; className: string }> = {
-    admin:     { label: "Admin",     className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/20" },
-    dept_lead: { label: "Dept Lead", className: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20" },
-    team_lead: { label: "Team Lead", className: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20" },
-    employee:  { label: "Employee", className: "" },
-    intern:    { label: "Intern",    className: "bg-indigo-500/15 text-indigo-500 border-indigo-500/20" },
+    admin:    { label: "Admin",    className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/20" },
+    hr:       { label: "HR",       className: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/20" },
+    accounts: { label: "Accounts", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
+    employee: { label: "Employee", className: "" },
+    intern:   { label: "Intern",   className: "bg-indigo-500/15 text-indigo-500 border-indigo-500/20" },
   };
   return map[role ?? "employee"] ?? map.employee;
 }

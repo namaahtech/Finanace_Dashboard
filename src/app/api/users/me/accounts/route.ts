@@ -70,15 +70,12 @@ function getSharedMailboxesForRole(role: string, department: string) {
       { email_address: `support@${domain}`,  display_name: "Support",       access_type: "shared_send", is_personal: false },
       { email_address: `invoices@${domain}`, display_name: "Invoices",      access_type: "shared_send", is_personal: false },
     );
-  } else if (role === "dept_lead") {
+  } else if (role === "accounts") {
+    mailboxes.push({ email_address: `accounts@${domain}`, display_name: "Accounts Team", access_type: "shared_send", is_personal: false });
+    mailboxes.push({ email_address: `invoices@${domain}`, display_name: "Invoices",      access_type: "shared_send", is_personal: false });
+  } else if (role === "hr") {
+    mailboxes.push({ email_address: `hr@${domain}`,      display_name: "HR Team",       access_type: "shared_send", is_personal: false });
     const deptLower = department.toLowerCase();
-    if (deptLower.includes("account") || deptLower.includes("finance")) {
-      mailboxes.push({ email_address: `accounts@${domain}`, display_name: "Accounts Team", access_type: "shared_send", is_personal: false });
-      mailboxes.push({ email_address: `invoices@${domain}`, display_name: "Invoices",      access_type: "shared_send", is_personal: false });
-    }
-    if (deptLower.includes("hr")) {
-      mailboxes.push({ email_address: `hr@${domain}`,      display_name: "HR Team",       access_type: "shared_send", is_personal: false });
-    }
     if (deptLower.includes("support")) {
       mailboxes.push({ email_address: `support@${domain}`, display_name: "Support",       access_type: "shared_send", is_personal: false });
     }

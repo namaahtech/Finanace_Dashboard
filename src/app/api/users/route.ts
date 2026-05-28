@@ -13,7 +13,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing highly critical parameters (Name, Email, Role)" }, { status: 400 });
     }
 
-    const VALID_ROLES = ["admin", "dept_lead", "team_lead", "employee", "intern"];
+    const VALID_ROLES = ["admin", "hr", "accounts", "employee", "intern"];
     if (!VALID_ROLES.includes(role)) {
       return NextResponse.json({ error: `Invalid role "${role}". Must be one of: ${VALID_ROLES.join(", ")}` }, { status: 400 });
     }

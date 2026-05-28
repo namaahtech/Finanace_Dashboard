@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "./AuthProvider";
+import { useAuth, getDashboardForRole, type Role } from "./AuthProvider";
 import { Sidebar } from "./Sidebar";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -19,13 +19,6 @@ interface DashboardShellProps {
   moduleKey?: string;
 }
 
-function getDashboardForRole(role: string): string {
-  if (role === "team_lead")  return "/team-lead/dashboard";
-  if (role === "dept_lead")  return "/department-lead/dashboard";
-  if (role === "employee" || role === "intern") return "/dashboard";
-  return "/admin";
-}
-
 export function DashboardShell({ children, title, subtitle, actions, moduleKey }: DashboardShellProps) {
   const { user, permissions, loading } = useAuth();
   const router = useRouter();
@@ -41,7 +34,7 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
 
     const perm = permissions[moduleKey];
     if (perm && !perm.can_view) {
-      router.replace(getDashboardForRole(user.role));
+      router.replace(getDashboardForRole(user.role as Role));
     }
   }, [permissions, moduleKey, user, router]);
 

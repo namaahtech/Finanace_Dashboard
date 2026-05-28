@@ -12,14 +12,31 @@ import { supabase } from "@/lib/supabase";
 
 // ─── Types ───────────────────────────────────────────────────
 
+export type Role = "admin" | "hr" | "accounts" | "employee" | "intern";
+
 interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "dept_lead" | "team_lead" | "employee" | "intern";
+  role: Role;
   employee_id: string;
   department: string;
   designation: string;
+  is_dept_lead: boolean;
+  is_team_lead: boolean;
+  managed_department_id: string | null;
+  managed_team_id: string | null;
+}
+
+export function getDashboardForRole(role: Role): string {
+  switch (role) {
+    case "admin":    return "/admin";
+    case "hr":       return "/hr";
+    case "accounts": return "/accounts";
+    case "employee":
+    case "intern":
+    default:         return "/dashboard";
+  }
 }
 
 export interface PermissionNode {
@@ -44,10 +61,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// ─── Helper — fetch permissions for a role ────────────────────
-async function fetchPermissions(role: string): Promise<PermissionMap | null> {
+// ─── Helper — fetch effective permissions (role defaults merged with per-employee overrides) ─
+async function fetchPermissions(role: string, employeeId?: string): Promise<PermissionMap | null> {
   try {
-    const res = await fetch(`/api/permissions?role=${role}`);
+    const qs = new URLSearchParams({ role });
+    if (employeeId) qs.set("employee_id", employeeId);
+    const res = await fetch(`/api/permissions?${qs.toString()}`);
     if (!res.ok) return null;
     const { permissions } = await res.json();
     return permissions ?? null;
@@ -67,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Reload permissions for the currently logged-in user
   const refreshPermissions = useCallback(async () => {
     if (!user) return;
-    const perms = await fetchPermissions(user.role);
+    const perms = await fetchPermissions(user.role, user.id);
     setPermissions(perms);
   }, [user]);
 
@@ -92,8 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (emp && !empErr && mounted) {
           setUser(emp as AuthUser);
-          // Load permissions alongside the user
-          const perms = await fetchPermissions(emp.role);
+          // Load permissions alongside the user (merged with per-employee overrides)
+          const perms = await fetchPermissions(emp.role, emp.id);
           if (mounted) setPermissions(perms);
         } else if (mounted) {
           setUser(null);
@@ -129,20 +148,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user?.role) return;
 
     const channel = supabase
-      .channel("role_permissions_realtime")
+      .channel("permissions_realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "role_permissions", filter: `role=eq.${user.role}` },
         async () => {
-          // Re-fetch the entire permission map for this role
-          const perms = await fetchPermissions(user.role);
+          const perms = await fetchPermissions(user.role, user.id);
+          if (perms) setPermissions(perms);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "employee_permissions", filter: `employee_id=eq.${user.id}` },
+        async () => {
+          const perms = await fetchPermissions(user.role, user.id);
           if (perms) setPermissions(perms);
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user?.role]);
+  }, [user?.role, user?.id]);
 
   const login = useCallback(async (email: string, password: string) => {
     let loginEmail = email;
@@ -186,20 +212,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setUser(emp as AuthUser);
 
-    // Load permissions immediately after login
-    const perms = await fetchPermissions(emp.role);
+    // Load permissions immediately after login (merged with per-employee overrides)
+    const perms = await fetchPermissions(emp.role, emp.id);
     setPermissions(perms);
 
     // Route based on role
-    if (emp.role === "employee" || emp.role === "intern") {
-      router.push("/dashboard");
-    } else if (emp.role === "team_lead") {
-      router.push("/team-lead/dashboard");
-    } else if (emp.role === "dept_lead") {
-      router.push("/department-lead/dashboard");
-    } else {
-      router.push("/admin");
-    }
+    router.push(getDashboardForRole(emp.role as Role));
   }, [router]);
 
   const logout = useCallback(async () => {

@@ -1,27 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
+type PermNode = {
+  can_view: boolean;
+  can_create: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  can_export: boolean;
+};
+
+// GET /api/permissions?role=<role>&employee_id=<uuid?>
+//
+// Returns the EFFECTIVE permission map for a role, optionally merged with
+// per-employee overrides. Override fields are honored field-by-field — NULL
+// on an override field falls back to the role default.
 export async function GET(req: NextRequest) {
   const role = req.nextUrl.searchParams.get("role");
+  const employeeId = req.nextUrl.searchParams.get("employee_id");
+
   if (!role) {
     return NextResponse.json({ error: "role param required" }, { status: 400 });
   }
 
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+
+    // 1. Role defaults
+    const { data: roleRows, error: roleErr } = await supabase
       .from("role_permissions")
       .select("module_key, can_view, can_create, can_edit, can_delete, can_export")
       .eq("role", role);
+    if (roleErr) throw roleErr;
 
-    if (error) throw error;
-
-    const permissions: Record<string, {
-      can_view: boolean; can_create: boolean; can_edit: boolean;
-      can_delete: boolean; can_export: boolean;
-    }> = {};
-
-    for (const row of data ?? []) {
+    const permissions: Record<string, PermNode> = {};
+    for (const row of roleRows ?? []) {
       permissions[row.module_key] = {
         can_view:   row.can_view,
         can_create: row.can_create,
@@ -31,22 +43,42 @@ export async function GET(req: NextRequest) {
       };
     }
 
+    // 2. Per-employee overrides (only if employee_id provided)
+    if (employeeId) {
+      const { data: overrideRows } = await supabase
+        .from("employee_permissions")
+        .select("module_key, can_view, can_create, can_edit, can_delete, can_export")
+        .eq("employee_id", employeeId);
+
+      for (const row of overrideRows ?? []) {
+        const base = permissions[row.module_key] ?? {
+          can_view: false, can_create: false, can_edit: false, can_delete: false, can_export: false,
+        };
+        permissions[row.module_key] = {
+          can_view:   row.can_view   ?? base.can_view,
+          can_create: row.can_create ?? base.can_create,
+          can_edit:   row.can_edit   ?? base.can_edit,
+          can_delete: row.can_delete ?? base.can_delete,
+          can_export: row.can_export ?? base.can_export,
+        };
+      }
+    }
+
     return NextResponse.json({ permissions });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const msg = (err as Error)?.message ?? "Unknown error";
     console.error("[GET /api/permissions]", err);
-    return NextResponse.json({ error: err.message ?? "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
+// POST /api/permissions — update ROLE defaults (existing behavior).
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { role, permissions, updatedBy } = body as {
       role: string;
-      permissions: Record<string, {
-        can_view: boolean; can_create: boolean; can_edit: boolean;
-        can_delete: boolean; can_export: boolean;
-      }>;
+      permissions: Record<string, PermNode>;
       updatedBy?: string;
     };
 
@@ -75,8 +107,9 @@ export async function POST(req: NextRequest) {
     if (error) throw error;
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const msg = (err as Error)?.message ?? "Unknown error";
     console.error("[POST /api/permissions]", err);
-    return NextResponse.json({ error: err.message ?? "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

@@ -140,7 +140,7 @@ export const POST = withAuth(async (req) => {
     console.error("KPI save error:", err);
     return apiError(err.message || "Failed to save KPI");
   }
-}, "admin", "team_lead", "dept_lead");
+}, "admin", "hr");
 
 // DELETE /api/kpi — delete KPI record (Admin only)
 export const DELETE = withAuth(async (req) => {

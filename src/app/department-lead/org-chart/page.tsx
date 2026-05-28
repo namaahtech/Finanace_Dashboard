@@ -208,8 +208,8 @@ export default function ManagerOrgChartPage() {
           return teams
             .filter((t: any) => t.parent_id === parentId)
             .map((t: any) => {
-              const leadEmp = employees.find((e: any) => e.id === t.lead_id) 
-                || employees.find((e: any) => e.team_id === t.id && (e.role === 'team_lead' || e.role === 'dept_lead' || e.role === 'manager'));
+              const leadEmp = employees.find((e: any) => e.id === t.lead_id)
+                || employees.find((e: any) => e.team_id === t.id && (e.is_team_lead || e.is_dept_lead));
               const teamEmps = employees
                 .filter((e: any) => e.team_id === t.id && (!leadEmp || e.id !== leadEmp.id))
                 .map((e: any) => ({
@@ -233,7 +233,7 @@ export default function ManagerOrgChartPage() {
 
         const leadEmp = employees.find((e: any) => e.id === dept.lead_id) 
                      || employees.find((e: any) => e.id === user.id) 
-                     || employees.find((e: any) => (e.department === dept.name || e.team_id === dept.id) && (e.role === 'dept_lead' || e.role === 'admin' || e.role === 'manager')) 
+                     || employees.find((e: any) => (e.department === dept.name || e.team_id === dept.id) && (e.role === 'admin' || e.is_dept_lead))
                      || (user as any);
         const deptEmps = employees
           .filter((e: any) => (e.team_id === dept.id || (e.department === dept.name && !e.team_id)) && (!leadEmp || e.id !== leadEmp.id))

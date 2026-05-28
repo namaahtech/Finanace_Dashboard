@@ -91,11 +91,11 @@ interface InvoiceSettings {
 }
 
 const ALL_ROLES = [
-  { value: "admin",     label: "Admin",          color: "text-purple-700 border-purple-500/30 bg-purple-500/10" },
-  { value: "dept_lead", label: "Dept Lead",      color: "text-amber-700 border-amber-500/30 bg-amber-500/10" },
-  { value: "team_lead", label: "Team Lead",      color: "text-orange-700 border-orange-500/30 bg-orange-500/10" },
-  { value: "employee",  label: "Employee",       color: "" },
-  { value: "intern",    label: "Intern",         color: "text-indigo-700 border-indigo-500/30 bg-indigo-500/10" },
+  { value: "admin",    label: "Admin",    color: "text-purple-700 border-purple-500/30 bg-purple-500/10" },
+  { value: "hr",       label: "HR",       color: "text-sky-700 border-sky-500/30 bg-sky-500/10" },
+  { value: "accounts", label: "Accounts", color: "text-emerald-700 border-emerald-500/30 bg-emerald-500/10" },
+  { value: "employee", label: "Employee", color: "" },
+  { value: "intern",   label: "Intern",   color: "text-indigo-700 border-indigo-500/30 bg-indigo-500/10" },
 ];
 
 const INDIAN_STATES_WITH_CODES = [

@@ -42,11 +42,11 @@ interface ResponseRow {
 }
 
 const ROLES = [
-  { id: "admin",     label: "Admin" },
-  { id: "dept_lead", label: "Department Lead" },
-  { id: "team_lead", label: "Team Lead" },
-  { id: "employee",  label: "Employee" },
-  { id: "intern",    label: "Intern" },
+  { id: "admin",    label: "Admin" },
+  { id: "hr",       label: "HR" },
+  { id: "accounts", label: "Accounts" },
+  { id: "employee", label: "Employee" },
+  { id: "intern",   label: "Intern" },
 ];
 
 const PRIORITIES = ["low", "medium", "high", "critical"];
@@ -377,8 +377,8 @@ export default function SupportHubPage() {
     
     // Exact phrasing requested: "show admis are", "show your team leads are"
     if (roleId === 'admin') return "Show Admins are...";
-    if (roleId === 'team_lead') return "Show your Team Leads are...";
-    if (roleId === 'dept_lead') return "Show Department Leads are...";
+    if (roleId === 'hr')       return "Show HR is…";
+    if (roleId === 'accounts') return "Show Accounts is…";
     
     return `Show ${role.label}s are...`;
   };
@@ -500,7 +500,7 @@ export default function SupportHubPage() {
                           </div>
                           {ROLES.filter(r => {
                             if (isRuleLocked) return true;
-                            if (user?.role === 'employee' || user?.role === 'intern') return r.id === 'dept_lead' || r.id === 'team_lead';
+                            if (user?.role === 'employee' || user?.role === 'intern') return r.id === 'hr' || r.id === 'accounts';
                             return r.id !== 'employee' && r.id !== 'intern';
                           }).map(r => (
                             <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>

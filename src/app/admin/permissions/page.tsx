@@ -46,19 +46,19 @@ interface RoleMember {
 }
 
 const ROLES = [
-  { id: "admin",     name: "Admin",          description: "Full access — HR, Finance, and all system controls." },
-  { id: "dept_lead", name: "Department Lead",description: "Oversees a department, its teams, and hiring." },
-  { id: "team_lead", name: "Team Lead",      description: "Runs a specific team day-to-day." },
-  { id: "employee",  name: "Employee",       description: "Standard staff — self-service portal." },
-  { id: "intern",    name: "Intern",         description: "Interns — training and limited access." },
+  { id: "admin",    name: "Admin",    description: "Full access — every panel and module." },
+  { id: "hr",       name: "HR",       description: "People scope: hiring, attendance, performance, L&D, org structure." },
+  { id: "accounts", name: "Accounts", description: "Finance scope: invoicing, vendors, budgets, payroll, claims." },
+  { id: "employee", name: "Employee", description: "Standard staff — self-service portal. Manager flags add team views." },
+  { id: "intern",   name: "Intern",   description: "Trainee — limited self-service access." },
 ];
 
 const ALL_ROLES_FOR_ASSIGN = [
-  { id: "admin",     label: "Admin" },
-  { id: "dept_lead", label: "Department Lead" },
-  { id: "team_lead", label: "Team Lead" },
-  { id: "employee",  label: "Employee" },
-  { id: "intern",    label: "Intern" },
+  { id: "admin",    label: "Admin" },
+  { id: "hr",       label: "HR" },
+  { id: "accounts", label: "Accounts" },
+  { id: "employee", label: "Employee" },
+  { id: "intern",   label: "Intern" },
 ];
 
 const SECTIONS = [
