@@ -1,22 +1,36 @@
-﻿"use client";
+"use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/ButtonLegacy";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { formatCurrency, cn } from "@/lib/utils";
+import { toast } from "sonner";
 import {
   BarChart3, Search, IndianRupee, TrendingUp, TrendingDown,
-  AlertCircle, ChevronDown, Plus, Pencil, Trash2, X, Check,
-  Building2, Users, Globe, Calendar, Tag, Layers, RefreshCw,
-  ChevronRight, LayoutList,
+  AlertCircle, Plus, Pencil, Trash2, Building2, Users, Globe, Calendar,
+  Layers, RefreshCw, LayoutList, Check, Loader2,
 } from "lucide-react";
-import { useState, useEffect, useCallback, useRef } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
@@ -53,7 +67,6 @@ interface Budget {
   created_at: string;
   teams?: { name: string } | null;
   budget_allocations?: BudgetAllocation[];
-  // computed
   actual_spent?: number;
   purchase_spent?: number;
   sub_spent?: number;
@@ -72,11 +85,10 @@ const BUDGET_CATEGORIES = [
   "Legal","Infrastructure","Product","Research","Sales","Other",
 ];
 
-const SCOPE_STYLES: Record<string, string> = {
-  department: "bg-sky-500/10 text-sky-700 dark:text-sky-400",
-  team:       "bg-violet-500/10 text-violet-700 dark:text-violet-400",
-  company:    "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-};
+const ALLOC_CATEGORIES = [
+  "Salaries","Software","Infrastructure","Marketing","Travel","Training",
+  "Subscriptions","Office","Legal","Research","Miscellaneous",
+];
 
 const SCOPE_ICONS: Record<string, React.ElementType> = {
   department: Building2,
@@ -84,175 +96,88 @@ const SCOPE_ICONS: Record<string, React.ElementType> = {
   company:    Globe,
 };
 
-const STATUS_STYLES: Record<string, string> = {
-  active: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  closed: "bg-gray-400/10 text-gray-500",
-  draft:  "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-};
-
-const ALLOC_CATEGORIES = [
-  "Salaries","Software","Infrastructure","Marketing","Travel","Training",
-  "Subscriptions","Office","Legal","Research","Miscellaneous",
-];
-
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
-function utilColor(pct: number, isOver: boolean) {
-  if (isOver) return { bar: "bg-red-500",    text: "text-red-500" };
+function utilBar(pct: number, isOver: boolean) {
+  if (isOver) return { bar: "bg-rose-500",    text: "text-rose-500" };
   if (pct >= 85) return { bar: "bg-amber-500", text: "text-amber-600" };
   return { bar: "bg-emerald-500", text: "text-emerald-600" };
 }
 
-function CustomTooltip({ active, payload, label }: {active?: boolean; payload?: {name:string;value:number;color:string}[]; label?: string}) {
+function scopeBadge(b: Budget) {
+  const Icon = SCOPE_ICONS[b.scope_type];
+  const label = b.scope_type === "department"
+    ? b.department_name || "Dept"
+    : b.scope_type === "team"
+      ? (b.teams?.name || "Team")
+      : "Company";
+  const cls =
+    b.scope_type === "department" ? "text-sky-700 dark:text-sky-400 border-sky-500/30 bg-sky-500/10" :
+    b.scope_type === "team"       ? "text-violet-700 dark:text-violet-400 border-violet-500/30 bg-violet-500/10" :
+                                    "text-amber-700 dark:text-amber-400 border-amber-500/30 bg-amber-500/10";
+  return (
+    <Badge variant="outline" className={cn("gap-1 capitalize", cls)}>
+      <Icon size={10} /> {label}
+    </Badge>
+  );
+}
+
+function statusBadge(status: Budget["status"]) {
+  if (status === "active") return <Badge className="bg-emerald-500 hover:bg-emerald-500/90 text-white capitalize">{status}</Badge>;
+  if (status === "draft")  return <Badge variant="secondary" className="capitalize">{status}</Badge>;
+  return <Badge variant="outline" className="capitalize text-muted-foreground">{status}</Badge>;
+}
+
+function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl border border-theme-border bg-theme-surface p-3 shadow-lg text-xs">
-      <p className="mb-2 font-bold text-theme-fg">{label}</p>
-      {payload.map((p) => (
+    <div className="rounded-md border border-border bg-popover p-2.5 shadow-md text-xs">
+      <p className="mb-1.5 font-medium text-foreground">{label}</p>
+      {payload.map((p: any) => (
         <div key={p.name} className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-1.5">
             <div className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
-            <span className="text-theme-muted">{p.name}</span>
+            <span className="text-muted-foreground">{p.name}</span>
           </div>
-          <span className="font-semibold text-theme-fg">{formatCurrency(p.value * 1000)}</span>
+          <span className="font-medium text-foreground tabular-nums">{formatCurrency(p.value * 1000)}</span>
         </div>
       ))}
     </div>
   );
 }
 
-/* ─── Custom Dropdown ────────────────────────────────────────────────────── */
-function BudgetDropdown({
-  label, value, onChange, options, placeholder, icon: Icon, searchable = false,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { label: string; value: string; sub?: string }[];
-  placeholder: string;
-  icon?: React.ElementType;
-  searchable?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false); setQuery("");
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const filtered = searchable && query.trim()
-    ? options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()))
-    : options;
-
-  const selected = options.find(o => o.value === value);
-
-  return (
-    <div ref={ref} className="relative">
-      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">{label}</label>
-      <button
-        type="button"
-        onClick={() => { setOpen(o => !o); setQuery(""); }}
-        className={cn(
-          "flex h-9 w-full items-center justify-between rounded-lg border bg-theme-raised px-3 text-sm outline-none transition-all",
-          open ? "border-theme-strong" : "border-theme-border",
-          selected ? "text-theme-fg" : "text-theme-muted"
-        )}
-      >
-        <span className="flex items-center gap-2 truncate">
-          {Icon && <Icon size={13} className="flex-shrink-0 text-theme-muted" />}
-          {selected ? selected.label : placeholder}
-        </span>
-        <ChevronDown size={12} className={cn("flex-shrink-0 text-theme-muted transition-transform", open && "rotate-180")} />
-      </button>
-
-      {open && (
-        <div className="absolute top-full left-0 z-[200] mt-1 w-full rounded-xl border border-theme-border bg-theme-surface shadow-xl overflow-hidden animate-in slide-in-from-top-1 duration-150">
-          {searchable && (
-            <div className="border-b border-theme-border px-3 py-2">
-              <input
-                autoFocus
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search…"
-                className="w-full bg-transparent text-xs text-theme-fg outline-none placeholder:text-theme-muted"
-              />
-            </div>
-          )}
-          <div className="max-h-52 overflow-y-auto p-1">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-4 text-center text-[11px] text-theme-subtle">No options found</div>
-            ) : filtered.map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => { onChange(opt.value); setOpen(false); setQuery(""); }}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs transition-all",
-                  value === opt.value
-                    ? "bg-theme-primary/10 text-theme-primary font-semibold"
-                    : "text-theme-fg hover:bg-theme-raised font-medium"
-                )}
-              >
-                <span className="truncate">{opt.label}</span>
-                {opt.sub && <span className="ml-2 flex-shrink-0 text-[10px] text-theme-subtle">{opt.sub}</span>}
-                {value === opt.value && <Check size={11} className="ml-2 flex-shrink-0 text-theme-primary" />}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Main Component ─────────────────────────────────────────────────────── */
+/* ─── Main ───────────────────────────────────────────────────────────────── */
 export default function BudgetsPage() {
-  /* tabs */
   const [activeTab, setActiveTab] = useState<"budgets" | "allocations">("budgets");
 
-  /* data */
-  const [budgets, setBudgets]     = useState<Budget[]>([]);
-  const [teams, setTeams]         = useState<Team[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [teams, setTeams]     = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  /* filters */
-  const [search, setSearch]       = useState("");
-  const [filterScope, setFilterScope] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterYear, setFilterYear]     = useState(String(CURRENT_YEAR));
+  const [search, setSearch]           = useState("");
+  const [filterScope, setFilterScope] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterYear, setFilterYear]   = useState(String(CURRENT_YEAR));
 
-  /* selected budget for allocations tab */
-  const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null);
-
-  /* add/edit modal */
-  const [showModal, setShowModal]   = useState(false);
+  /* dialog state */
+  const [showModal, setShowModal]         = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
-  const [saving, setSaving]         = useState(false);
+  const [saving, setSaving]               = useState(false);
 
-  /* delete confirm */
   const [confirmDelete, setConfirmDelete] = useState<Budget | null>(null);
-  const [deleting, setDeleting]     = useState(false);
+  const [deleting, setDeleting]           = useState(false);
 
-  /* allocation modal */
-  const [showAllocModal, setShowAllocModal] = useState(false);
-  const [allocBudget, setAllocBudget]       = useState<Budget | null>(null);
-  const [allocations, setAllocations]       = useState<BudgetAllocation[]>([]);
-  const [loadingAllocs, setLoadingAllocs]   = useState(false);
+  /* allocations tab */
+  const [allocBudget, setAllocBudget]     = useState<Budget | null>(null);
+  const [allocations, setAllocations]     = useState<BudgetAllocation[]>([]);
+  const [loadingAllocs, setLoadingAllocs] = useState(false);
 
-  /* new allocation form */
-  const [newAllocCat, setNewAllocCat]       = useState("General");
-  const [newAllocLabel, setNewAllocLabel]   = useState("");
-  const [newAllocAmt, setNewAllocAmt]       = useState("");
-  const [savingAlloc, setSavingAlloc]       = useState(false);
+  const [newAllocCat, setNewAllocCat]     = useState("General");
+  const [newAllocLabel, setNewAllocLabel] = useState("");
+  const [newAllocAmt, setNewAllocAmt]     = useState("");
+  const [savingAlloc, setSavingAlloc]     = useState(false);
 
   /* form fields */
   const [fName, setFName]         = useState("");
@@ -266,29 +191,44 @@ export default function BudgetsPage() {
   const [fNotes, setFNotes]       = useState("");
   const [fStatus, setFStatus]     = useState<"active"|"closed"|"draft">("active");
 
-  /* ── fetch ── */
+  /* fetch */
   const fetchBudgets = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (search)      params.set("search", search);
-    if (filterScope) params.set("scope_type", filterScope);
-    if (filterStatus) params.set("status", filterStatus);
-    if (filterYear)  params.set("year", filterYear);
-    const res = await fetch(`/api/budgets?${params}`);
-    const json = await res.json();
-    setBudgets(json.budgets || []);
-    setLoading(false);
+    try {
+      const params = new URLSearchParams();
+      if (search)                   params.set("search", search);
+      if (filterScope !== "all")    params.set("scope_type", filterScope);
+      if (filterStatus !== "all")   params.set("status", filterStatus);
+      if (filterYear)               params.set("year", filterYear);
+      const res = await fetch(`/api/budgets?${params}`);
+      const json = await res.json();
+      setBudgets(json.budgets || []);
+    } catch {
+      // non-fatal
+    } finally {
+      setLoading(false);
+    }
   }, [search, filterScope, filterStatus, filterYear]);
 
   const fetchTeams = useCallback(async () => {
     const { data } = await supabase.from("teams").select("id, name, department").order("name");
     setTeams(data || []);
-  }, [supabase]);
+  }, []);
+
+  const fetchAllocations = useCallback(async (budgetId: string) => {
+    setLoadingAllocs(true);
+    try {
+      const res = await fetch(`/api/budgets/${budgetId}/allocations`);
+      const json = await res.json();
+      setAllocations(json.allocations || []);
+    } finally {
+      setLoadingAllocs(false);
+    }
+  }, []);
 
   useEffect(() => { fetchBudgets(); }, [fetchBudgets]);
   useEffect(() => { fetchTeams(); }, [fetchTeams]);
 
-  /* realtime */
   useEffect(() => {
     const channel = supabase
       .channel("budgets-rt-v1")
@@ -299,18 +239,9 @@ export default function BudgetsPage() {
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [supabase, fetchBudgets, allocBudget]);
+  }, [fetchBudgets, fetchAllocations, allocBudget]);
 
-  /* ── allocations fetch ── */
-  const fetchAllocations = async (budgetId: string) => {
-    setLoadingAllocs(true);
-    const res = await fetch(`/api/budgets/${budgetId}/allocations`);
-    const json = await res.json();
-    setAllocations(json.allocations || []);
-    setLoadingAllocs(false);
-  };
-
-  /* ── open modal ── */
+  /* modal */
   const openAdd = () => {
     setEditingBudget(null);
     setFName(""); setFScope("department"); setFDept(""); setFTeamId("");
@@ -329,88 +260,109 @@ export default function BudgetsPage() {
     setShowModal(true);
   };
 
-  /* ── save ── */
-  const handleSave = async () => {
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!fName.trim()) return;
     setSaving(true);
-    const payload = {
-      name: fName.trim(), scope_type: fScope,
-      department_name: fScope === "department" ? fDept || null : null,
-      team_id: fScope === "team" ? fTeamId || null : null,
-      fiscal_year: parseInt(fYear) || CURRENT_YEAR,
-      fiscal_month: fMonth ? parseInt(fMonth) : null,
-      total_amount: parseFloat(fAmount) || 0,
-      category: fCategory, notes: fNotes || null, status: fStatus,
-    };
-    if (editingBudget) {
-      await fetch(`/api/budgets/${editingBudget.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    } else {
-      await fetch("/api/budgets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    try {
+      const payload = {
+        name: fName.trim(), scope_type: fScope,
+        department_name: fScope === "department" ? fDept || null : null,
+        team_id: fScope === "team" ? fTeamId || null : null,
+        fiscal_year: parseInt(fYear) || CURRENT_YEAR,
+        fiscal_month: fMonth ? parseInt(fMonth) : null,
+        total_amount: parseFloat(fAmount) || 0,
+        category: fCategory, notes: fNotes || null, status: fStatus,
+      };
+      if (editingBudget) {
+        await fetch(`/api/budgets/${editingBudget.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        toast.success("Budget updated");
+      } else {
+        await fetch("/api/budgets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        toast.success("Budget created");
+      }
+      setShowModal(false);
+      fetchBudgets();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save budget");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setShowModal(false);
-    fetchBudgets();
   };
 
-  /* ── delete ── */
   const handleDelete = async () => {
     if (!confirmDelete) return;
     setDeleting(true);
-    await fetch(`/api/budgets/${confirmDelete.id}`, { method: "DELETE" });
-    setDeleting(false);
-    setConfirmDelete(null);
-    fetchBudgets();
+    try {
+      await fetch(`/api/budgets/${confirmDelete.id}`, { method: "DELETE" });
+      toast.success("Budget deleted");
+      setConfirmDelete(null);
+      fetchBudgets();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete");
+    } finally {
+      setDeleting(false);
+    }
   };
 
-  /* ── allocations ── */
+  /* allocations */
   const openAllocations = (b: Budget) => {
     setAllocBudget(b);
     fetchAllocations(b.id);
-    if (activeTab !== "allocations") setActiveTab("allocations");
-    setSelectedBudget(b);
+    setActiveTab("allocations");
   };
 
   const handleAddAlloc = async () => {
     if (!allocBudget || !newAllocAmt) return;
     setSavingAlloc(true);
-    await fetch(`/api/budgets/${allocBudget.id}/allocations`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ category: newAllocCat, label: newAllocLabel || null, allocated: parseFloat(newAllocAmt) }),
-    });
-    setNewAllocCat("General"); setNewAllocLabel(""); setNewAllocAmt("");
-    setSavingAlloc(false);
-    fetchAllocations(allocBudget.id);
+    try {
+      await fetch(`/api/budgets/${allocBudget.id}/allocations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: newAllocCat, label: newAllocLabel || null, allocated: parseFloat(newAllocAmt) }),
+      });
+      setNewAllocCat("General"); setNewAllocLabel(""); setNewAllocAmt("");
+      fetchAllocations(allocBudget.id);
+      toast.success("Allocation added");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add allocation");
+    } finally {
+      setSavingAlloc(false);
+    }
   };
 
   const handleDeleteAlloc = async (allocId: string) => {
     if (!allocBudget) return;
-    await fetch(`/api/budgets/${allocBudget.id}/allocations?allocId=${allocId}`, { method: "DELETE" });
-    fetchAllocations(allocBudget.id);
+    try {
+      await fetch(`/api/budgets/${allocBudget.id}/allocations?allocId=${allocId}`, { method: "DELETE" });
+      fetchAllocations(allocBudget.id);
+      toast.success("Allocation removed");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to remove");
+    }
   };
 
-  /* ── computed stats ── */
-  const totalBudget  = budgets.reduce((s, b) => s + b.total_amount, 0);
-  const totalSpent   = budgets.reduce((s, b) => s + (b.actual_spent || 0), 0);
-  const remaining    = totalBudget - totalSpent;
-  const overCount    = budgets.filter(b => (b.actual_spent || 0) > b.total_amount).length;
-
-  /* ── chart data ── */
-  const chartData = budgets.slice(0, 8).map(b => ({
+  /* computed */
+  const totalBudget = budgets.reduce((s, b) => s + b.total_amount, 0);
+  const totalSpent  = budgets.reduce((s, b) => s + (b.actual_spent || 0), 0);
+  const remaining   = totalBudget - totalSpent;
+  const overCount   = budgets.filter(b => (b.actual_spent || 0) > b.total_amount).length;
+  const chartData   = budgets.slice(0, 8).map(b => ({
     name: b.name.split(" ")[0].slice(0, 8),
     Budget: Math.round(b.total_amount / 1000),
     Spent:  Math.round((b.actual_spent || 0) / 1000),
   }));
-
-  /* ── departments from teams table (real source) ── */
   const departments = [...new Set(teams.filter(t => t.department).map(t => t.department!))].sort();
+  const teamsForDept = fDept ? teams.filter(t => t.department === fDept) : teams;
+  const totalAllocated = allocations.reduce((s, a) => s + a.allocated, 0);
 
-  /* ── teams filtered by selected department (for team-scope budgets) ── */
-  const teamsForDept = fDept
-    ? teams.filter(t => t.department === fDept)
-    : teams;
+  const stats = [
+    { label: "Total Budget", value: formatCurrency(totalBudget),              icon: IndianRupee,  tone: "text-foreground",  bg: "bg-muted" },
+    { label: "Total Spent",  value: formatCurrency(totalSpent),               icon: TrendingDown, tone: "text-sky-600",     bg: "bg-sky-500/10" },
+    { label: "Remaining",    value: formatCurrency(Math.max(remaining, 0)),   icon: TrendingUp,   tone: "text-emerald-600", bg: "bg-emerald-500/10" },
+    { label: "Over Budget",  value: String(overCount),                        icon: AlertCircle,  tone: "text-rose-500",    bg: "bg-rose-500/10" },
+  ];
 
-  /* ─── Render ─────────────────────────────────────────────────────────── */
   return (
     <DashboardShell
       moduleKey="budgets"
@@ -418,252 +370,205 @@ export default function BudgetsPage() {
       subtitle="Plan and monitor spend across departments, teams, and the company."
       actions={
         <div className="flex items-center gap-2">
-          <button onClick={fetchBudgets} className="flex h-8 w-8 items-center justify-center rounded-lg border border-theme-border bg-theme-raised text-theme-muted hover:text-theme-fg transition-colors">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={fetchBudgets} title="Refresh">
             <RefreshCw size={13} />
-          </button>
-          <Button variant="primary" size="sm" onClick={openAdd}>
-            <Plus size={13} className="mr-1" />New Budget
+          </Button>
+          <Button size="sm" onClick={openAdd}>
+            <Plus size={13} /> New Budget
           </Button>
         </div>
       }
     >
-      {/* ── Delete confirm bar ── */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-[70] flex items-start justify-center pt-16 bg-transparent pointer-events-none">
-          <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-theme-border bg-theme-surface px-5 py-3 shadow-2xl">
-            <Trash2 size={15} className="text-red-500 flex-shrink-0" />
-            <span className="text-sm font-medium text-theme-fg">
-              Delete <span className="font-bold">"{confirmDelete.name}"</span>?
-            </span>
-            <div className="flex items-center gap-2 ml-2">
-              <button onClick={() => setConfirmDelete(null)} className="flex h-7 items-center gap-1 rounded-lg border border-theme-border bg-theme-raised px-3 text-xs font-semibold text-theme-muted hover:text-theme-fg transition-colors">
-                <X size={11} />Cancel
-              </button>
-              <button onClick={handleDelete} disabled={deleting} className="flex h-7 items-center gap-1 rounded-lg bg-red-500 px-3 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50 transition-colors">
-                <Trash2 size={11} />{deleting ? "Deleting…" : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="space-y-5">
-        {/* ── Stat cards ── */}
+        {/* Stats */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {[
-            { label: "Total Budget",  value: formatCurrency(totalBudget), icon: IndianRupee,  color: "text-theme-fg",     bg: "bg-theme-raised" },
-            { label: "Total Spent",   value: formatCurrency(totalSpent),  icon: TrendingDown, color: "text-sky-600",      bg: "bg-sky-500/10" },
-            { label: "Remaining",     value: formatCurrency(Math.max(remaining, 0)), icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-            { label: "Over Budget",   value: overCount,                   icon: AlertCircle,  color: "text-red-500",      bg: "bg-red-500/10" },
-          ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="page-card flex items-center gap-3">
-              <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
-                <Icon size={15} className={color} />
-              </div>
-              <div>
-                <p className="text-[11px] text-theme-muted">{label}</p>
-                <p className={cn("text-xl font-black leading-tight", color)}>{value}</p>
-              </div>
-            </div>
+          {stats.map(({ label, value, icon: Icon, tone, bg }) => (
+            <Card key={label}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg", bg)}>
+                  <Icon size={15} className={tone} />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className={cn("text-xl font-semibold tabular-nums leading-tight", tone)}>{value}</p>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
 
-        {/* ── Chart ── */}
+        {/* Chart */}
         {chartData.length > 0 && (
-          <div className="page-card">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BarChart3 size={15} className="text-theme-muted" />
-                <span className="text-sm font-semibold text-theme-fg">Budget vs Spend</span>
+          <Card>
+            <CardContent className="p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart3 size={15} className="text-muted-foreground" />
+                  <span className="text-sm font-semibold text-foreground">Budget vs Spend</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  {[{ dot: "bg-sky-500", label: "Budget" }, { dot: "bg-emerald-500", label: "Spent" }].map(({ dot, label }) => (
+                    <div key={label} className="flex items-center gap-1.5">
+                      <div className={cn("h-2 w-2 rounded-full flex-shrink-0", dot)} />
+                      {label}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-theme-muted">
-                {[{ dot: "bg-sky-500", label: "Budget" }, { dot: "bg-emerald-500", label: "Spent" }].map(({ dot, label }) => (
-                  <div key={label} className="flex items-center gap-1.5">
-                    <div className={cn("h-2 w-2 rounded-full flex-shrink-0", dot)} />
-                    {label}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={chartData} barCategoryGap="30%" barGap={3}>
-                <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="4 0" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--fg-muted))" }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={v => `₹${v}K`} tick={{ fontSize: 11, fill: "hsl(var(--fg-muted))" }} axisLine={false} tickLine={false} width={52} />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: "hsl(var(--surface-raised))", radius: 6 }} />
-                <Bar dataKey="Budget" fill="#0ea5e9" radius={[4,4,0,0]} />
-                <Bar dataKey="Spent"  fill="#10b981" radius={[4,4,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={chartData} barCategoryGap="30%" barGap={3}>
+                  <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={v => `₹${v}K`} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={52} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--muted)", radius: 6 }} />
+                  <Bar dataKey="Budget" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Spent"  fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         )}
 
-        {/* ── Tab Switcher + Table ── */}
-        <div className="page-card overflow-hidden p-0">
-          {/* Header */}
-          <div className="flex flex-col gap-3 border-b border-theme-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5">
-              {[
-                { id: "budgets",     label: "Budgets",     icon: IndianRupee },
-                { id: "allocations", label: "Allocations", icon: LayoutList },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setActiveTab(t.id as typeof activeTab)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
-                    activeTab === t.id ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
-                  )}
-                >
-                  <t.icon size={11} />{t.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <Select value={filterYear || "all"} onValueChange={(v) => setFilterYear(v === "all" ? "" : v)}>
-                <SelectTrigger className="h-8 w-[120px]"><SelectValue placeholder="Year" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Years</SelectItem>
-                  {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={filterScope || "all"} onValueChange={(v) => setFilterScope(v === "all" ? "" : v)}>
-                <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="Scope" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Scopes</SelectItem>
-                  <SelectItem value="department">Department</SelectItem>
-                  <SelectItem value="team">Team</SelectItem>
-                  <SelectItem value="company">Company</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterStatus || "all"} onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}>
-                <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search budgets…"
-                  className="h-8 w-44 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all" />
+        {/* Tabs + filters + table */}
+        <Card className="p-0 overflow-hidden">
+          <div className="flex flex-col gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+              <TabsList>
+                <TabsTrigger value="budgets" className="text-xs gap-1.5"><IndianRupee size={11} /> Budgets</TabsTrigger>
+                <TabsTrigger value="allocations" className="text-xs gap-1.5"><LayoutList size={11} /> Allocations</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {activeTab === "budgets" && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select value={filterYear || "all"} onValueChange={(v) => setFilterYear(v === "all" ? "" : v)}>
+                  <SelectTrigger className="h-8 w-[120px]"><SelectValue placeholder="Year" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Years</SelectItem>
+                    {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={filterScope} onValueChange={setFilterScope}>
+                  <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="Scope" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Scopes</SelectItem>
+                    <SelectItem value="department">Department</SelectItem>
+                    <SelectItem value="team">Team</SelectItem>
+                    <SelectItem value="company">Company</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="h-8 w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={13} />
+                  <Input
+                    value={search} onChange={e => setSearch(e.target.value)}
+                    placeholder="Search budgets…"
+                    className="h-8 w-44 pl-8 text-xs"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* ── BUDGETS TAB ── */}
+          {/* BUDGETS TAB */}
           {activeTab === "budgets" && (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
-                    <th className="px-5 py-3 font-semibold">Budget</th>
-                    <th className="px-5 py-3 font-semibold">Scope</th>
-                    <th className="px-5 py-3 font-semibold">Period</th>
-                    <th className="px-5 py-3 font-semibold">Total</th>
-                    <th className="px-5 py-3 font-semibold">Spent</th>
-                    <th className="px-5 py-3 font-semibold">Remaining</th>
-                    <th className="px-5 py-3 font-semibold">Utilisation</th>
-                    <th className="px-5 py-3 font-semibold">Status</th>
-                    <th className="px-5 py-3 font-semibold w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-theme-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Budget</TableHead>
+                    <TableHead>Scope</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Spent</TableHead>
+                    <TableHead>Remaining</TableHead>
+                    <TableHead>Utilisation</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right w-[120px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
-                      <tr key={i}>
+                      <TableRow key={i}>
                         {Array.from({ length: 9 }).map((_, j) => (
-                          <td key={j} className="px-5 py-3">
-                            <div className="h-3 rounded bg-theme-raised animate-pulse" style={{ width: j === 0 ? 140 : j === 6 ? 80 : 70 }} />
-                          </td>
+                          <TableCell key={j}><Skeleton className="h-4 w-20" /></TableCell>
                         ))}
-                      </tr>
+                      </TableRow>
                     ))
                   ) : budgets.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-16 text-center text-sm text-theme-subtle">
-                        No budgets yet — click <span className="font-semibold text-theme-fg">New Budget</span> to create one.
-                      </td>
-                    </tr>
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-16 text-center text-sm text-muted-foreground">
+                        No budgets yet — click <span className="font-medium text-foreground">New Budget</span> to create one.
+                      </TableCell>
+                    </TableRow>
                   ) : budgets.map(b => {
-                    const spent   = b.actual_spent || 0;
-                    const isOver  = spent > b.total_amount;
-                    const pct     = b.total_amount > 0 ? Math.min((spent / b.total_amount) * 100, 100) : 0;
-                    const rem     = b.total_amount - spent;
-                    const { bar, text } = utilColor(pct, isOver);
-                    const ScopeIcon = SCOPE_ICONS[b.scope_type];
-
+                    const spent  = b.actual_spent || 0;
+                    const isOver = spent > b.total_amount;
+                    const pct    = b.total_amount > 0 ? Math.min((spent / b.total_amount) * 100, 100) : 0;
+                    const rem    = b.total_amount - spent;
+                    const { bar, text } = utilBar(pct, isOver);
                     return (
-                      <tr key={b.id} className="group transition-colors hover:bg-theme-raised/40">
-                        <td className="px-5 py-3">
-                          <div>
-                            <p className="text-xs font-semibold text-theme-fg">{b.name}</p>
-                            <p className="text-[10px] text-theme-subtle tabular-nums">{b.budget_number}</p>
+                      <TableRow key={b.id} className="group">
+                        <TableCell>
+                          <p className="text-sm font-medium text-foreground">{b.name}</p>
+                          <p className="text-xs text-muted-foreground tabular-nums">{b.budget_number}</p>
+                        </TableCell>
+                        <TableCell>{scopeBadge(b)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Calendar size={11} />
+                            {b.fiscal_month ? `${MONTHS[b.fiscal_month - 1].slice(0, 3)} ${b.fiscal_year}` : `FY ${b.fiscal_year}`}
                           </div>
-                        </td>
-                        <td className="px-5 py-3">
-                          <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize", SCOPE_STYLES[b.scope_type])}>
-                            <ScopeIcon size={9} />
-                            {b.scope_type === "department" ? b.department_name || "Dept"
-                             : b.scope_type === "team"     ? (b.teams?.name || "Team")
-                             : "Company"}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-1 text-[11px] text-theme-muted">
-                            <Calendar size={10} />
-                            {b.fiscal_month ? `${MONTHS[b.fiscal_month - 1].slice(0,3)} ${b.fiscal_year}` : `FY ${b.fiscal_year}`}
-                          </div>
-                        </td>
-                        <td className="px-5 py-3 text-xs text-theme-muted">{formatCurrency(b.total_amount)}</td>
-                        <td className="px-5 py-3 text-xs font-semibold text-theme-fg">{formatCurrency(spent)}</td>
-                        <td className={cn("px-5 py-3 text-xs font-semibold", isOver ? "text-red-500" : "text-emerald-600")}>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground tabular-nums">{formatCurrency(b.total_amount)}</TableCell>
+                        <TableCell className="text-sm font-medium text-foreground tabular-nums">{formatCurrency(spent)}</TableCell>
+                        <TableCell className={cn("text-sm font-medium tabular-nums", isOver ? "text-rose-500" : "text-emerald-600")}>
                           {isOver ? `−${formatCurrency(Math.abs(rem))}` : formatCurrency(rem)}
-                        </td>
-                        <td className="px-5 py-3">
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-theme-raised">
+                            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
                               <div className={cn("h-full rounded-full transition-all", bar)} style={{ width: `${pct}%` }} />
                             </div>
-                            <span className={cn("text-[10px] font-bold tabular-nums", text)}>
+                            <span className={cn("text-[11px] font-semibold tabular-nums inline-flex items-center gap-0.5", text)}>
                               {isOver ? `${((spent / b.total_amount) * 100).toFixed(0)}%` : `${pct.toFixed(0)}%`}
-                              {isOver && <AlertCircle size={9} className="inline ml-0.5 text-red-500" />}
+                              {isOver && <AlertCircle size={10} className="text-rose-500" />}
                             </span>
                           </div>
-                        </td>
-                        <td className="px-5 py-3">
-                          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize", STATUS_STYLES[b.status])}>
-                            {b.status}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => openAllocations(b)} title="Allocations"
-                              className="flex h-6 w-6 items-center justify-center rounded-md text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-colors">
-                              <Layers size={12} />
-                            </button>
-                            <button onClick={() => openEdit(b)} title="Edit"
-                              className="flex h-6 w-6 items-center justify-center rounded-md text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-colors">
-                              <Pencil size={12} />
-                            </button>
-                            <button onClick={() => setConfirmDelete(b)} title="Delete"
-                              className="flex h-6 w-6 items-center justify-center rounded-md text-theme-muted hover:bg-red-500/10 hover:text-red-500 transition-colors">
-                              <Trash2 size={12} />
-                            </button>
+                        </TableCell>
+                        <TableCell>{statusBadge(b.status)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Allocations" onClick={() => openAllocations(b)}>
+                              <Layers size={13} />
+                            </Button>
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEdit(b)}>
+                              <Pencil size={13} />
+                            </Button>
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10" title="Delete" onClick={() => setConfirmDelete(b)}>
+                              <Trash2 size={13} />
+                            </Button>
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
+
               {!loading && budgets.length > 0 && (
-                <div className="flex items-center justify-between border-t border-theme-border bg-theme-page px-5 py-2.5">
-                  <span className="text-xs text-theme-subtle">{budgets.length} budget{budgets.length !== 1 ? "s" : ""}</span>
-                  <span className="text-xs text-theme-subtle">
-                    Overall utilisation: <span className="font-bold text-theme-fg">
+                <div className="flex items-center justify-between border-t border-border bg-muted/30 px-5 py-2.5">
+                  <span className="text-xs text-muted-foreground">{budgets.length} budget{budgets.length !== 1 ? "s" : ""}</span>
+                  <span className="text-xs text-muted-foreground">
+                    Overall utilisation: <span className="font-semibold text-foreground">
                       {totalBudget > 0 ? `${((totalSpent / totalBudget) * 100).toFixed(1)}%` : "—"}
                     </span>
                   </span>
@@ -672,291 +577,298 @@ export default function BudgetsPage() {
             </div>
           )}
 
-          {/* ── ALLOCATIONS TAB ── */}
+          {/* ALLOCATIONS TAB */}
           {activeTab === "allocations" && (
             <div>
-              {/* Budget picker */}
-              <div className="border-b border-theme-border bg-theme-page px-5 py-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-semibold text-theme-muted">Budget:</span>
-                  <Select
-                    value={allocBudget?.id || ""}
-                    onValueChange={(v) => {
-                      const b = budgets.find(x => x.id === v);
-                      if (b) { setAllocBudget(b); setSelectedBudget(b); fetchAllocations(b.id); }
-                    }}
-                  >
-                    <SelectTrigger className="h-7 w-[280px]"><SelectValue placeholder="— Select a budget —" /></SelectTrigger>
-                    <SelectContent>
-                      {budgets.map(b => <SelectItem key={b.id} value={b.id}>{b.name} ({b.budget_number})</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  {allocBudget && (
-                    <span className="text-xs text-theme-muted">
-                      Total: <span className="font-bold text-theme-fg">{formatCurrency(allocBudget.total_amount)}</span>
-                      {" · "}Allocated: <span className="font-bold text-theme-fg">{formatCurrency(allocations.reduce((s, a) => s + a.allocated, 0))}</span>
-                      {" · "}Remaining: <span className={cn("font-bold", allocations.reduce((s, a) => s + a.allocated, 0) > allocBudget.total_amount ? "text-red-500" : "text-emerald-600")}>
-                        {formatCurrency(allocBudget.total_amount - allocations.reduce((s, a) => s + a.allocated, 0))}
-                      </span>
+              <div className="border-b border-border bg-muted/30 px-5 py-3 flex flex-wrap items-center gap-3">
+                <span className="text-xs font-semibold text-muted-foreground">Budget:</span>
+                <Select
+                  value={allocBudget?.id || undefined}
+                  onValueChange={(v) => {
+                    const b = budgets.find(x => x.id === v);
+                    if (b) { setAllocBudget(b); fetchAllocations(b.id); }
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-[300px]"><SelectValue placeholder="— Select a budget —" /></SelectTrigger>
+                  <SelectContent>
+                    {budgets.map(b => <SelectItem key={b.id} value={b.id}>{b.name} ({b.budget_number})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {allocBudget && (
+                  <span className="text-xs text-muted-foreground">
+                    Total: <span className="font-semibold text-foreground tabular-nums">{formatCurrency(allocBudget.total_amount)}</span>
+                    {" · "}Allocated: <span className="font-semibold text-foreground tabular-nums">{formatCurrency(totalAllocated)}</span>
+                    {" · "}Remaining: <span className={cn("font-semibold tabular-nums", totalAllocated > allocBudget.total_amount ? "text-rose-500" : "text-emerald-600")}>
+                      {formatCurrency(allocBudget.total_amount - totalAllocated)}
                     </span>
-                  )}
-                </div>
+                  </span>
+                )}
               </div>
 
               {!allocBudget ? (
-                <div className="py-16 text-center text-sm text-theme-subtle">Select a budget to view and manage its allocations.</div>
+                <div className="py-16 text-center text-sm text-muted-foreground">
+                  Select a budget to view and manage its allocations.
+                </div>
               ) : (
                 <>
-                  {/* Add allocation row */}
-                  <div className="flex items-center gap-2 border-b border-theme-border bg-theme-raised/30 px-5 py-3">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-5 py-3">
                     <Select value={newAllocCat} onValueChange={setNewAllocCat}>
-                      <SelectTrigger className="h-7 w-[160px] flex-shrink-0"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 w-[160px] flex-shrink-0"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {ALLOC_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <input value={newAllocLabel} onChange={e => setNewAllocLabel(e.target.value)} placeholder="Line-item label (optional)"
-                      className="h-7 flex-1 rounded-lg border border-theme-border bg-theme-raised px-3 text-xs text-theme-fg outline-none focus:border-theme-strong" />
-                    <input value={newAllocAmt} onChange={e => setNewAllocAmt(e.target.value)} placeholder="Amount" type="number" min={0}
-                      className="h-7 w-32 rounded-lg border border-theme-border bg-theme-raised px-3 text-xs text-theme-fg outline-none focus:border-theme-strong" />
-                    <button onClick={handleAddAlloc} disabled={savingAlloc || !newAllocAmt}
-                      className="flex h-7 items-center gap-1 rounded-lg bg-theme-primary px-3 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
-                      <Plus size={11} />{savingAlloc ? "Adding…" : "Add"}
-                    </button>
+                    <Input
+                      value={newAllocLabel} onChange={e => setNewAllocLabel(e.target.value)}
+                      placeholder="Line-item label (optional)"
+                      className="h-8 flex-1 min-w-[200px]"
+                    />
+                    <Input
+                      value={newAllocAmt} onChange={e => setNewAllocAmt(e.target.value)}
+                      type="number" min={0} placeholder="Amount"
+                      className="h-8 w-32"
+                    />
+                    <Button
+                      type="button" size="sm" className="h-8"
+                      onClick={handleAddAlloc}
+                      disabled={savingAlloc || !newAllocAmt}
+                    >
+                      {savingAlloc ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                      Add
+                    </Button>
                   </div>
 
-                  {/* Allocations table */}
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
-                          <th className="px-5 py-3 font-semibold">Category</th>
-                          <th className="px-5 py-3 font-semibold">Label</th>
-                          <th className="px-5 py-3 font-semibold">Linked Subscription</th>
-                          <th className="px-5 py-3 font-semibold text-right">Allocated</th>
-                          <th className="px-5 py-3 font-semibold w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-theme-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Label</TableHead>
+                          <TableHead>Linked Subscription</TableHead>
+                          <TableHead className="text-right">Allocated</TableHead>
+                          <TableHead className="w-[60px]" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {loadingAllocs ? (
                           Array.from({ length: 3 }).map((_, i) => (
-                            <tr key={i}>
-                              {[140, 180, 120, 80, 30].map((w, j) => (
-                                <td key={j} className="px-5 py-3">
-                                  <div className="h-3 rounded bg-theme-raised animate-pulse" style={{ width: w }} />
-                                </td>
+                            <TableRow key={i}>
+                              {Array.from({ length: 5 }).map((_, j) => (
+                                <TableCell key={j}><Skeleton className="h-4 w-24" /></TableCell>
                               ))}
-                            </tr>
+                            </TableRow>
                           ))
                         ) : allocations.length === 0 ? (
-                          <tr>
-                            <td colSpan={5} className="py-10 text-center text-sm text-theme-subtle">
+                          <TableRow>
+                            <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                               No allocations yet — add one above.
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ) : allocations.map(a => (
-                          <tr key={a.id} className="group transition-colors hover:bg-theme-raised/40">
-                            <td className="px-5 py-3">
-                              <span className="rounded-full bg-theme-raised px-2 py-0.5 text-[10px] font-semibold text-theme-fg">{a.category}</span>
-                            </td>
-                            <td className="px-5 py-3 text-xs text-theme-muted">{a.label || <span className="text-theme-subtle italic">—</span>}</td>
-                            <td className="px-5 py-3 text-xs text-theme-muted">
+                          <TableRow key={a.id} className="group">
+                            <TableCell>
+                              <Badge variant="secondary" className="font-normal">{a.category}</Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {a.label || <span className="italic">—</span>}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
                               {a.subscriptions
-                                ? <span className="font-medium text-theme-fg">{a.subscriptions.name} <span className="text-theme-subtle tabular-nums">{a.subscriptions.sub_number}</span></span>
-                                : <span className="text-theme-subtle italic">—</span>}
-                            </td>
-                            <td className="px-5 py-3 text-right text-xs font-bold text-theme-fg">{formatCurrency(a.allocated)}</td>
-                            <td className="px-5 py-3">
-                              <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleDeleteAlloc(a.id)}
-                                  className="flex h-6 w-6 items-center justify-center rounded-md text-theme-muted hover:bg-red-500/10 hover:text-red-500 transition-colors">
-                                  <Trash2 size={11} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
+                                ? <span className="font-medium text-foreground">{a.subscriptions.name} <span className="text-muted-foreground tabular-nums">{a.subscriptions.sub_number}</span></span>
+                                : <span className="italic">—</span>}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold text-foreground tabular-nums">{formatCurrency(a.allocated)}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                type="button" variant="ghost" size="icon"
+                                className="h-7 w-7 opacity-0 group-hover:opacity-100 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 transition-opacity"
+                                onClick={() => handleDeleteAlloc(a.id)}
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
                         ))}
-                      </tbody>
+                      </TableBody>
                       {!loadingAllocs && allocations.length > 0 && (
-                        <tfoot>
-                          <tr className="border-t-2 border-theme-border bg-theme-raised/50">
-                            <td colSpan={3} className="px-5 py-2.5 text-xs font-semibold text-theme-muted">Total Allocated</td>
-                            <td className="px-5 py-2.5 text-right text-xs font-black text-theme-fg">
-                              {formatCurrency(allocations.reduce((s, a) => s + a.allocated, 0))}
-                            </td>
-                            <td />
-                          </tr>
-                        </tfoot>
+                        <TableFooter>
+                          <TableRow>
+                            <TableCell colSpan={3} className="text-xs font-semibold text-muted-foreground">Total Allocated</TableCell>
+                            <TableCell className="text-right font-semibold text-foreground tabular-nums">{formatCurrency(totalAllocated)}</TableCell>
+                            <TableCell />
+                          </TableRow>
+                        </TableFooter>
                       )}
-                    </table>
+                    </Table>
                   </div>
                 </>
               )}
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
-      {/* ── Add / Edit Budget Modal ── */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-2xl border border-theme-border bg-theme-surface shadow-2xl">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
-              <div>
-                <h2 className="text-base font-bold text-theme-fg">{editingBudget ? "Edit Budget" : "New Budget"}</h2>
-                <p className="text-xs text-theme-muted mt-0.5">{editingBudget ? "Update budget details below." : "Create a new budget plan."}</p>
-              </div>
-              <button onClick={() => setShowModal(false)} className="flex h-7 w-7 items-center justify-center rounded-lg text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-colors">
-                <X size={14} />
-              </button>
-            </div>
+      {/* Add / Edit Budget Dialog */}
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="sm:max-w-2xl !grid-rows-[auto_1fr_auto] !grid p-0 overflow-hidden gap-0 max-h-[calc(100vh-6rem)] sm:max-h-[85vh]">
+          <DialogHeader className="border-b border-border px-6 py-4">
+            <DialogTitle className="text-sm font-semibold">{editingBudget ? "Edit Budget" : "New Budget"}</DialogTitle>
+            <DialogDescription className="text-xs">{editingBudget ? "Update budget details below." : "Create a new budget plan."}</DialogDescription>
+          </DialogHeader>
 
-            {/* Body */}
-            <div className="grid grid-cols-2 gap-5 px-6 py-5">
-              {/* Left col */}
+          <form id="budget-form" onSubmit={handleSave} className="min-h-0 overflow-y-auto px-6 py-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* left */}
               <div className="space-y-4">
-                <div>
-                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Budget Name *</label>
-                  <input value={fName} onChange={e => setFName(e.target.value)} placeholder="e.g. Engineering Q1 2025"
-                    className="h-9 w-full rounded-lg border border-theme-border bg-theme-raised px-3 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Budget Name *</Label>
+                  <Input value={fName} onChange={e => setFName(e.target.value)} placeholder="e.g. Engineering Q1 2025" autoFocus />
                 </div>
-                <div>
-                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Scope</label>
-                  <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5">
-                    {(["department","team","company"] as const).map(s => (
-                      <button key={s} onClick={() => { setFScope(s); setFDept(""); setFTeamId(""); }}
-                        className={cn("flex-1 rounded-lg py-1.5 text-xs font-semibold capitalize transition-all",
-                          fScope === s ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Scope</Label>
+                  <Tabs value={fScope} onValueChange={(v) => { setFScope(v as typeof fScope); setFDept(""); setFTeamId(""); }}>
+                    <TabsList className="grid grid-cols-3 w-full">
+                      <TabsTrigger value="department" className="text-xs">Department</TabsTrigger>
+                      <TabsTrigger value="team" className="text-xs">Team</TabsTrigger>
+                      <TabsTrigger value="company" className="text-xs">Company</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
                 </div>
+
                 {fScope === "department" && (
-                  <BudgetDropdown
-                    label="Department"
-                    value={fDept}
-                    onChange={setFDept}
-                    placeholder="— Select department —"
-                    icon={Building2}
-                    searchable
-                    options={departments.map(d => ({
-                      label: d,
-                      value: d,
-                      sub: `${teams.filter(t => t.department === d).length} team${teams.filter(t => t.department === d).length !== 1 ? "s" : ""}`,
-                    }))}
-                  />
-                )}
-                {fScope === "team" && (
-                  <div className="space-y-3">
-                    <BudgetDropdown
-                      label="Department (filter)"
-                      value={fDept}
-                      onChange={v => { setFDept(v); setFTeamId(""); }}
-                      placeholder="— All departments —"
-                      icon={Building2}
-                      options={[
-                        { label: "All departments", value: "" },
-                        ...departments.map(d => ({ label: d, value: d })),
-                      ]}
-                    />
-                    <BudgetDropdown
-                      label="Team *"
-                      value={fTeamId}
-                      onChange={setFTeamId}
-                      placeholder="— Select team —"
-                      icon={Users}
-                      searchable
-                      options={teamsForDept.map(t => ({
-                        label: t.name,
-                        value: t.id,
-                        sub: t.department || undefined,
-                      }))}
-                    />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Department</Label>
+                    <Select value={fDept || undefined} onValueChange={setFDept}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="— Select department —" /></SelectTrigger>
+                      <SelectContent>
+                        {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
-                <BudgetDropdown
-                  label="Category"
-                  value={fCategory}
-                  onChange={setFCategory}
-                  placeholder="— Select category —"
-                  icon={Tag}
-                  options={BUDGET_CATEGORIES.map(c => ({ label: c, value: c }))}
-                />
+
+                {fScope === "team" && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Department (filter)</Label>
+                      <Select value={fDept || "all"} onValueChange={(v) => { setFDept(v === "all" ? "" : v); setFTeamId(""); }}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All departments</SelectItem>
+                          {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Team *</Label>
+                      <Select value={fTeamId || undefined} onValueChange={setFTeamId}>
+                        <SelectTrigger className="w-full"><SelectValue placeholder="— Select team —" /></SelectTrigger>
+                        <SelectContent>
+                          {teamsForDept.map(t => <SelectItem key={t.id} value={t.id}>{t.name}{t.department ? ` · ${t.department}` : ""}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Category</Label>
+                  <Select value={fCategory} onValueChange={setFCategory}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {BUDGET_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              {/* Right col */}
+              {/* right */}
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Fiscal Year</label>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Fiscal Year</Label>
                     <Select value={fYear} onValueChange={setFYear}>
-                      <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Month (opt.)</label>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Month (opt.)</Label>
                     <Select value={fMonth || "all"} onValueChange={(v) => setFMonth(v === "all" ? "" : v)}>
-                      <SelectTrigger className="h-9 w-full"><SelectValue placeholder="Full Year" /></SelectTrigger>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Full Year" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Full Year</SelectItem>
-                        {MONTHS.map((m, i) => <SelectItem key={m} value={String(i + 1)}>{m.slice(0,3)}</SelectItem>)}
+                        {MONTHS.map((m, i) => <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
-                <div>
-                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Total Budget Amount</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-theme-muted">₹</span>
-                    <input value={fAmount} onChange={e => setFAmount(e.target.value)} type="number" min={0} placeholder="0"
-                      className="h-9 w-full rounded-lg border border-theme-border bg-theme-raised pl-7 pr-3 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all" />
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Status</label>
-                  <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5">
-                    {(["active","draft","closed"] as const).map(s => (
-                      <button key={s} onClick={() => setFStatus(s)}
-                        className={cn("flex-1 rounded-lg py-1.5 text-xs font-semibold capitalize transition-all",
-                          fStatus === s ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Notes</label>
-                  <textarea value={fNotes} onChange={e => setFNotes(e.target.value)} rows={3} placeholder="Optional notes…"
-                    className="w-full resize-none rounded-lg border border-theme-border bg-theme-raised px-3 py-2 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all" />
-                </div>
-              </div>
-            </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-between border-t border-theme-border px-6 py-4">
-              <div className="text-[11px] text-theme-subtle">
-                {fAmount && !isNaN(parseFloat(fAmount)) && parseFloat(fAmount) > 0
-                  ? <><span className="font-bold text-theme-fg">{formatCurrency(parseFloat(fAmount))}</span> total budget</>
-                  : "Enter an amount to continue"}
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setShowModal(false)} className="h-8 rounded-lg border border-theme-border bg-theme-raised px-4 text-xs font-semibold text-theme-muted hover:text-theme-fg transition-colors">
-                  Cancel
-                </button>
-                <button onClick={handleSave} disabled={saving || !fName.trim()}
-                  className="flex h-8 items-center gap-1.5 rounded-lg bg-theme-primary px-4 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity">
-                  <Check size={12} />{saving ? "Saving…" : editingBudget ? "Save Changes" : "Create Budget"}
-                </button>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Total Budget Amount (₹)</Label>
+                  <Input value={fAmount} onChange={e => setFAmount(e.target.value)} type="number" min={0} placeholder="0" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Status</Label>
+                  <Tabs value={fStatus} onValueChange={(v) => setFStatus(v as typeof fStatus)}>
+                    <TabsList className="grid grid-cols-3 w-full">
+                      <TabsTrigger value="active" className="text-xs">Active</TabsTrigger>
+                      <TabsTrigger value="draft" className="text-xs">Draft</TabsTrigger>
+                      <TabsTrigger value="closed" className="text-xs">Closed</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Notes</Label>
+                  <Textarea value={fNotes} onChange={e => setFNotes(e.target.value)} rows={3} placeholder="Optional notes…" className="resize-none" />
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </form>
+
+          <DialogFooter className="!mx-0 !mb-0 !rounded-none flex-row items-center sm:justify-between gap-2 border-t border-border bg-background px-6 py-4">
+            <div className="text-xs text-muted-foreground">
+              {fAmount && !isNaN(parseFloat(fAmount)) && parseFloat(fAmount) > 0
+                ? <><span className="font-semibold text-foreground tabular-nums">{formatCurrency(parseFloat(fAmount))}</span> total budget</>
+                : "Enter an amount to continue"}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowModal(false)}>Cancel</Button>
+              <Button type="submit" form="budget-form" size="sm" disabled={saving || !fName.trim()}>
+                {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                {editingBudget ? "Save Changes" : "Create Budget"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm */}
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete budget?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium text-foreground">&ldquo;{confirmDelete?.name}&rdquo;</span> and its allocations will be permanently deleted. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDelete(); }}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardShell>
   );
 }
