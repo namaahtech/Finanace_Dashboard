@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useAuth } from "@/components/layout/AuthProvider";
+import { useAuth, getDashboardForRole, type Role } from "@/components/layout/AuthProvider";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/ButtonLegacy";
 import { Mail, Lock, ShieldCheck, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/BadgeLegacy";
 import { useToast } from "@/components/ui/ToastLegacy";
+import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
   return (
@@ -26,19 +27,22 @@ function LoginInner() {
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [justLoggedIn, setJustLoggedIn] = useState(false);
 
+  // Redirect already-authenticated users (e.g. session still alive, hit /login manually)
+  // — no onboarding check here, just send them to their dashboard.
   useEffect(() => {
-    if (!authLoading && user) {
-      // If middleware redirected with ?next=<path>, honor it; else role-router
-      router.replace(nextPath && nextPath.startsWith("/") ? nextPath : "/");
+    if (!authLoading && user && !justLoggedIn) {
+      router.replace(nextPath && nextPath.startsWith("/") ? nextPath : getDashboardForRole(user.role as Role));
     }
-  }, [user, authLoading, router, nextPath]);
+  }, [user, authLoading, router, nextPath, justLoggedIn]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
       await login(email, password);
+      setJustLoggedIn(true);
       showToast("Access Granted. Welcome back to Namaah Nexus.", "success");
     } catch (err: any) {
       const msg = err.message || "Authentication failed. Please check your credentials.";
@@ -47,6 +51,32 @@ function LoginInner() {
       setLoading(false);
     }
   }
+
+  // After a fresh login: check if new employee needs onboarding, otherwise go to dashboard.
+  useEffect(() => {
+    if (!justLoggedIn || !user || authLoading) return;
+
+    const needsOnboarding = user.role === "employee" || user.role === "intern";
+    if (!needsOnboarding) {
+      // Admin / hr / accounts / dept_lead / team_lead → dashboard directly
+      router.replace(getDashboardForRole(user.role as Role));
+      return;
+    }
+
+    // Employee/intern: check if onboarding is already completed
+    supabase
+      .from("user_onboarding")
+      .select("status")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data || data.status !== "completed") {
+          router.replace("/onboarding");
+        } else {
+          router.replace(getDashboardForRole(user.role as Role));
+        }
+      });
+  }, [justLoggedIn, user, authLoading, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-theme-page p-6 selection:bg-theme-primary/10">

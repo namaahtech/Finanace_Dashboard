@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, getDashboardForRole, type Role } from "@/components/layout/AuthProvider";
-import { supabase } from "@/lib/supabase";
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -15,20 +14,10 @@ export default function Home() {
       router.replace("/login");
       return;
     }
-
-    // Check onboarding status
-    supabase
-      .from("user_onboarding")
-      .select("status")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data || data.status !== "completed") {
-          router.replace("/onboarding");
-        } else {
-          router.replace(getDashboardForRole(user.role as Role));
-        }
-      });
+    // Root page just routes to the role's dashboard.
+    // Onboarding is only triggered from the login page right after a fresh sign-in,
+    // not on every visit to "/", so existing sessions always land on the dashboard.
+    router.replace(getDashboardForRole(user.role as Role));
   }, [user, loading, router]);
 
   return (
