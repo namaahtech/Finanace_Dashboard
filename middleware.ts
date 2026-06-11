@@ -14,7 +14,8 @@ const PUBLIC_ROUTES = [
   "/login",
   "/forgot-password",
   "/forgot-credentials",
-  "/onboarding",
+  // /onboarding is NOT public — requires a valid session.
+  // Unauthenticated users hitting /onboarding are redirected to /login by middleware.
   "/career",
   "/careers",
 ];

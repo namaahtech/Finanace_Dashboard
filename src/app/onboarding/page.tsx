@@ -94,6 +94,11 @@ export default function OnboardingPage() {
       router.push("/login");
       return;
     }
+    // Admins and dept leads have no onboarding — send them to their dashboard
+    if (!authLoading && user && (user.role === "admin" || user.role === "dept_lead")) {
+      router.replace(getDashboardForRole(user.role as Role));
+      return;
+    }
     if (user?.id) {
       fetchOnboardingStatus();
       fetchSystemConfig();

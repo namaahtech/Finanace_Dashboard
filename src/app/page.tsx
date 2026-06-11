@@ -16,7 +16,13 @@ export default function Home() {
       return;
     }
 
-    // Check onboarding status
+    // Admins and dept leads never go through onboarding — send straight to dashboard
+    if (user.role === "admin" || user.role === "dept_lead") {
+      router.replace(getDashboardForRole(user.role as Role));
+      return;
+    }
+
+    // For employees/interns: check if onboarding is complete
     supabase
       .from("user_onboarding")
       .select("status")
