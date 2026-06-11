@@ -8,10 +8,15 @@ export const ZOHO_ACCOUNTS_URL = process.env.ZOHO_ACCOUNTS_URL || "https://accou
 
 // Each Zoho product is served from its own host.
 export const ZOHO_API = {
-  mail: process.env.ZOHO_MAIL_API_URL || "https://mail.zoho.in/api",
-  calendar: process.env.ZOHO_CALENDAR_URL || "https://calendar.zoho.in/api/v1",
-  cliq: process.env.ZOHO_CLIQ_API_URL || "https://cliq.zoho.in/api/v2",
-  meeting: process.env.ZOHO_MEETING_API_URL || "https://meeting.zoho.in/api/v2",
+  mail:      process.env.ZOHO_MAIL_API_URL        || "https://mail.zoho.in/api",
+  calendar:  process.env.ZOHO_CALENDAR_URL        || "https://calendar.zoho.in/api/v1",
+  cliq:      process.env.ZOHO_CLIQ_API_URL        || "https://cliq.zoho.in/api/v2",
+  meeting:   process.env.ZOHO_MEETING_API_URL     || "https://meeting.zoho.in/api/v2",
+  // Office Suite — Workspace Hub
+  writer:    process.env.ZOHO_WRITER_API_URL      || "https://writer.zoho.in/writer/v1",
+  sheet:     process.env.ZOHO_SHEET_API_URL       || "https://sheet.zoho.in/api/v2",
+  show:      process.env.ZOHO_SHOW_API_URL        || "https://show.zoho.in/api/v1",
+  workdrive: process.env.ZOHO_WORKDRIVE_API_URL   || "https://workdrive.zoho.in/api/v1",
 } as const;
 
 export type ZohoService = keyof typeof ZOHO_API;
@@ -30,9 +35,15 @@ export const ZOHO_SCOPES = [
   // Calendar
   "ZohoCalendar.calendar.ALL",
   "ZohoCalendar.event.ALL",
-  // Cliq — enable when the messaging module is wired (verify exact scope names):
+  // Office Suite (Workspace Hub)
+  "ZohoWriter.documents.ALL",
+  "ZohoSheet.dataAPI.ALL",
+  "ZohoShow.presentation.ALL",
+  "WorkDrive.files.ALL",
+  "WorkDrive.workspace.ALL",
+  // Cliq — enable when the messaging module is wired:
   // "ZohoCliq.Channels.ALL", "ZohoCliq.Messages.ALL", "ZohoCliq.Webhooks.ALL",
-  // Meeting — enable when the meeting module is wired (verify exact scope names):
+  // Meeting — enable when the meeting module is wired:
   // "ZohoMeeting.meeting.ALL",
 ];
 
