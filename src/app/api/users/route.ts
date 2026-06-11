@@ -97,6 +97,9 @@ export async function POST(req: Request) {
     }
 
     // ── Zoho Mail Auto-Provisioning Gate ──────────────────────────────────────
+    // Non-fatal: if Zoho fails, the employee is still created. Admin can
+    // provision the Zoho mailbox later from the employee's profile page.
+    let zohoWarning: string | null = null;
     if (create_zoho_mail) {
       try {
         const zohoResult = await provisionZohoMailbox({
@@ -108,24 +111,12 @@ export async function POST(req: Request) {
         });
 
         if (!zohoResult?.zoho_account_id) {
-          // Rollback Database entry
-          await supabase.from("employees").delete().eq("id", user.id);
-          // Rollback Auth user
-          await supabase.auth.admin.deleteUser(user.id);
-          
-          return NextResponse.json({ 
-            error: "Zoho Mail account creation failed: Zoho did not return an active account/mailbox ID. Please check seat availability or console credentials." 
-          }, { status: 400 });
+          zohoWarning = "Employee created, but Zoho mailbox could not be provisioned (Zoho not connected on this server). Go to Admin → Mail Config and reconnect Zoho, then retry from the employee profile.";
+          console.warn("[Users API] Zoho provisioning returned no account ID — employee saved without Zoho mailbox.");
         }
       } catch (zohoErr: any) {
-        // Rollback Database entry
-        await supabase.from("employees").delete().eq("id", user.id);
-        // Rollback Auth user
-        await supabase.auth.admin.deleteUser(user.id);
-
-        return NextResponse.json({ 
-          error: `Zoho Mail account creation failed: ${zohoErr.message}` 
-        }, { status: 400 });
+        zohoWarning = `Employee created, but Zoho mailbox provisioning failed: ${zohoErr.message}`;
+        console.warn("[Users API] Zoho provisioning exception:", zohoErr.message);
       }
     }
 
@@ -211,7 +202,12 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, id: user.id, message: "Employee registered & Auth linked successfully." }, { status: 200 });
+    return NextResponse.json({
+      success: true,
+      id: user.id,
+      message: "Employee registered & Auth linked successfully.",
+      ...(zohoWarning ? { zoho_warning: zohoWarning } : {}),
+    }, { status: 200 });
 
   } catch (error: any) {
     return NextResponse.json({ error: "Internal Relay Fault: " + error.message }, { status: 500 });
