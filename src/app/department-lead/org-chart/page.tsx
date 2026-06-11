@@ -35,6 +35,17 @@ const HGAP = 40;   // min horizontal gap between sibling subtrees
 const VGAP = 64;   // vertical gap between parent bottom and child top
 const PAD  = 72;   // canvas edge padding
 
+const ROLE_LABEL: Record<string, string> = {
+  employee: "Employee",
+  hr: "HR",
+  accounts: "Accounts",
+  admin: "Admin",
+  intern: "Intern",
+  dept_lead: "Department Lead",
+  team_lead: "Team Lead",
+  sales: "Sales",
+};
+
 // ── Compute the horizontal space needed for a subtree ─────────
 function stW(node: OrgNode, exp: Set<string>): number {
   const kids = exp.has(node.id) && node.children?.length ? node.children : [];
@@ -153,17 +164,12 @@ function NodeCard({
           <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-muted")}>{node.role || "N/A"}</span>
         </div>
         
-        {(node.access_level || node.type === "employee" || node.type === "root") && (
-          <div className="flex items-center justify-between text-[9px] uppercase tracking-wider">
-            <span className={isRoot ? "text-white/50" : "text-theme-subtle"}>Access Level</span>
-            <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-primary/80")}>{node.access_level?.replace('_', ' ') || "N/A"}</span>
-          </div>
-        )}
-
-        {(node.matrix_role || node.type === "employee" || node.type === "root") && (
+        {(node.access_level || node.matrix_role || node.type === "employee" || node.type === "root") && (
           <div className="flex items-center justify-between text-[9px] uppercase tracking-wider">
             <span className={isRoot ? "text-white/50" : "text-theme-subtle"}>Matrix Role</span>
-            <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-muted")}>{node.matrix_role || "N/A"}</span>
+            <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-primary/80")}>
+              {node.access_level ? (ROLE_LABEL[node.access_level] || node.access_level.replace('_', ' ')) : (node.matrix_role || "N/A")}
+            </span>
           </div>
         )}
       </div>

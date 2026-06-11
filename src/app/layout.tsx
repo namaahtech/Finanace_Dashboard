@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { AuthProvider } from "@/components/layout/AuthProvider";
+import { DeactivationGuard } from "@/components/layout/DeactivationGuard";
 import { ToastProvider } from "@/components/ui/ToastLegacy";
 import { NotificationProvider } from "@/components/layout/NotificationProvider";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -32,11 +33,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <TooltipProvider delayDuration={200}>
             <AuthProvider>
-              <ToastProvider>
-                <NotificationProvider>
-                  {children}
-                </NotificationProvider>
-              </ToastProvider>
+              <DeactivationGuard>
+                <ToastProvider>
+                  <NotificationProvider>
+                    {children}
+                  </NotificationProvider>
+                </ToastProvider>
+              </DeactivationGuard>
             </AuthProvider>
           </TooltipProvider>
           <Toaster />

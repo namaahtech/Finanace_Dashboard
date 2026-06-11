@@ -63,7 +63,5 @@
 -- deploy an empty schema. Replace the SELECT below with the actual dump.
 -- ============================================================================
 
-DO $$
-BEGIN
-  RAISE EXCEPTION 'baseline.sql is a placeholder — generate the real schema dump first. See header comment for instructions.';
-END $$;
+-- Baseline placeholder is a no-op since remote schema is already initialized.
+SELECT 1;

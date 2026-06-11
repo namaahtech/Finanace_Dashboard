@@ -415,6 +415,17 @@ function SalesTracker({
   );
 }
 
+const ROLE_LABEL: Record<string, string> = {
+  employee: "Employee",
+  hr: "HR",
+  accounts: "Accounts",
+  admin: "Admin",
+  intern: "Intern",
+  dept_lead: "Department Lead",
+  team_lead: "Team Lead",
+  sales: "Sales",
+};
+
 // ── Main Profile Page ─────────────────────────────────────
 export default function EmployeeProfile() {
   const { user } = useAuth();
@@ -630,6 +641,12 @@ export default function EmployeeProfile() {
                   <div>
                     <p className="text-xs text-theme-muted">Designation</p>
                     <p className="text-sm font-semibold text-theme-fg mt-0.5">{employee.designation || "Not specified"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-theme-muted">Matrix Role</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5">
+                      {employee.commission_enabled ? "Sales" : (ROLE_LABEL[employee.role] || employee.role || "Not specified")}
+                    </p>
                   </div>
                   <div className="pt-2 border-t border-theme-border">
                     <p className="text-xs text-theme-muted">Salary Structure</p>

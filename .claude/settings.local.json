@@ -33,7 +33,17 @@
       "Bash(grep -cE '<__TRACKED_VAR__\\\\b' /Users/devacc/Finanace_Dashboard/src/app/admin/org-chart/page.tsx)",
       "Bash(grep -nB1 -A4 \"function SidebarInset\" /Users/devacc/Finanace_Dashboard/src/components/ui/sidebar.tsx)",
       "Bash(awk -F= '/CLIQ/ {print $1}' .env.local)",
-      "Bash(sed -n '1,60p' src/app/admin/messaging/page.tsx)"
+      "Bash(sed -n '1,60p' src/app/admin/messaging/page.tsx)",
+      "Bash(supabase --version)",
+      "Bash(supabase projects *)",
+      "PowerShell($KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qZXBueWNleHVtd3B6Y3ZseWRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTc0MDkwOCwiZXhwIjoyMDkxMzE2OTA4fQ.WKAgJqAUoEbMfB8UA-QK6-kUDFAQiI-ks5sKqHqx0xM\"; $h=@{apikey=$KEY;Authorization=\"Bearer $KEY\"}; $s=Invoke-RestMethod -Uri \"https://ojepnycexumwpzcvlydb.supabase.co/rest/v1/\" -Headers $h; foreach\\($t in @\\('employees','zoho_config','user_onboarding'\\)\\){ Write-Output \"==== $t ====\"; if\\($s.definitions.$t\\){ \\($s.definitions.$t.properties.PSObject.Properties.Name\\) -join ', ' } else { '\\(not found\\)' } })",
+      "PowerShell($KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qZXBueWNleHVtd3B6Y3ZseWRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTc0MDkwOCwiZXhwIjoyMDkxMzE2OTA4fQ.WKAgJqAUoEbMfB8UA-QK6-kUDFAQiI-ks5sKqHqx0xM\"; $h=@{apikey=$KEY;Authorization=\"Bearer $KEY\"}; Write-Output \"==== employees ====\"; Invoke-RestMethod -Uri \"https://ojepnycexumwpzcvlydb.supabase.co/rest/v1/employees?select=name,email,personal_email,zoho_email,zoho_user_id,zoho_account_id,status,is_active\" -Headers $h | ConvertTo-Json -Depth 4; Write-Output \"==== zoho_config \\(saml\\) ====\"; Invoke-RestMethod -Uri \"https://ojepnycexumwpzcvlydb.supabase.co/rest/v1/zoho_config?select=org_id,zoid,org_domain,is_connected,saml_enabled,saml_issuer,saml_acs_url,saml_certificate\" -Headers $h | ConvertTo-Json -Depth 4)",
+      "Bash(cd /d/Finanace_Dashboard)",
+      "Bash(ls src/app/api/employees/ src/app/api/users/)",
+      "Bash(timeout 30 supabase migration list)",
+      "Bash(grep -v \"process\\\\.env\\\\.$\")",
+      "Bash(findstr /i \"gemma\\\\|local_ai\\\\|ai_bridge\\\\|ollama\\\\|openrouter\")",
+      "Bash(powershell -Command \"Get-Content .env.local | Select-String 'GEMMA|LOCAL_AI|AI_BRIDGE|OLLAMA|OPENROUTER'\")"
     ]
   }
 }

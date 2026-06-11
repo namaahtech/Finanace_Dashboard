@@ -277,6 +277,23 @@ export default function AdminConfigPage() {
 
       const { data: { publicUrl } } = supabase.storage.from("legal").getPublicUrl(filePath);
 
+      // Clean up old PDF from storage if it exists
+      const oldUrl = config?.consultant_agreement_url || form.consultant_agreement_url;
+      if (oldUrl) {
+        try {
+          const searchStr = "/public/legal/";
+          const index = oldUrl.indexOf(searchStr);
+          if (index !== -1) {
+            const oldPath = oldUrl.substring(index + searchStr.length);
+            if (oldPath) {
+              await supabase.storage.from("legal").remove([oldPath]);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to delete old PDF:", err);
+        }
+      }
+
       const { data: queueData, error: queueError } = await supabase
         .from("onboarding_analysis_queue")
         .insert({ pdf_url: publicUrl, status: "pending" })
@@ -286,7 +303,7 @@ export default function AdminConfigPage() {
 
       setAnalyzingTask(queueData);
       setForm(prev => ({ ...prev, consultant_agreement_url: publicUrl }));
-      toast.success("PDF Uploaded. AI Neural Analysis (Gemma 4) triggered.");
+      toast.success("PDF Uploaded. Kimi AI Compliance Analysis triggered.");
     } catch (err: unknown) {
       console.error(err);
       toast.error((err as Error)?.message || "Failed to upload PDF.");
@@ -576,7 +593,7 @@ export default function AdminConfigPage() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="text-sm font-medium">Gemma 4 Analysis in Progress…</span>
+                          <span className="text-sm font-medium">Kimi AI Analysis in Progress…</span>
                         </div>
                         <span className="text-xs text-muted-foreground">Compliance Engine Active</span>
                       </div>
@@ -586,7 +603,7 @@ export default function AdminConfigPage() {
                           style={{ width: analyzingTask.status === "pending" ? "30%" : "75%" }}
                         />
                       </div>
-                      <p className="mt-3 text-xs text-muted-foreground uppercase tracking-wide">OCR + NLP on Mac Mini</p>
+                      <p className="mt-3 text-xs text-muted-foreground uppercase tracking-wide">OCR + Kimi Compliance Agent</p>
                     </div>
                   ) : (
                     <>

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -46,6 +46,16 @@ export default function MailConfigPage() {
   );
   const [showSecret, setShowSecret] = useState(false);
 
+  // SAML SSO configurations
+  const [samlEnabled,      setSamlEnabled]      = useState(false);
+  const [samlIssuer,       setSamlIssuer]       = useState("namaah-nexus");
+  const [samlAcsUrl,       setSamlAcsUrl]       = useState("");
+  const [samlCertificate,  setSamlCertificate]  = useState("");
+  const [samlLoading,      setSamlLoading]      = useState(true);
+  const [samlSaving,       setSamlSaving]       = useState(false);
+  const [samlRegenLoading, setSamlRegenLoading] = useState(false);
+  const [showCert,         setShowCert]         = useState(false);
+
   useEffect(() => {
     fetch("/api/mail/auth/connect")
       .then(r => r.json())
@@ -62,7 +72,84 @@ export default function MailConfigPage() {
         if (d.current_domain) { setDomainInput(d.current_domain); setMailDomain(d.current_domain); }
       })
       .catch(() => {});
+
+    // Load SAML SSO configuration
+    fetch("/api/mail/config/saml")
+      .then(r => r.json())
+      .then(d => {
+        if (d.config) {
+          setSamlEnabled(d.config.saml_enabled);
+          setSamlIssuer(d.config.saml_issuer || "namaah-nexus");
+          
+          const accountsUrl = d.config.zoho_accounts_url || "https://accounts.zoho.in";
+          const resolvedAcs = d.config.saml_acs_url || (d.config.zoid ? `${accountsUrl}/samlresponse/${d.config.zoid}` : `${accountsUrl}/samlresponse`);
+          setSamlAcsUrl(resolvedAcs);
+          setSamlCertificate(d.config.saml_certificate || "");
+        }
+        setSamlLoading(false);
+      })
+      .catch(() => setSamlLoading(false));
   }, []);
+
+  async function handleSaveSaml(enabledOverride?: boolean) {
+    setSamlSaving(true);
+    try {
+      const activeEnabled = enabledOverride !== undefined ? enabledOverride : samlEnabled;
+      const res = await fetch("/api/mail/config/saml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          saml_enabled: activeEnabled,
+          saml_issuer: samlIssuer,
+          saml_acs_url: samlAcsUrl,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSamlEnabled(data.config.saml_enabled);
+        setSamlIssuer(data.config.saml_issuer);
+        setSamlAcsUrl(data.config.saml_acs_url);
+        setSamlCertificate(data.config.saml_certificate || "");
+        showToast("SAML settings saved successfully.", "success");
+      } else {
+        showToast(data.error || "Failed to save SAML configuration.", "error");
+      }
+    } catch (e: any) {
+      showToast("Error saving SAML configuration: " + e.message, "error");
+    } finally {
+      setSamlSaving(false);
+    }
+  }
+
+  async function handleRegenerateSamlKeys() {
+    if (!confirm("Are you sure you want to regenerate SAML SSO keys? This will invalidate the existing certificate configured in Zoho.")) {
+      return;
+    }
+    setSamlRegenLoading(true);
+    try {
+      const res = await fetch("/api/mail/config/saml", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          regenerate_keys: true,
+          saml_enabled: samlEnabled,
+          saml_issuer: samlIssuer,
+          saml_acs_url: samlAcsUrl,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSamlCertificate(data.config.saml_certificate || "");
+        showToast("SAML keypair regenerated successfully.", "success");
+      } else {
+        showToast(data.error || "Failed to regenerate keys.", "error");
+      }
+    } catch (e: any) {
+      showToast("Error regenerating keys: " + e.message, "error");
+    } finally {
+      setSamlRegenLoading(false);
+    }
+  }
 
   async function handleSyncDomain() {
     setDomainSyncing(true);
@@ -236,7 +323,7 @@ export default function MailConfigPage() {
                 <button onClick={() => { navigator.clipboard.writeText(redirectUri); showToast("Copied!", "success"); }}
                   className="p-1 rounded hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all"><Copy size={11} /></button>
               </div>
-              <p>3. Enable scopes: <strong>ZohoMail.messages.ALL, ZohoMail.accounts.ALL, ZohoMail.organization.ALL</strong></p>
+              <p>3. Enable scopes: <strong>ZohoMail.messages.ALL, ZohoMail.accounts.ALL, ZohoMail.organization.ALL, ZohoMail.organization.accounts.ALL</strong></p>
               <p>4. Copy Client ID and Client Secret</p>
             </div>
           </div>
@@ -407,6 +494,148 @@ export default function MailConfigPage() {
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* SAML Single Sign-On (SSO) Card */}
+          <div className="page-card border-theme-primary/20 bg-theme-primary/3">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-8 w-8 rounded-xl bg-theme-primary/10 flex items-center justify-center text-theme-primary flex-shrink-0">
+                <Shield size={16} />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-theme-fg">SAML Single Sign-On (SSO)</p>
+                <p className="text-xs text-theme-muted">Delegated login credentials for enterprise accounts</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-theme-muted">Status:</span>
+                <button
+                  onClick={() => {
+                    const nextVal = !samlEnabled;
+                    setSamlEnabled(nextVal);
+                    handleSaveSaml(nextVal);
+                  }}
+                  disabled={samlLoading || samlSaving}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold transition-all border",
+                    samlEnabled 
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                      : "bg-theme-raised text-theme-muted border-theme-border hover:text-theme-fg"
+                  )}
+                >
+                  {samlEnabled ? "Enabled" : "Disabled"}
+                </button>
+              </div>
+            </div>
+
+            {samlLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-theme-primary" />
+              </div>
+            ) : (
+              <div className="space-y-4 pt-2 border-t border-theme-border/60">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-theme-muted">
+                      SAML Entity ID (Issuer)
+                    </label>
+                    <input
+                      value={samlIssuer}
+                      onChange={e => setSamlIssuer(e.target.value)}
+                      placeholder="namaah-nexus"
+                      className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-sm text-theme-fg outline-none focus:border-theme-primary"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-theme-muted">
+                      ACS URL (Zoho Target)
+                    </label>
+                    <input
+                      value={samlAcsUrl}
+                      onChange={e => setSamlAcsUrl(e.target.value)}
+                      placeholder="https://accounts.zoho.in/samlresponse/..."
+                      className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-xs text-theme-fg outline-none focus:border-theme-primary tabular-nums"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mt-4 text-xs text-theme-muted">
+                  <div className="rounded-xl bg-theme-raised border border-theme-border p-3 space-y-1">
+                    <p className="font-bold text-theme-fg">IdP Configuration endpoints:</p>
+                    <p className="flex items-center justify-between gap-2">
+                      <span>Login URL:</span>
+                      <span className="font-semibold text-theme-fg select-all break-all text-[10px]">
+                        {typeof window !== "undefined" ? `${window.location.origin}/api/auth/saml/sso` : "/api/auth/saml/sso"}
+                      </span>
+                    </p>
+                    <p className="flex items-center justify-between gap-2">
+                      <span>Logout URL:</span>
+                      <span className="font-semibold text-theme-fg select-all break-all text-[10px]">
+                        {typeof window !== "undefined" ? `${window.location.origin}/login` : "/login"}
+                      </span>
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-theme-raised border border-theme-border p-3 flex flex-col justify-between">
+                    <div>
+                      <p className="font-bold text-theme-fg">Self-Signed Certificate</p>
+                      <p className="mt-0.5">Upload this X.509 certificate to your Zoho Admin Portal.</p>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => setShowCert(!showCert)}
+                        className="flex-1 py-1.5 rounded-lg border border-theme-border text-center font-bold hover:text-theme-fg transition-all text-[11px]"
+                      >
+                        {showCert ? "Hide Cert" : "View Certificate"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (samlCertificate) {
+                            navigator.clipboard.writeText(samlCertificate);
+                            showToast("Certificate copied!", "success");
+                          } else {
+                            showToast("No certificate exists.", "warning");
+                          }
+                        }}
+                        className="flex-1 py-1.5 rounded-lg bg-theme-primary text-white text-center font-bold hover:bg-theme-primary/90 transition-all text-[11px]"
+                      >
+                        Copy PEM Cert
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {showCert && samlCertificate && (
+                  <div className="space-y-1.5 mt-2">
+                    <label className="text-xs font-semibold text-theme-muted">Public X.509 Certificate (PEM Format)</label>
+                    <textarea
+                      readOnly
+                      value={samlCertificate}
+                      rows={6}
+                      className="w-full p-3 font-mono text-[10px] rounded-xl border border-theme-border bg-theme-page text-theme-fg outline-none select-all leading-normal"
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-3 justify-end mt-4 pt-2 border-t border-theme-border/60">
+                  <button
+                    onClick={handleRegenerateSamlKeys}
+                    disabled={samlRegenLoading}
+                    className="flex items-center gap-1.5 h-10 px-4 rounded-xl border border-theme-border bg-theme-raised text-xs font-semibold text-theme-muted hover:text-theme-fg transition-all"
+                  >
+                    {samlRegenLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                    Regenerate Keys & Certificate
+                  </button>
+                  <button
+                    onClick={() => handleSaveSaml()}
+                    disabled={samlSaving}
+                    className="flex items-center gap-1.5 h-10 px-6 rounded-xl bg-theme-primary text-white text-xs font-bold hover:bg-theme-primary/90 transition-all shadow-sm"
+                  >
+                    {samlSaving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                    Save SAML Settings
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

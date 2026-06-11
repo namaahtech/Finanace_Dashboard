@@ -25,6 +25,8 @@ export const ZOHO_SCOPES = [
   "ZohoMail.accounts.ALL",
   "ZohoMail.organization.ALL",
   "ZohoMail.folders.ALL",
+  "ZohoMail.organization.accounts.ALL",
+  "ZohoMail.organization.accounts.DELETE",
   // Calendar
   "ZohoCalendar.calendar.ALL",
   "ZohoCalendar.event.ALL",

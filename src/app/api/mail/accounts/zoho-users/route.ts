@@ -11,10 +11,19 @@ export async function GET() {
 
   const { data: config } = await supabase
     .from("zoho_config")
-    .select("org_id, zoid, org_domain")
+    .select("id, org_id, zoid, org_domain")
     .maybeSingle();
 
-  const orgId = config?.org_id || config?.zoid;
+  let orgId = config?.org_id || config?.zoid;
+  if (!orgId && process.env.ZOHO_ORG_ID) {
+    orgId = process.env.ZOHO_ORG_ID;
+    if (config?.id) {
+      await supabase
+        .from("zoho_config")
+        .update({ org_id: orgId, zoid: orgId })
+        .eq("id", config.id);
+    }
+  }
 
   if (!token || !orgId) {
     return NextResponse.json({ users: [], domain: config?.org_domain || null, is_connected: false });
@@ -26,14 +35,28 @@ export async function GET() {
     });
     const json = await res.json();
 
-    const users = (json?.data || []).map((u: any) => ({
-      accountId:  u.accountId   || u.mailboxId || null,
-      name:       u.displayName || u.name      || "—",
-      email:      u.primaryEmailAddress || u.emailAddress || "—",
-      role:       u.role        || "member",
-      isActive:   u.accountEnabled !== false,
-      domain:     (u.primaryEmailAddress || u.emailAddress || "").split("@")[1] || "",
-    }));
+    const users = (json?.data || []).map((u: any) => {
+      const lastLoginMs = u.lastLogin;
+      const neverSignedIn = !lastLoginMs || lastLoginMs === -1;
+      const lastLoginDate = !neverSignedIn ? new Date(lastLoginMs).toISOString() : null;
+
+      return {
+        accountId:    u.accountId   || u.mailboxId || null,
+        name:         u.displayName || u.name      || "—",
+        email:        u.primaryEmailAddress || u.emailAddress || "—",
+        role:         u.role        || "member",
+        // Zoho API returns `enabled` (boolean) and `status` (boolean)
+        isActive:     u.enabled === true && u.status !== false,
+        domain:       (u.primaryEmailAddress || u.emailAddress || "").split("@")[1] || "",
+        lastLogin:    lastLoginDate,
+        neverSignedIn,
+        lastClient:   u.lastClient  || null,
+        mailboxStatus: u.mailboxStatus || null,
+        iamStatus:    u.iamStatus   || null,
+        lastPasswordReset: u.lastPasswordReset ? new Date(u.lastPasswordReset).toISOString() : null,
+        accountCreationTime: u.accountCreationTime ? new Date(u.accountCreationTime).toISOString() : null,
+      };
+    });
 
     return NextResponse.json({
       users,

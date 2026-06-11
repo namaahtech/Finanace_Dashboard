@@ -3,7 +3,7 @@
 import { useAuth, getDashboardForRole, type Role } from "./AuthProvider";
 import { Sidebar } from "./Sidebar";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { GlobalAttendanceWidget } from "./GlobalAttendanceWidget";
 import {
   SidebarInset,
@@ -22,6 +22,23 @@ interface DashboardShellProps {
 export function DashboardShell({ children, title, subtitle, actions, moduleKey }: DashboardShellProps) {
   const { user, permissions, loading } = useAuth();
   const router = useRouter();
+
+  // 1. One-time background SAML SSO Zoho session seeding via top-level redirect (bypasses third-party cookie restrictions)
+  useEffect(() => {
+    if (user?.zoho_email && sessionStorage.getItem("zoho_sso_seeded") !== user.zoho_email) {
+      sessionStorage.setItem("zoho_sso_seeded", user.zoho_email);
+      const returnUrl = window.location.origin + window.location.pathname + window.location.search;
+      window.location.href = `/api/auth/saml/sso?RelayState=${encodeURIComponent(returnUrl)}`;
+    }
+  }, [user]);
+
+  // 2. Automate inbox sync fetch on successful return from session seeding
+  useEffect(() => {
+    if (user?.zoho_email && sessionStorage.getItem("zoho_sso_seeded") === user.zoho_email && sessionStorage.getItem("zoho_inbox_synced") !== user.zoho_email) {
+      sessionStorage.setItem("zoho_inbox_synced", user.zoho_email);
+      fetch(`/api/mail/inbox?sync=true&employee_id=${user.id}`).catch(() => {});
+    }
+  }, [user]);
 
   // Redirect away when not authenticated
   useEffect(() => {

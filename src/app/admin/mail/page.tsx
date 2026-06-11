@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -50,6 +50,53 @@ function PriorityDot({ p }: { p: number }) {
   return <span className={cn("inline-block w-1.5 h-1.5 rounded-full flex-shrink-0", c[p] || "bg-slate-400")} />;
 }
 
+function MailScopeBadge({ msg, size = "small" }: { msg: any; size?: "small" | "large" }) {
+  const companyDomains = ["namaah.io", "mail.namaah.io"];
+  
+  const isCompanyEmail = (email: string) => {
+    if (!email) return false;
+    const clean = email.toLowerCase().trim();
+    return companyDomains.some(domain => clean.endsWith(`@${domain}`) || clean.endsWith(`.${domain}`));
+  };
+
+  const fromAddress = msg.from_address || "";
+  
+  let recipients: string[] = [];
+  if (Array.isArray(msg.to_address)) {
+    recipients = msg.to_address;
+  } else if (typeof msg.to_address === "string") {
+    recipients = msg.to_address.split(",").map((e: string) => e.trim());
+  }
+
+  const isFromCompany = isCompanyEmail(fromAddress);
+  const isAllToCompany = recipients.length > 0 && recipients.every(email => isCompanyEmail(email));
+  const isInternal = isFromCompany && isAllToCompany;
+
+  if (isInternal) {
+    return (
+      <span className={cn(
+        "font-black uppercase tracking-wider rounded-md border",
+        size === "large" 
+          ? "px-2.5 py-1 text-[11px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+          : "px-1.5 py-0.5 text-[8px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+      )}>
+        Internal
+      </span>
+    );
+  } else {
+    return (
+      <span className={cn(
+        "font-black uppercase tracking-wider rounded-md border",
+        size === "large" 
+          ? "px-2.5 py-1 text-[11px] bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500/40 shadow-sm animate-pulse"
+          : "px-1.5 py-0.5 text-[8px] bg-rose-500/15 text-rose-500 border-rose-500/25"
+      )}>
+        External
+      </span>
+    );
+  }
+}
+
 export default function MailHubPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -66,11 +113,21 @@ export default function MailHubPage() {
   useEffect(() => {
     loadData();
     const channel = supabase
-      .channel("mail_hub_rt")
+      .channel("mail_realtime_kanban")
+      .on("broadcast", { event: "new_mail" }, (payload: any) => {
+        if (payload.payload && payload.payload.employee_id === user?.id) {
+          loadData();
+        }
+      })
+      .on("broadcast", { event: "mail_status_changed" }, (payload: any) => {
+        if (payload.payload && payload.payload.employee_id === user?.id) {
+          loadData();
+        }
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "mail_messages" }, () => loadData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [user?.id]);
 
   async function loadData() {
     setLoading(true);
@@ -175,7 +232,7 @@ export default function MailHubPage() {
             </button>
           </Link>
           <button
-            onClick={() => { fetch("/api/mail/inbox?sync=true"); setTimeout(loadData, 2000); }}
+            onClick={() => { fetch(`/api/mail/inbox?sync=true${user?.id ? `&employee_id=${user.id}` : ""}`); setTimeout(loadData, 2000); }}
             className="flex items-center gap-1.5 h-9 px-3 rounded-xl border border-theme-border bg-theme-raised text-xs font-semibold text-theme-muted hover:text-theme-fg transition-all"
           >
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Sync
@@ -284,6 +341,7 @@ export default function MailHubPage() {
                                         {email.from_name || email.from_address}
                                       </span>
                                       <PriorityDot p={email.ai_priority || 3} />
+                                      <MailScopeBadge msg={email} />
                                     </div>
                                     <p className={cn("text-[11px] truncate mb-1", !email.is_read ? "font-bold text-theme-fg" : "text-theme-muted font-medium")}>
                                       {email.subject || "(no subject)"}

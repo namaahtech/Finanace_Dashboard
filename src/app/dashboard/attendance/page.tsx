@@ -153,27 +153,25 @@ export default function AttendancePage() {
         let foundLead = false;
 
         if (!user.is_team_lead && !user.is_dept_lead) {
-          // Look for a team_lead or dept_lead in the same department
-          const { data: leads } = await supabase.from("employees")
-            .select("id, role, is_team_lead, is_dept_lead")
-            .eq("department", user.department)
-            .or("is_team_lead.eq.true,is_dept_lead.eq.true")
-            .limit(1);
-          if (leads && leads.length > 0) {
-            targetId = leads[0].id;
-            targetRole = leads[0].is_dept_lead ? "dept_lead" : "team_lead";
-            foundLead = true;
-          }
-        } else if (user.is_team_lead && !user.is_dept_lead) {
-          // Escalate to a dept_lead in the same department
+          // Look for a team lead or manager in the same department
           const { data: leads } = await supabase.from("employees")
             .select("id, role")
             .eq("department", user.department)
-            .eq("is_dept_lead", true)
             .limit(1);
           if (leads && leads.length > 0) {
             targetId = leads[0].id;
-            targetRole = "dept_lead";
+            targetRole = leads[0].role === "admin" || leads[0].role === "hr" ? leads[0].role : "team_lead";
+            foundLead = true;
+          }
+        } else if (user.is_team_lead && !user.is_dept_lead) {
+          // Escalate to a department head or admin
+          const { data: leads } = await supabase.from("employees")
+            .select("id, role")
+            .eq("role", "admin")
+            .limit(1);
+          if (leads && leads.length > 0) {
+            targetId = leads[0].id;
+            targetRole = "admin";
             foundLead = true;
           }
         }

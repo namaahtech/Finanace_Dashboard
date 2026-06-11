@@ -11,7 +11,9 @@ INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
   ('invoices',         'invoices',         false, 10 * 1024 * 1024, ARRAY['application/pdf']),
   ('lms-content',      'lms-content',      false, 500 * 1024 * 1024, NULL),
   ('mail-attachments', 'mail-attachments', false, 25 * 1024 * 1024, NULL),
-  ('documents',        'documents',        false, 50 * 1024 * 1024, NULL)
+  ('documents',        'documents',        false, 50 * 1024 * 1024, NULL),
+  -- General-purpose attachments bucket: used by support tickets, messages, etc.
+  ('attachments',      'attachments',      false, 50 * 1024 * 1024, NULL)
 ON CONFLICT (id) DO UPDATE SET
   public             = EXCLUDED.public,
   file_size_limit    = EXCLUDED.file_size_limit,
@@ -74,3 +76,18 @@ CREATE POLICY "auth_write_mail_attachments" ON storage.objects FOR INSERT
   WITH CHECK (bucket_id = 'mail-attachments' AND auth.role() = 'authenticated');
 CREATE POLICY "auth_write_documents"        ON storage.objects FOR INSERT
   WITH CHECK (bucket_id = 'documents'        AND auth.role() = 'authenticated');
+
+-- ─── General-purpose attachments bucket (support tickets, messages) ───────────
+DROP POLICY IF EXISTS "auth_read_attachments"  ON storage.objects;
+DROP POLICY IF EXISTS "auth_write_attachments" ON storage.objects;
+
+-- Any authenticated employee can upload or read files in this bucket.
+-- Row-level access control is handled at the application layer (ticket ownership).
+CREATE POLICY "auth_read_attachments" ON storage.objects FOR SELECT
+  USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
+
+CREATE POLICY "auth_write_attachments" ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'attachments' AND auth.role() = 'authenticated');
+
+CREATE POLICY "auth_delete_attachments" ON storage.objects FOR DELETE
+  USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');

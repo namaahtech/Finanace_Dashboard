@@ -9,12 +9,13 @@ type ToastType = "success" | "error" | "info" | "warning";
 
 interface Toast {
   id: string;
-  message: string;
+  message: React.ReactNode;
   type: ToastType;
+  onClick?: () => void;
 }
 
 interface ToastContextType {
-  showToast: (message: string, type?: ToastType) => void;
+  showToast: (message: React.ReactNode, type?: ToastType, onClick?: () => void) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -30,9 +31,9 @@ export function useToast() {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = useCallback((message: string, type: ToastType = "info") => {
+  const showToast = useCallback((message: React.ReactNode, type: ToastType = "info", onClick?: () => void) => {
     const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message, type, onClick }]);
 
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -82,20 +83,25 @@ function ToastPill({ toast, onClose }: { toast: Toast; onClose: () => void }) {
 
   return (
     <div
+      onClick={toast.onClick}
       className={cn(
-        "flex items-center gap-4 px-6 py-3 bg-white border border-zinc-100 shadow-[0_15px_40px_rgba(0,0,0,0.12)] rounded-full max-w-[450px]"
+        "flex items-center gap-4 px-6 py-3 bg-white border border-zinc-100 shadow-[0_15px_40px_rgba(0,0,0,0.12)] rounded-full max-w-[450px]",
+        toast.onClick && "cursor-pointer hover:bg-zinc-50 active:scale-[0.98] transition-all"
       )}
     >
       <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full", bgStyles[toast.type])}>
         {icons[toast.type]}
       </div>
       
-      <p className="text-sm font-semibold text-zinc-900 flex-1">
+      <div className="text-sm font-semibold text-zinc-900 flex-1">
         {toast.message}
-      </p>
+      </div>
       
       <button
-        onClick={onClose}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
         className="p-1 text-zinc-400 hover:text-zinc-600 transition-colors flex-shrink-0"
       >
         <X size={16} />

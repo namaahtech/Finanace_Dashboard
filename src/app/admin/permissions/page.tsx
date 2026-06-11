@@ -49,6 +49,8 @@ const ROLES = [
   { id: "admin",    name: "Admin",    description: "Full access — every panel and module." },
   { id: "hr",       name: "HR",       description: "People scope: hiring, attendance, performance, L&D, org structure." },
   { id: "accounts", name: "Accounts", description: "Finance scope: invoicing, vendors, budgets, payroll, claims." },
+  { id: "dept_lead", name: "Department Lead", description: "Manage department personnel, shifts, and team structures." },
+  { id: "team_lead", name: "Team Lead",       description: "Manage assigned sub-team and daily shift routines." },
   { id: "employee", name: "Employee", description: "Standard staff — self-service portal. Manager flags add team views." },
   { id: "intern",   name: "Intern",   description: "Trainee — limited self-service access." },
 ];
@@ -57,6 +59,8 @@ const ALL_ROLES_FOR_ASSIGN = [
   { id: "admin",    label: "Admin" },
   { id: "hr",       label: "HR" },
   { id: "accounts", label: "Accounts" },
+  { id: "dept_lead", label: "Department Lead" },
+  { id: "team_lead", label: "Team Lead" },
   { id: "employee", label: "Employee" },
   { id: "intern",   label: "Intern" },
 ];
@@ -243,17 +247,20 @@ function ModuleRow({
   onToggle: (key: string, field: keyof PermNode) => void;
 }) {
   return (
-    <div className={cn(
-      "flex items-center justify-between px-5 py-3 border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors",
-      !node.can_view && "opacity-60"
-    )}>
+    <div 
+      onClick={() => onToggle(item.key, "can_view")}
+      className={cn(
+        "flex items-center justify-between px-5 py-3 border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors cursor-pointer select-none",
+        !node.can_view && "opacity-60"
+      )}
+    >
       <div className="min-w-0 flex-1 mr-4">
         <p className="text-sm font-medium text-foreground truncate">{item.label}</p>
         <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.desc}</p>
       </div>
 
       <div className="flex items-center gap-4 flex-shrink-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <Switch checked={node.can_view} onCheckedChange={() => onToggle(item.key, "can_view")} />
           <span className={cn(
             "text-[10px] font-medium w-12",
@@ -263,10 +270,13 @@ function ModuleRow({
           </span>
         </div>
 
-        <div className={cn(
-          "flex items-center gap-1.5 transition-opacity",
-          node.can_view ? "opacity-100" : "opacity-0 pointer-events-none"
-        )}>
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "flex items-center gap-1.5 transition-opacity",
+            node.can_view ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}
+        >
           <PermBadge label="Create" field="can_create" checked={node.can_create} onChange={() => onToggle(item.key, "can_create")} />
           <PermBadge label="Edit"   field="can_edit"   checked={node.can_edit}   onChange={() => onToggle(item.key, "can_edit")} />
           <PermBadge label="Delete" field="can_delete" checked={node.can_delete} onChange={() => onToggle(item.key, "can_delete")} />

@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/ToastLegacy";
 import { cn } from "@/lib/utils";
 import {
   Mail, Users, Plus, Search, RefreshCw, Check, X, Loader2,
-  Zap, UserCheck, AlertTriangle, Copy, Globe, ShieldCheck,
+  Zap, UserCheck, AlertTriangle, Copy, Globe, ShieldCheck, Clock, AlertCircle,
 } from "lucide-react";
 
 type MailAccount = {
@@ -28,6 +28,11 @@ type ZohoUser = {
   role: string;
   isActive: boolean;
   domain: string;
+  lastLogin: string | null;
+  neverSignedIn: boolean;
+  lastClient: string | null;
+  mailboxStatus: string | null;
+  accountCreationTime: string | null;
 };
 
 type Employee = {
@@ -250,6 +255,22 @@ export default function MailAccountsPage() {
           </div>
         )}
 
+        {/* Never Signed In info banner — explains Zoho admin console limitation */}
+        {connected && zohoUsers.some(u => u.neverSignedIn) && (
+          <div className="flex items-start gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+            <AlertCircle size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-blue-500">About "Never Signed In" Status</p>
+              <p className="text-xs text-theme-muted leading-relaxed">
+                Some users show <strong className="text-amber-500">Never Signed In</strong> in Zoho Admin Console.
+                This status updates only when users directly sign into{" "}
+                <strong className="text-theme-fg">mail.zoho.in</strong> via browser — it cannot be triggered via API.
+                Ask affected employees to open Zoho Mail once directly to activate their account session.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Tab switcher */}
         <div className="flex gap-1 p-1 bg-theme-raised rounded-xl w-fit border border-theme-border">
           {(["zoho", "local"] as const).map(tab => (
@@ -313,7 +334,7 @@ export default function MailAccountsPage() {
                       <th className="px-5 py-3">Name</th>
                       <th className="px-5 py-3">Email Address</th>
                       <th className="px-5 py-3">Role</th>
-                      <th className="px-5 py-3">Domain</th>
+                      <th className="px-5 py-3">Last Sign In</th>
                       <th className="px-5 py-3 text-center">Status</th>
                     </tr>
                   </thead>
@@ -343,7 +364,21 @@ export default function MailAccountsPage() {
                           <span className="text-xs text-theme-muted capitalize">{u.role}</span>
                         </td>
                         <td className="px-5 py-3">
-                          <span className="text-xs tabular-nums text-theme-muted">@{u.domain}</span>
+                          {u.neverSignedIn ? (
+                            <div className="flex items-center gap-1.5">
+                              <AlertCircle size={11} className="text-amber-500 flex-shrink-0" />
+                              <span className="text-[10px] font-bold text-amber-500">Never Signed In</span>
+                            </div>
+                          ) : u.lastLogin ? (
+                            <div className="flex items-center gap-1.5">
+                              <Clock size={11} className="text-emerald-500 flex-shrink-0" />
+                              <span className="text-[10px] font-semibold text-theme-muted" title={u.lastLogin}>
+                                {new Date(u.lastLogin).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-theme-muted">—</span>
+                          )}
                         </td>
                         <td className="px-5 py-3 text-center">
                           <span className={cn(

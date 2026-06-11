@@ -13,6 +13,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 const PUBLIC_ROUTES = [
   "/login",
   "/forgot-password",
+  "/forgot-credentials",
   "/onboarding",
   "/career",
   "/careers",
@@ -65,7 +66,25 @@ export async function middleware(req: NextRequest) {
     },
   });
 
-  const { data: { session } } = await supabase.auth.getSession();
+  let session = null;
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error && (error.message?.includes("Refresh Token") || error.message?.includes("refresh_token"))) {
+      throw error;
+    }
+    session = data?.session || null;
+  } catch (err) {
+    console.error("Middleware session check failed:", err);
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/login";
+    redirectUrl.searchParams.set("error", "session_expired");
+    if (pathname !== "/") redirectUrl.searchParams.set("next", pathname);
+    
+    const responseWithRedirect = NextResponse.redirect(redirectUrl);
+    responseWithRedirect.cookies.delete("sb-access-token");
+    responseWithRedirect.cookies.delete("sb-refresh-token");
+    return responseWithRedirect;
+  }
 
   // Unauthenticated → /login (preserve intended destination)
   if (!session) {

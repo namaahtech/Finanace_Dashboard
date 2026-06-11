@@ -31,6 +31,9 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/components/ui/ToastLegacy";
+import { playMessagePing } from "@/lib/sounds";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -183,6 +186,8 @@ function roleBadge(role?: string) {
     accounts: { label: "Accounts", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
     employee: { label: "Employee", className: "" },
     intern:   { label: "Intern",   className: "bg-indigo-500/15 text-indigo-500 border-indigo-500/20" },
+    dept_lead: { label: "Dept Lead", className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/20" },
+    team_lead: { label: "Team Lead", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
   };
   return map[role ?? "employee"] ?? map.employee;
 }
@@ -200,6 +205,141 @@ export function Sidebar() {
   const navRef = useRef<HTMLDivElement>(null);
 
   const role = roleBadge(user?.role);
+
+  const [unreadCount, setUnreadCount] = useState(0);
+  const { showToast } = useToast();
+
+  // Play dual-tone chime sound programmatically via browser Web Audio API
+  const playChimeSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const now = ctx.currentTime;
+
+      // Note E5
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(659.25, now);
+      gain1.gain.setValueAtTime(0.15, now);
+      gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.35);
+
+      // Note A5 starting slightly later
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = "sine";
+      osc2.frequency.setValueAtTime(880, now + 0.12);
+      gain2.gain.setValueAtTime(0.15, now + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.5);
+    } catch (e) {
+      console.error("Audio Context playback failed", e);
+    }
+  };
+
+  // Show desktop Notification
+  const showDesktopNotification = (msg: { id: string; sender_name: string; subject: string; is_internal?: boolean }) => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      const typeLabel = msg.is_internal ? "INTERNAL" : "EXTERNAL";
+      const notification = new Notification(`[${typeLabel}] New Mail from ${msg.sender_name}`, {
+        body: msg.subject || "(No Subject)",
+        icon: "/icon.png",
+        tag: msg.id,
+      });
+
+      notification.onclick = () => {
+        window.focus();
+        window.location.href = `/admin/mail/inbox?select_id=${msg.id}`;
+      };
+    }
+  };
+
+  // Request browser notification permissions on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+  }, []);
+
+  // Fetch initial unread count and subscribe to realtime broadcast channels
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchCount = async () => {
+      const { count, error } = await supabase
+        .from("mail_messages")
+        .select("*", { count: "exact", head: true })
+        .eq("employee_id", user.id)
+        .eq("folder", "Inbox")
+        .eq("is_read", false);
+
+      if (!error && count !== null) {
+        setUnreadCount(count);
+      }
+    };
+
+    fetchCount();
+
+    const channel = supabase
+      .channel("mail_realtime_sidebar")
+      .on("broadcast", { event: "new_mail" }, (payload: any) => {
+        if (payload.payload && payload.payload.employee_id === user.id) {
+          playMessagePing();
+          fetchCount();
+          showDesktopNotification(payload.payload);
+
+          const isInternal = payload.payload.is_internal;
+          const senderName = payload.payload.sender_name || "Namaah";
+          const subject = payload.payload.subject || "(No Subject)";
+
+          const typeBadge = isInternal ? (
+            <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-md">
+              Internal
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-500 border border-rose-500/25 rounded-md shadow-sm animate-pulse">
+              External
+            </span>
+          );
+
+          showToast(
+            <div className="flex flex-col gap-1 text-left">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-zinc-900 dark:text-white text-xs">New Mail from {senderName}</span>
+                {typeBadge}
+              </div>
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                {subject}
+              </span>
+            </div>,
+            "info",
+            () => {
+              window.location.href = `/admin/mail/inbox?select_id=${payload.payload.id}`;
+            }
+          );
+        }
+      })
+      .on("broadcast", { event: "mail_status_changed" }, (payload: any) => {
+        if (payload.payload && payload.payload.employee_id === user.id) {
+          fetchCount();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   // ── Permission filtering ──────────────────────────────────
   const sections: NavSection[] = MASTER_NAV
@@ -351,9 +491,16 @@ export function Sidebar() {
                               tooltip={label}
                               className="h-8 rounded-md text-sm font-normal data-[active=true]:bg-sidebar-accent data-[active=true]:text-foreground data-[active=true]:font-medium"
                             >
-                              <Link href={href} scroll={false}>
-                                <Icon className="size-4 shrink-0" />
-                                <span className="truncate">{label}</span>
+                              <Link href={href} scroll={false} className="flex items-center justify-between w-full">
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <Icon className="size-4 shrink-0" />
+                                  <span className="truncate">{label}</span>
+                                </span>
+                                {(label === "Inbox" || label === "Mail Hub") && unreadCount > 0 && (
+                                  <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white leading-none">
+                                    {unreadCount}
+                                  </span>
+                                )}
                               </Link>
                             </SidebarMenuButton>
                           </SidebarMenuItem>

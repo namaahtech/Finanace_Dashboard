@@ -170,11 +170,15 @@ export default function EmployeePermissionsPage() {
       // Employee
       const { data: emp, error: empErr } = await supabase
         .from("employees")
-        .select("id, name, email, role, designation, department, is_dept_lead, is_team_lead")
+        .select("id, name, email, role, designation, department")
         .eq("id", employeeId)
         .single();
       if (empErr || !emp) throw empErr ?? new Error("Employee not found");
-      setEmployee(emp as EmployeeData);
+      setEmployee({
+        ...emp,
+        is_dept_lead: (emp as any).is_dept_lead || false,
+        is_team_lead: (emp as any).is_team_lead || false,
+      } as EmployeeData);
 
       // Role defaults
       const roleRes = await fetch(`/api/permissions?role=${emp.role}`);
@@ -290,7 +294,7 @@ export default function EmployeePermissionsPage() {
     <DashboardShell
       moduleKey="permissions_control"
       title={`Permissions — ${employee.name}`}
-      subtitle="Per-employee overrides on top of role defaults. Allow grants access; Deny revokes it; Inherit follows the role default."
+      subtitle="Per-employee overrides on top of role defaults. Allow grants access; Deny revokes it; Default follows the role default."
       actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" asChild>
@@ -331,7 +335,7 @@ export default function EmployeePermissionsPage() {
             </div>
           </CardContent>
         </Card>
-
+ 
         {/* Info banner */}
         <div className="rounded-md border bg-muted/30 p-4 flex items-start gap-3">
           <ShieldCheck className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
@@ -339,11 +343,11 @@ export default function EmployeePermissionsPage() {
             <strong className="text-foreground">How overrides work:</strong> Each module has 5 actions
             (View, Create, Edit, Delete, Export). For each action you can choose <strong>Allow</strong>{" "}
             (grant regardless of role), <strong>Deny</strong> (revoke regardless of role), or{" "}
-            <strong>Inherit</strong> (use the role default). Inherit is the most common; only override
+            <strong>Default</strong> (use the role default). Default is the most common; only override
             when this person needs an exception.
           </div>
         </div>
-
+ 
         {/* Search */}
         <Input
           placeholder="Search modules…"
@@ -351,7 +355,7 @@ export default function EmployeePermissionsPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-md"
         />
-
+ 
         {/* Sections */}
         <div className="space-y-4">
           {filteredSections.map(section => (
@@ -364,7 +368,7 @@ export default function EmployeePermissionsPage() {
                   const rolePerm = rolePerms[item.key];
                   const ov = overrides[item.key];
                   const hasAnyOverride = ov && (ov.can_view !== null || ov.can_create !== null || ov.can_edit !== null || ov.can_delete !== null || ov.can_export !== null);
-
+ 
                   return (
                     <div
                       key={item.key}
@@ -387,7 +391,7 @@ export default function EmployeePermissionsPage() {
                           {!rolePerm && (
                             <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 flex items-center gap-1">
                               <AlertCircle className="h-3 w-3" />
-                              Role default not seeded — Inherit means denied
+                              Role default not seeded — Default means denied
                             </p>
                           )}
                         </div>
@@ -397,7 +401,7 @@ export default function EmployeePermissionsPage() {
                           </Button>
                         )}
                       </div>
-
+ 
                       {/* 5 action tri-states */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                         {FIELDS.map(field => {
@@ -424,7 +428,7 @@ export default function EmployeePermissionsPage() {
                                         : "bg-background text-muted-foreground border-border hover:border-foreground/30",
                                     )}
                                   >
-                                    {opt}
+                                    {opt === "inherit" ? "default" : opt}
                                   </button>
                                 ))}
                               </div>

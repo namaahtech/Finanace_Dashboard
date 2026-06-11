@@ -1,0 +1,27 @@
+Dev Name,Timestamp,Progress,%,EOD Status
+,,,,
+--- MONDAY JUNE 8 (Login 12:30 PM – Logout 9:00 PM) ---,,,,
+Darshan Murthy K,12:30 PM - 2:00 PM (1.5 hrs),Mail AI Improve/Shorten — maxTokens Truncation Fix (2048→4096),100%,Completed
+Darshan Murthy K,2:00 PM - 3:30 PM (1.5 hrs),HTML Body ContentEditable Direct Edit Mode (click-to-edit in compose),100%,Completed
+Darshan Murthy K,3:30 PM - 5:00 PM (1.5 hrs),AI 18-Model OpenRouter Waterfall Chain (Kimi K2.6 → Gemma fallback),100%,Completed
+Darshan Murthy K,5:00 PM - 7:00 PM (2 hrs),Zoho Mail Send Route — From Field Investigation (admin vs employee),100%,Completed
+Darshan Murthy K,7:00 PM - 9:00 PM (2 hrs),Employee Email From Field Fix + hasEmployeeAccount Logic,100%,Completed
+,,,,
+--- TUESDAY JUNE 9 (Login 5:00 PM – Logout 3:20 AM) ---,,,,
+Darshan Murthy K,5:00 PM - 6:30 PM (1.5 hrs),/api/mail/send 500 Error Debug — Non-JSON HTML Error Page Root Cause,100%,Completed
+Darshan Murthy K,6:30 PM - 8:00 PM (1.5 hrs),zohoPost Try/Catch Wrapper — Always Return JSON on Failure,100%,Completed
+Darshan Murthy K,8:00 PM - 9:30 PM (1.5 hrs),primarySendAccountId Logic — Employee vs Admin Account Selection,100%,Completed
+Darshan Murthy K,9:30 PM - 11:00 PM (1.5 hrs),Zoho Cross-Account Send Investigation (org scope requirement),100%,Completed
+Darshan Murthy K,11:00 PM - 12:30 AM (1.5 hrs),Zoho OAuth Token Scope Analysis (ZohoMail.organization.accounts.ALL),100%,Completed
+Darshan Murthy K,12:30 AM - 3:20 AM (2.83 hrs),SAML SSO Silent Activation — zoho_activated_at Migration + AuthProvider iframe,100%,Completed
+,,,,
+--- WEDNESDAY JUNE 10 (Login 3:00 PM – Logout 12:30 AM) ---,,,,
+Darshan Murthy K,3:00 PM - 4:30 PM (1.5 hrs),Mail Attachment Supabase Migration — Remove Zoho storeName Dependency,100%,Completed
+Darshan Murthy K,4:30 PM - 6:00 PM (1.5 hrs),Supabase mail-attachments Bucket + 30-Day Signed URL Generation,100%,Completed
+Darshan Murthy K,6:00 PM - 7:30 PM (1.5 hrs),Attachment Independence — Any Sender Account Can Attach Files,100%,Completed
+Darshan Murthy K,7:30 PM - 9:00 PM (1.5 hrs),Deploy Build Fix — Vercel OOM (Node heap 8GB) + Suspense CSR Bailout,100%,Completed
+Darshan Murthy K,9:00 PM - 10:30 PM (1.5 hrs),Zoho Webhook Registration Route (/api/mail/webhook/register),100%,Completed
+Darshan Murthy K,10:30 PM - 12:30 AM (2 hrs),replyTo 500 Error Investigation — Zoho API Field Compatibility Debug,80%,In Progress
+,,,,
+--- THURSDAY JUNE 11 (12:30 AM – Present) ---,,,,
+Darshan Murthy K,12:30 AM - 1:30 AM (1 hr),Mail Send replyTo Fix — Removed Unsupported Zoho Field + Fallback Banner,100%,Completed

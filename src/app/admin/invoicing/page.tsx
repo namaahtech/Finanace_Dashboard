@@ -94,6 +94,8 @@ const ALL_ROLES = [
   { value: "admin",    label: "Admin",    color: "text-purple-700 border-purple-500/30 bg-purple-500/10" },
   { value: "hr",       label: "HR",       color: "text-sky-700 border-sky-500/30 bg-sky-500/10" },
   { value: "accounts", label: "Accounts", color: "text-emerald-700 border-emerald-500/30 bg-emerald-500/10" },
+  { value: "dept_lead", label: "Department Lead", color: "text-purple-700 border-purple-500/30 bg-purple-500/10" },
+  { value: "team_lead", label: "Team Lead",       color: "text-emerald-700 border-emerald-500/30 bg-emerald-500/10" },
   { value: "employee", label: "Employee", color: "" },
   { value: "intern",   label: "Intern",   color: "text-indigo-700 border-indigo-500/30 bg-indigo-500/10" },
 ];

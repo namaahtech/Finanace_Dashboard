@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -32,6 +32,17 @@ export default function ComposePage() {
   const [body,    setBody]    = useState("");
   const [sending, setSending] = useState(false);
   const [saving,  setSaving]  = useState(false);
+  const [attachments, setAttachments] = useState<{
+    id: string;
+    name: string;
+    size: number;
+    progress: number;
+    error: string | null;
+    storeName: string | null;
+    attachmentName: string | null;
+    attachmentPath: string | null;
+    xhr?: XMLHttpRequest | null;
+  }[]>([]);
 
   const [templates,        setTemplates]        = useState<Template[]>([]);
   const [showTemplates,    setShowTemplates]    = useState(false);
@@ -40,15 +51,30 @@ export default function ComposePage() {
 
   const [aiLoading,   setAiLoading]   = useState(false);
   const [aiPanel,     setAiPanel]     = useState(false);
+  const [improvedBody,    setImprovedBody]    = useState("");
+  const [improvedSubject, setImprovedSubject] = useState("");
+  const [improvedIsHtml,  setImprovedIsHtml]  = useState(false);
   const [suggestedSubject, setSuggestedSubject] = useState("");
-  const [improved,    setImproved]    = useState("");
+  const [isHtmlBody,  setIsHtmlBody]  = useState(false);
+  const [showSource,  setShowSource]  = useState(false);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef  = useRef<HTMLTextAreaElement>(null);
+  const htmlBodyRef  = useRef<HTMLDivElement>(null);
+  const lastSetBody  = useRef("");
 
   useEffect(() => {
     supabase.from("mail_templates").select("id,name,category,subject,body").eq("status","active")
       .then(({ data }) => setTemplates(data || []));
   }, []);
+
+  // Sync external body changes (AI / template apply) into the contentEditable div.
+  // Skip when the change came from user typing (lastSetBody already matches body).
+  useEffect(() => {
+    if (isHtmlBody && htmlBodyRef.current && body !== lastSetBody.current) {
+      htmlBodyRef.current.innerHTML = body;
+      lastSetBody.current = body;
+    }
+  }, [body, isHtmlBody]);
 
   async function searchEmployees(q: string) {
     if (!q || q.length < 2) { setEmployeeSuggestions([]); return; }
@@ -103,9 +129,31 @@ export default function ComposePage() {
         body: JSON.stringify({ type, subject, body }),
       });
       const data = await res.json();
-      if (type === "improve_tone") { setImproved(data.improved || ""); setAiPanel(true); }
-      else if (type === "shorten")  { setImproved(data.shortened || ""); setAiPanel(true); }
-      else if (type === "suggest_subject") { setSuggestedSubject(data.subject || ""); }
+
+      if (!res.ok) {
+        showToast(data.error || "AI unavailable — try again in 30 seconds.", "warning");
+        return;
+      }
+
+      if (type === "improve_tone") {
+        const result = data.improved || "";
+        if (!result) { showToast("AI returned empty response — try again.", "warning"); return; }
+        setImprovedBody(result);
+        setImprovedSubject(data.improvedSubject || subject || "");
+        setImprovedIsHtml(data.isHtml === true);
+        setAiPanel(true);
+      } else if (type === "shorten") {
+        const result = data.shortened || "";
+        if (!result) { showToast("AI returned empty response — try again.", "warning"); return; }
+        setImprovedBody(result);
+        setImprovedSubject(data.shortenedSubject || subject || "");
+        setImprovedIsHtml(data.isHtml === true);
+        setAiPanel(true);
+      } else if (type === "suggest_subject") {
+        setSuggestedSubject(data.subject || "");
+      }
+    } catch (e: any) {
+      showToast("Network error — check your connection.", "error");
     } finally {
       setAiLoading(false);
     }
@@ -115,16 +163,27 @@ export default function ComposePage() {
     if (!body && !subject && !to.length) { showToast("Nothing to save.", "warning"); return; }
     setSaving(true);
     try {
-      const { data: emp } = await supabase
-        .from("employees")
-        .select("id")
-        .eq("email", (user as any)?.email || "")
-        .maybeSingle();
+      const employeeId = (user as any)?.id;
+      const uploadedAttachments = attachments
+        .filter((att) => att.progress === 100 && !att.error && att.storeName)
+        .map((att) => ({
+          storeName: att.storeName,
+          attachmentName: att.attachmentName,
+          attachmentPath: att.attachmentPath,
+        }));
 
       await fetch("/api/mail/drafts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employee_id: emp?.id, to, cc, bcc, subject, body }),
+        body: JSON.stringify({
+          employee_id: employeeId,
+          to,
+          cc,
+          bcc,
+          subject,
+          body,
+          attachments: uploadedAttachments,
+        }),
       });
       showToast("Draft saved.", "success");
     } finally {
@@ -132,25 +191,215 @@ export default function ComposePage() {
     }
   }
 
+  function formatFileSize(bytes: number) {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach((file) => {
+      uploadFile(file);
+    });
+    e.target.value = "";
+  }
+
+  function uploadFile(file: File) {
+    const id = Math.random().toString(36).substring(7);
+    const newAttachment = {
+      id,
+      name: file.name,
+      size: file.size,
+      progress: 0,
+      error: null,
+      storeName: null,
+      attachmentName: null,
+      attachmentPath: null,
+      xhr: null as XMLHttpRequest | null,
+    };
+
+    setAttachments((prev) => [...prev, newAttachment]);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("employee_id", (user as any)?.id || "");
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/mail/attachments", true);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setAttachments((prev) =>
+          prev.map((att) => (att.id === id ? { ...att, progress: percent } : att))
+        );
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        try {
+          const res = JSON.parse(xhr.responseText);
+          if (res.data && res.data.length > 0) {
+            const uploaded = res.data[0];
+            setAttachments((prev) =>
+              prev.map((att) =>
+                att.id === id
+                  ? {
+                      ...att,
+                      progress: 100,
+                      storeName: uploaded.storeName,
+                      attachmentName: uploaded.attachmentName,
+                      attachmentPath: uploaded.attachmentPath,
+                    }
+                  : att
+              )
+            );
+          } else {
+            throw new Error("Invalid response");
+          }
+        } catch {
+          setAttachments((prev) =>
+            prev.map((att) => (att.id === id ? { ...att, error: "Invalid response from server" } : att))
+          );
+        }
+      } else {
+        try {
+          const res = JSON.parse(xhr.responseText);
+          setAttachments((prev) =>
+            prev.map((att) => (att.id === id ? { ...att, error: res.error || "Upload failed" } : att))
+          );
+        } catch {
+          setAttachments((prev) =>
+            prev.map((att) => (att.id === id ? { ...att, error: "Upload failed" } : att))
+          );
+        }
+      }
+    };
+
+    xhr.onerror = () => {
+      setAttachments((prev) =>
+        prev.map((att) => (att.id === id ? { ...att, error: "Network error occurred" } : att))
+      );
+    };
+
+    xhr.send(formData);
+
+    // Track the XHR in state
+    setAttachments((prev) =>
+      prev.map((att) => (att.id === id ? { ...att, xhr } : att))
+    );
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => {
+      const target = prev.find((att) => att.id === id);
+      if (target && target.xhr) {
+        target.xhr.abort();
+      }
+      return prev.filter((att) => att.id !== id);
+    });
+  }
+
   async function handleSend() {
     if (!to.length)    { showToast("Add at least one recipient.", "warning"); return; }
     if (!subject)      { showToast("Subject is required.", "warning"); return; }
     if (!body.trim())  { showToast("Email body cannot be empty.", "warning"); return; }
+
+    const isUploading = attachments.some((att) => att.progress < 100 && !att.error);
+    if (isUploading) {
+      showToast("Please wait for all attachments to finish uploading.", "warning");
+      return;
+    }
+
+    const hasUploadErrors = attachments.some((att) => att.error !== null);
+    if (hasUploadErrors) {
+      showToast("Some attachments failed to upload. Please remove or retry them before sending.", "error");
+      return;
+    }
+
+    const uploadedAttachments = attachments
+      .filter((att) => att.progress === 100 && !att.error && att.storeName)
+      .map((att) => ({
+        storeName: att.storeName,
+        attachmentName: att.attachmentName,
+        attachmentPath: att.attachmentPath,
+      }));
+
+    if (uploadedAttachments.length < attachments.length) {
+      showToast("Not all attachments have uploaded successfully.", "error");
+      return;
+    }
 
     setSending(true);
     try {
       const res = await fetch("/api/mail/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to, cc, bcc, subject, content: body, fromName: (user as any)?.name }),
+        body: JSON.stringify({
+          to,
+          cc,
+          bcc,
+          subject,
+          content: body,
+          fromName: (user as any)?.name,
+          employeeId: (user as any)?.id,
+          attachments: uploadedAttachments,
+        }),
       });
-      const data = await res.json();
+
+      let data: any = {};
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text || "Server returned non-JSON response");
+      }
+
       if (res.ok) {
         showToast("Email sent successfully.", "success");
+        
+        // Broadcast real-time notifications for each recipient
+        if (data.recipients && Array.isArray(data.recipients)) {
+          const channelsToNotify = ["mail_realtime_sidebar", "mail_realtime_inbox", "mail_realtime_kanban", "mail_realtime_sent"];
+          channelsToNotify.forEach((chanName) => {
+            const channel = supabase.channel(chanName);
+            channel.subscribe((status) => {
+              if (status === "SUBSCRIBED") {
+                data.recipients.forEach((rec: any) => {
+                  channel.send({
+                    type: "broadcast",
+                    event: "new_mail",
+                    payload: {
+                      id: rec.id,
+                      employee_id: rec.employee_id,
+                      sender_name: (user as any)?.name || "Namaah",
+                      subject: subject,
+                      is_internal: rec.is_internal,
+                    },
+                  });
+                });
+                setTimeout(() => {
+                  supabase.removeChannel(channel);
+                }, 1000);
+              }
+            });
+          });
+        }
+
         setTo([]); setCc([]); setBcc([]); setSubject(""); setBody("");
+        setAttachments([]);
       } else {
         showToast(data.error || "Failed to send.", "error");
       }
+    } catch (e: any) {
+      console.error("Failed to send email:", e);
+      showToast(e.message || "An error occurred while sending.", "error");
     } finally {
       setSending(false);
     }
@@ -344,21 +593,97 @@ export default function ComposePage() {
             </div>
           </div>
 
-          {/* Body */}
-          <textarea
-            ref={textareaRef}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Write your email here…&#10;&#10;Tip: Use the AI buttons above to improve tone, shorten, or apply a template."
-            className="w-full flex-1 px-4 py-4 text-sm text-theme-fg bg-transparent resize-none outline-none placeholder:text-theme-muted/40 leading-relaxed"
-            style={{ minHeight: 320 }}
-          />
+          {/* Body — plain textarea OR rich HTML (contentEditable for inline editing) */}
+          {isHtmlBody && !showSource ? (
+            <div className="relative">
+              {/* ContentEditable lets the user click and type directly in the HTML preview.
+                  innerHTML is set via useEffect (ref pattern) to avoid React cursor-reset issues. */}
+              <div
+                ref={htmlBodyRef}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={() => {
+                  if (htmlBodyRef.current) {
+                    const html = htmlBodyRef.current.innerHTML;
+                    lastSetBody.current = html;
+                    setBody(html);
+                  }
+                }}
+                className="w-full px-4 py-4 text-sm text-theme-fg leading-relaxed outline-none cursor-text"
+                style={{ minHeight: 320 }}
+              />
+              <div className="absolute top-3 right-3 flex items-center gap-2">
+                <span className="text-[9px] text-theme-muted/50 font-medium select-none">Click to edit</span>
+                <button
+                  onClick={() => setShowSource(true)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-theme-raised border border-theme-border text-[10px] font-semibold text-theme-muted hover:text-theme-fg transition-all"
+                >
+                  Edit Source
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                value={body}
+                onChange={(e) => { setBody(e.target.value); }}
+                placeholder="Write your email here…&#10;&#10;Tip: Use the AI buttons above to improve tone, shorten, or apply a template."
+                className="w-full flex-1 px-4 py-4 text-sm text-theme-fg bg-transparent resize-none outline-none placeholder:text-theme-muted/40 leading-relaxed"
+                style={{ minHeight: 320 }}
+              />
+              {isHtmlBody && showSource && (
+                <button
+                  onClick={() => setShowSource(false)}
+                  className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded-lg bg-theme-primary/10 border border-theme-primary/20 text-[10px] font-semibold text-theme-primary hover:bg-theme-primary/20 transition-all"
+                >
+                  Preview
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Attachments List */}
+          {attachments.length > 0 && (
+            <div className="border-t border-theme-border/50 bg-theme-raised/10 px-4 py-3 space-y-2">
+              {attachments.map((file) => (
+                <div key={file.id} className="flex items-center justify-between p-2 rounded-xl bg-theme-surface border border-theme-border/50">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <FileText size={16} className="text-theme-muted flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-semibold text-theme-fg truncate">{file.name}</span>
+                        <span className="text-[10px] text-theme-muted flex-shrink-0">({formatFileSize(file.size)})</span>
+                      </div>
+                      {file.progress < 100 && !file.error && (
+                        <div className="w-full bg-theme-border/30 rounded-full h-1 mt-1.5 overflow-hidden">
+                          <div 
+                            className="bg-theme-primary h-1 rounded-full transition-all duration-300" 
+                            style={{ width: `${file.progress}%` }} 
+                          />
+                        </div>
+                      )}
+                      {file.error && (
+                        <p className="text-[10px] text-red-500 font-medium mt-0.5">{file.error}</p>
+                      )}
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => removeAttachment(file.id)} 
+                    className="p-1 rounded-lg text-theme-muted hover:text-theme-fg hover:bg-theme-raised transition-all ml-4"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Footer */}
           <div className="flex items-center gap-2 px-4 py-3 border-t border-theme-border bg-theme-raised/20">
             <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-dashed border-theme-border text-theme-muted hover:text-theme-fg cursor-pointer text-xs font-semibold transition-all">
               <Paperclip size={13} /> Attach File
-              <input type="file" className="hidden" />
+              <input type="file" multiple className="hidden" onChange={handleFileChange} />
             </label>
             <div className="ml-auto flex items-center gap-2">
               <button onClick={saveDraft} disabled={saving}
@@ -374,25 +699,60 @@ export default function ComposePage() {
         </div>
 
         {/* AI Panel */}
-        {aiPanel && improved && (
-          <div className="w-72 flex-shrink-0 page-card">
-            <div className="flex items-center gap-2 mb-4">
+        {aiPanel && improvedBody && (
+          <div className="w-80 flex-shrink-0 page-card flex flex-col">
+            <div className="flex items-center gap-2 mb-3">
               <div className="h-8 w-8 rounded-xl bg-theme-primary/10 flex items-center justify-center">
                 <Sparkles size={14} className="text-theme-primary" />
               </div>
-              <p className="text-xs font-bold text-theme-fg flex-1">AI Suggestion</p>
+              <div className="flex-1">
+                <p className="text-xs font-bold text-theme-fg">AI Suggestion</p>
+                {improvedIsHtml && (
+                  <p className="text-[10px] text-emerald-500 font-semibold">Rich HTML · professionally formatted</p>
+                )}
+              </div>
               <button onClick={() => setAiPanel(false)} className="text-theme-muted hover:text-theme-fg"><X size={13} /></button>
             </div>
-            <div className="rounded-xl bg-theme-raised p-3 mb-3 text-xs text-theme-muted leading-relaxed whitespace-pre-wrap">
-              {improved}
+
+            {improvedSubject && improvedSubject !== subject && (
+              <div className="mb-3">
+                <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1">Subject</p>
+                <div className="rounded-lg bg-theme-primary/5 border border-theme-primary/20 px-3 py-2 text-xs font-semibold text-theme-fg leading-relaxed">
+                  {improvedSubject}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[10px] font-bold text-theme-muted uppercase tracking-wider mb-1.5">Preview</p>
+            <div className="rounded-xl bg-white dark:bg-slate-900 border border-theme-border p-3 mb-3 overflow-y-auto flex-1" style={{ maxHeight: 340, minHeight: 120 }}>
+              {improvedIsHtml ? (
+                <div
+                  className="text-sm"
+                  dangerouslySetInnerHTML={{ __html: improvedBody }}
+                />
+              ) : (
+                <p className="text-xs text-theme-muted leading-relaxed whitespace-pre-wrap">{improvedBody}</p>
+              )}
             </div>
+
             <div className="flex gap-2">
-              <button onClick={() => { setBody(improved); setAiPanel(false); showToast("AI suggestion applied.", "success"); }}
-                className="flex-1 py-2 rounded-xl bg-theme-primary text-white text-xs font-bold hover:bg-theme-primary/90 transition-all">
+              <button
+                onClick={() => {
+                  setBody(improvedBody);
+                  if (improvedSubject) setSubject(improvedSubject);
+                  setIsHtmlBody(improvedIsHtml);
+                  setShowSource(false);
+                  setAiPanel(false);
+                  showToast("AI suggestion applied.", "success");
+                }}
+                className="flex-1 py-2 rounded-xl bg-theme-primary text-white text-xs font-bold hover:bg-theme-primary/90 transition-all"
+              >
                 <Check size={11} className="inline mr-1" /> Apply
               </button>
-              <button onClick={() => setAiPanel(false)}
-                className="flex-1 py-2 rounded-xl border border-theme-border text-theme-muted text-xs font-semibold hover:bg-theme-raised transition-all">
+              <button
+                onClick={() => { setAiPanel(false); setImprovedBody(""); setImprovedSubject(""); setImprovedIsHtml(false); }}
+                className="flex-1 py-2 rounded-xl border border-theme-border text-theme-muted text-xs font-semibold hover:bg-theme-raised transition-all"
+              >
                 Discard
               </button>
             </div>

@@ -50,12 +50,17 @@ export async function GET(req: NextRequest) {
          ?? null;
   } catch {}
 
+  if (!orgId) {
+    orgId = process.env.ZOHO_ORG_ID || null;
+  }
+
   await supabase.from("zoho_config").update({
     access_token:     tokens.access_token,
     refresh_token:    tokens.refresh_token,
     token_expiry:     new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
     admin_account_id: adminAccountId,
     zoid:             orgId,
+    org_id:           orgId,
     is_connected:     true,
     connected_at:     new Date().toISOString(),
     updated_at:       new Date().toISOString(),

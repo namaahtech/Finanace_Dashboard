@@ -133,7 +133,10 @@ function LoginInner() {
           </form>
 
           <div className="mt-8 pt-5 border-t border-theme-border/60 flex items-center justify-between">
-            <a href="#" className="text-[11px] font-bold text-theme-muted hover:text-theme-fg transition-colors">
+            <a 
+              href={`/forgot-credentials?email=${encodeURIComponent(email)}`} 
+              className="text-[11px] font-bold text-theme-muted hover:text-theme-fg transition-colors"
+            >
               Forgot credentials?
             </a>
             <Badge variant="success" className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/10 py-1 px-3">

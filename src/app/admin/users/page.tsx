@@ -53,6 +53,7 @@ import {
 import { useAuth } from "@/components/layout/AuthProvider";
 import { usePermission } from "@/hooks/usePermission";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -93,6 +94,7 @@ interface User {
   behavioral_weight?: number;
   enable_salary_linkage?: boolean;
   zoho_email?: string | null;
+  personal_email?: string | null;
   commission_enabled?: boolean;
   monthly_sales_target?: number | null;
   salary_slab_id?: string | null;
@@ -104,10 +106,18 @@ const ROLE_BADGE: Record<string, string> = {
   accounts: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent",
   admin:    "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-transparent",
   intern:   "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-transparent",
+  dept_lead: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-transparent",
+  team_lead: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent",
 };
 const COMMISSION_BADGE = "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-transparent";
 const ROLE_LABEL: Record<string, string> = {
-  employee: "Employee", hr: "HR", accounts: "Accounts", admin: "Admin", intern: "Intern",
+  employee: "Employee",
+  hr: "HR",
+  accounts: "Accounts",
+  admin: "Admin",
+  intern: "Intern",
+  dept_lead: "Department Lead",
+  team_lead: "Team Lead",
 };
 
 function getInitials(name: string) {
@@ -143,17 +153,14 @@ function CustomSelect({ value, options, onChange, placeholder, icon, label }: {
           </span>
         </SelectTrigger>
         <SelectContent>
-          {options.length > 0 ? (
-            options.map((opt) => (
-              <SelectItem key={opt.value || EMPTY_SENTINEL} value={opt.value || EMPTY_SENTINEL}>
-                {opt.label}
-              </SelectItem>
-            ))
-          ) : (
-            <div className="px-3 py-4 text-center text-[10px] uppercase font-medium tracking-wider text-muted-foreground opacity-50">
-              No options
-            </div>
-          )}
+          <SelectItem value={EMPTY_SENTINEL}>
+            {placeholder}
+          </SelectItem>
+          {options.map((opt) => (
+            <SelectItem key={opt.value || EMPTY_SENTINEL} value={opt.value || EMPTY_SENTINEL}>
+              {opt.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </div>
@@ -364,6 +371,7 @@ export default function AdminUsersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "active" | "inactive">("all");
   const [deleteConfirm, setDeleteConfirm] = useState<User | null>(null);
+  const [togglingStatusId, setTogglingStatusId] = useState<string | null>(null);
   const [orgTeams, setOrgTeams] = useState<TeamNode[]>([]);
   const [departments, setDepartments] = useState<{id: string, name: string}[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -389,7 +397,7 @@ export default function AdminUsersPage() {
   async function load(q?: string) {
     setLoading(true);
     try {
-      const url = `/api/users?${q ? `search=${q}` : ""}`;
+      const url = `/api/users?_t=${Date.now()}${q ? `&search=${encodeURIComponent(q)}` : ""}`;
       const res = await request<{ users: User[]; total: number }>({ url });
       setUsers(res.users ?? []);
       setTotal(res.total ?? 0);
@@ -436,6 +444,47 @@ export default function AdminUsersPage() {
       }
     }
   }, [authLoading, user]);
+
+  // ── Real-time status sync: listen to is_active changes on the employees table ──
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel("admin_users_status_sync")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "employees" },
+        (payload) => {
+          const updated = payload.new;
+          // Only apply partial update if we care about status-related changes
+          if (
+            "is_active" in updated ||
+            "deactivated_by" in updated ||
+            "deactivated_at" in updated
+          ) {
+            setUsers((prevUsers) =>
+              prevUsers.map((u) => {
+                if (u.id === updated.id) {
+                  return {
+                    ...u,
+                    isActive: updated.is_active,
+                    is_active: updated.is_active,
+                    deactivated_by: updated.deactivated_by ?? null,
+                    deactivated_at: updated.deactivated_at ?? null,
+                  } as any;
+                }
+                return u;
+              })
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   // Update Zoho email preview when name changes
   useEffect(() => {
@@ -508,7 +557,7 @@ export default function AdminUsersPage() {
     const deptNode = orgTeams.find(t => t.name === user.department && t.type === 'department');
     setForm({
       name: user.name,
-      email: user.email,
+      email: user.personal_email || user.email,
       role: user.commission_enabled ? "sales" : user.role,
       employeeId: user.employeeId,
       department: deptNode ? deptNode.id : user.department,
@@ -550,12 +599,14 @@ export default function AdminUsersPage() {
       }
 
       const isSales = form.role === "sales";
-      const VALID_ROLES = ["admin", "hr", "accounts", "employee", "intern"];
+      const VALID_ROLES = ["admin", "hr", "accounts", "employee", "intern", "dept_lead", "team_lead"];
       const safeRole = isSales ? "employee" : (VALID_ROLES.includes(form.role) ? form.role : "employee");
+      const matrixRoleLabel = isSales ? "Sales" : (ROLE_LABEL[form.role] || form.role);
 
       const payload = {
         ...form,
         role: safeRole,
+        matrix_role: matrixRoleLabel,
         department: deptNode ? deptNode.name : form.department,
         shift_id: form.shift_id || null,
         team_id: form.team_id || null,
@@ -571,6 +622,7 @@ export default function AdminUsersPage() {
         commission_enabled: isSales,
         monthly_sales_target: isSales && form.monthly_sales_target ? parseFloat(form.monthly_sales_target) : null,
         salary_slab_id: isSales && form.linkSlab ? form.salary_slab_id || null : null,
+        create_zoho_mail: form.create_zoho_mail && zohoConnected,
       };
 
       if (editingId) {
@@ -647,12 +699,76 @@ export default function AdminUsersPage() {
   }
 
   async function toggleActive(userId: string, current: boolean) {
+    // Block self-deactivation
+    if (userId === user?.id && current) {
+      toast.error("You cannot deactivate your own account.", { duration: 5000 });
+      return;
+    }
+
+    // Client-side pre-check for quick feedback:
+    if (!current) {
+      const targetUser = users.find(u => u.id === userId);
+      if (
+        targetUser && 
+        (targetUser as any).deactivated_by && 
+        (targetUser as any).deactivated_by !== user?.id && 
+        user?.role !== "admin"
+      ) {
+        const dec = (targetUser as any).deactivator || { name: "another administrator", role: "admin", employee_id: "System" };
+        const roleLabel = ROLE_LABEL[dec.role] || dec.role || "Admin";
+        toast.error(
+          `Reactivation Denied: Suspended by ${dec.name} (${roleLabel}, ID: ${dec.employee_id || "System"}). Only they or a Super Admin are authorized to reactivate this account.`,
+          { duration: 8000 }
+        );
+        return;
+      }
+    }
+
+    setTogglingStatusId(userId);
+
     try {
-      await axios.patch(`/api/users/${userId}`, { isActive: !current });
+      await axios.patch(`/api/users/${userId}`, { 
+        isActive: !current,
+        deactivatedBy: user?.id
+      });
+
+      // Optimistically update local state immediately
+      setUsers((prevUsers) =>
+        prevUsers.map((u) => {
+          if (u.id === userId) {
+            return {
+              ...u,
+              isActive: !current,
+              is_active: !current,
+              deactivated_by: !current ? null : user?.id,
+              deactivated_at: !current ? null : new Date().toISOString(),
+              deactivator: !current ? null : {
+                name: user?.name,
+                email: user?.email,
+                employee_id: user?.employee_id,
+                role: user?.role
+              }
+            } as any;
+          }
+          return u;
+        })
+      );
+
       toast.success(`Account is now ${!current ? "Active" : "Inactive"}`);
       await load();
     } catch (e: any) {
-      toast.error("Error updating status.");
+      if (e.response?.status === 403 && e.response?.data?.error === "UNAUTHORIZED_REACTIVATION") {
+        const dec = e.response.data.deactivator;
+        const roleLabel = ROLE_LABEL[dec.role] || dec.role || "Admin";
+        toast.error(
+          `Reactivation Denied: Suspended by ${dec.name} (${roleLabel}, ID: ${dec.employee_id || "System"}). Only they are authorized to reactivate this account.`,
+          { duration: 8000 }
+        );
+      } else {
+        toast.error(e.response?.data?.error || "Error updating status.");
+      }
+    } finally {
+      setTogglingStatusId(null);
     }
   }
 
@@ -848,22 +964,45 @@ export default function AdminUsersPage() {
                           <span className="text-xs text-foreground">{formatDate(u.joiningDate)}</span>
                         </TableCell>
                         <TableCell className="text-center">
-                          <button
-                            onClick={() => toggleActive(u.id, isActive)}
-                            className="inline-flex items-center"
-                            aria-label="Toggle active state"
-                          >
-                            <Badge
-                              variant={isActive ? "default" : "secondary"}
-                              className={cn(
-                                "cursor-pointer transition-colors",
-                                isActive && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent hover:bg-emerald-500/25",
-                                !isActive && "hover:bg-muted-foreground/20"
-                              )}
+                          {u.id === user?.id ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center cursor-not-allowed">
+                                  <Badge
+                                    variant={isActive ? "default" : "secondary"}
+                                    className={cn(
+                                      "opacity-50 pointer-events-none",
+                                      isActive && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent",
+                                    )}
+                                  >
+                                    {isActive ? "Active" : "Inactive"}
+                                  </Badge>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[200px] text-center">
+                                You cannot deactivate your own account
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <button
+                              onClick={() => toggleActive(u.id, isActive)}
+                              disabled={togglingStatusId !== null}
+                              className="inline-flex items-center disabled:opacity-80 disabled:cursor-not-allowed"
+                              aria-label="Toggle active state"
                             >
-                              {isActive ? "Active" : "Inactive"}
-                            </Badge>
-                          </button>
+                              <Badge
+                                variant={isActive ? "default" : "secondary"}
+                                className={cn(
+                                  "cursor-pointer transition-colors flex items-center gap-1",
+                                  isActive && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent hover:bg-emerald-500/25",
+                                  !isActive && "hover:bg-muted-foreground/20"
+                                )}
+                              >
+                                {togglingStatusId === u.id && <Loader2 size={10} className="animate-spin" />}
+                                {isActive ? "Active" : "Inactive"}
+                              </Badge>
+                            </button>
+                          )}
                         </TableCell>
                         <TableCell className="pr-4 text-right">
                           <RowMenu user={u} onRefresh={() => load(search || undefined)} onEdit={() => handleEdit(u)} setDeleteConfirm={setDeleteConfirm} canEdit={canEdit} canDelete={canDelete} zohoConnected={zohoConnected} zohoDomain={zohoDomain} />
@@ -907,9 +1046,16 @@ export default function AdminUsersPage() {
                     <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                   </div>
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Operational Inbox</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Personal Email</label>
                     <Input required type="email" value={form.email} disabled={!!editingId} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                   </div>
+
+                  {editingId && (
+                    <div className="space-y-2 sm:col-span-2">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Professional Email (Generated by Zoho)</label>
+                      <Input disabled value={users.find(u => u.id === editingId)?.zoho_email || users.find(u => u.id === editingId)?.email || ""} className="bg-theme-raised/50" />
+                    </div>
+                  )}
                   
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Architecture node (Dept)</label>
@@ -931,7 +1077,8 @@ export default function AdminUsersPage() {
                       placeholder="Global/No Team"
                       value={form.team_id} 
                       onChange={(v) => {
-                         setForm({...form, team_id: v, shift_id: ""});
+                         const nextRole = v && form.role === "dept_lead" ? "employee" : form.role;
+                         setForm({...form, team_id: v, shift_id: "", role: nextRole});
                       }} 
                       options={form.department ? orgTeams.filter(t => t.type === 'team' && t.parent_id === form.department).map(t => ({ label: t.name, value: t.id })) : []}
                     />
@@ -943,12 +1090,7 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Matrix Role (Hierarchy Position)</label>
-                    <Input value={form.matrix_role} onChange={(e) => setForm({ ...form, matrix_role: e.target.value })} placeholder="e.g. Lead Frontend Architect" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Access Level</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Matrix Role</label>
                     <CustomSelect
                       icon={<ShieldCheck size={14} className="text-theme-primary" />}
                       placeholder="Select Role"
@@ -963,7 +1105,11 @@ export default function AdminUsersPage() {
                       options={[
                         ...Object.entries(ROLE_LABEL)
                           .filter(([v]) => {
-                            const validRoles = ["admin", "hr", "accounts", "employee", "intern"];
+                            // Hide dept_lead if a team is selected
+                            if (v === "dept_lead" && form.team_id) {
+                              return false;
+                            }
+                            const validRoles = ["admin", "hr", "accounts", "employee", "intern", "dept_lead", "team_lead"];
                             const allowed = assignableRoles.filter(r => validRoles.includes(r));
                             return (allowed.length === 0 || allowed.includes(v)) && v !== "sales";
                           })

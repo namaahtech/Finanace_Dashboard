@@ -46,6 +46,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Build professional email address: firstname.lastname@domain
+    const parts        = name.trim().toLowerCase().split(/\s+/);
+    const localPart    = parts.length >= 2
+      ? `${parts[0]}.${parts[parts.length - 1]}`
+      : parts[0];
+    
+    // Prefer env var, then default to mail.namaah.io, then dynamically query configuration
+    let mailDomain = process.env.ZOHO_MAIL_DOMAIN || "mail.namaah.io";
+    const { data: orgCfg } = await supabase.from("zoho_config").select("org_domain").maybeSingle();
+    if (orgCfg?.org_domain) {
+      mailDomain = orgCfg.org_domain;
+    }
+    const professionalEmail = `${localPart}@${mailDomain}`;
+
     // ── 1. Generate employee_id ───────────────────────────────────────────────
     const prefix  = role === "intern" ? "IN" : "NP";
     const { count } = await supabase.from("employees").select("*", { count: "exact", head: true });
@@ -55,7 +69,7 @@ export async function POST(req: NextRequest) {
     // ── 2. Create Supabase Auth user ──────────────────────────────────────────
     const tempPassword = generateTempPassword();
     const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-      email,
+      email:          professionalEmail,
       password:       tempPassword,
       email_confirm:  true,
     });
@@ -72,8 +86,9 @@ export async function POST(req: NextRequest) {
       .insert({
         ...(userId ? { id: userId } : {}),
         name,
-        email,
+        email:               professionalEmail,
         personal_email:      email,
+        zoho_email:          professionalEmail,
         employee_id,
         role,
         department:          department || null,
