@@ -115,16 +115,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
-          console.error("Session error during hydration:", error.message);
-          if (error.message?.includes("Refresh Token") || error.message?.includes("refresh_token")) {
+          const isStaleToken =
+            error.message?.includes("Refresh Token") ||
+            error.message?.includes("refresh_token") ||
+            error.message?.includes("Invalid Refresh Token");
+
+          if (isStaleToken) {
+            // Expected: stale browser cookie after re-deploy or DB reset.
+            // Sign out silently and send to login — no console.error so the
+            // Next.js dev overlay doesn't surface this as a bug.
             await supabase.auth.signOut().catch(() => {});
-            if (mounted) {
-              setUser(null);
-              setPermissions(null);
-            }
-            router.push("/login?error=session_expired");
+            if (mounted) { setUser(null); setPermissions(null); }
+            router.replace("/login");
             return;
           }
+          // Unexpected error — log it
+          console.warn("[AuthProvider] Session error:", error.message);
         }
 
         if (!session?.user) {
@@ -139,36 +145,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
 
         if (empErr) {
-          console.error("Profile load error during hydration:", empErr.message);
-          // If the profile fetch fails because of RLS/auth issues, sign out gracefully
           if (empErr.message?.includes("not authorized") || empErr.code === "PGRST116") {
             await supabase.auth.signOut().catch(() => {});
-            if (mounted) {
-              setUser(null);
-              setPermissions(null);
-            }
-            router.push("/login?error=unauthorized");
+            if (mounted) { setUser(null); setPermissions(null); }
+            router.replace("/login?error=unauthorized");
             return;
           }
+          console.warn("[AuthProvider] Profile load error:", empErr.message);
         }
 
         if (emp && !empErr && mounted) {
           setUser(emp as AuthUser);
-          // Load permissions alongside the user (merged with per-employee overrides)
           const perms = await fetchPermissions(emp.role, emp.id);
           if (mounted) setPermissions(perms);
         } else if (mounted) {
           setUser(null);
         }
       } catch (err: any) {
-        console.error("Session hydration error:", err);
-        if (err.message?.includes("Refresh Token") || err.message?.includes("refresh_token")) {
+        const isStaleToken =
+          err.message?.includes("Refresh Token") ||
+          err.message?.includes("refresh_token") ||
+          err.message?.includes("Invalid Refresh Token");
+
+        if (isStaleToken) {
           await supabase.auth.signOut().catch(() => {});
-          if (mounted) {
-            setUser(null);
-            setPermissions(null);
-          }
-          router.push("/login?error=session_expired");
+          if (mounted) { setUser(null); setPermissions(null); }
+          router.replace("/login");
+        } else {
+          console.warn("[AuthProvider] Hydration error:", err.message);
         }
       } finally {
         if (mounted) setLoading(false);
@@ -179,9 +183,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event) => {
-        if (event === "SIGNED_OUT") {
-          setUser(null);
-          setPermissions(null);
+        if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED") {
+          if (event === "SIGNED_OUT") {
+            setUser(null);
+            setPermissions(null);
+          }
         }
       }
     );
