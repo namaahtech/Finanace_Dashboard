@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
-const ADMIN_ROLES = ["admin", "dept_lead"];
+const ADMIN_ROLES = ["admin"];
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {

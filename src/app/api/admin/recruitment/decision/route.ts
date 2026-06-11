@@ -96,7 +96,7 @@ export async function POST(req: Request) {
     const html = `
       <!DOCTYPE html>
       <html>
-      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; line-height:1.5;">
+      <body style="font-family: 'Inter', Arial, sans-serif; color: #1e293b; line-height:1.5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
           <p style="font-size:16px;">Dear <b>${application.applicant_name}</b>,</p>
           ${greeting}

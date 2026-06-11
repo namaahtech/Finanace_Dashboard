@@ -1,294 +1,405 @@
 "use client";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge, statusBadgeVariant } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { useToast } from "@/components/ui/Toast";
+import { Badge } from "@/components/ui/BadgeLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { cn, formatDate } from "@/lib/utils";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Ticket, Plus, Search, Filter, Clock, CheckCircle2, AlertCircle,
-  ChevronRight, X, Send, MessageSquare, UserCheck, Loader2,
-  Inbox, ShieldCheck, Zap, ArrowRight, Signal, RefreshCw, Building, Users
+  Ticket, Plus, Search, Clock, CheckCircle2, AlertCircle,
+  ChevronRight, X, Send, MessageSquare, Loader2,
+  Inbox, Zap, ArrowRight, Signal, RefreshCw, Building, Users,
+  Paperclip, XCircle, AlertTriangle, ArrowUpRight, GitBranch, Bell
 } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
-// ─── Types ───────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
+interface TrackingEntry {
+  timestamp: string;
+  action: string;
+  by_id: string | null;
+  by_name: string;
+  by_role?: string | null;
+  to_id: string | null;
+  to_name: string | null;
+  to_role?: string | null;
+  notes: string | null;
+}
+
 interface TicketRow {
-  id: string; subject: string; description: string; category: string;
-  priority: string; status: string; target_role: string;
-  resolution_notes: string | null; created_at: string; updated_at: string;
+  id: string;
+  subject: string;
+  description: string;
+  priority: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  rejection_reason: string | null;
+  attachments: string[];
+  tracking_log: TrackingEntry[];
   creator: { id: string; name: string; role: string; department: string | null } | null;
   assignee: { id: string; name: string; role: string; department: string | null } | null;
+  current_handler: { id: string; name: string; role: string; department: string | null } | null;
   linked_ticket_id: string | null;
-  linked_ticket?: { 
-    id: string; subject: string; status: string; priority: string; created_at: string;
-    creator?: { id: string; name: string; role: string; department: string | null } | null;
-  } | null;
 }
 
 interface ResponseRow {
-  id: string; message: string; created_at: string; is_internal: boolean;
+  id: string;
+  message: string;
+  created_at: string;
+  is_internal: boolean;
   sender: { id: string; name: string; role: string; department: string | null } | null;
 }
 
-const ROLES = [
-  { id: "admin",     label: "Admin" },
-  { id: "dept_lead", label: "Department Lead" },
-  { id: "team_lead", label: "Team Lead" },
-  { id: "employee",  label: "Employee" },
-  { id: "intern",    label: "Intern" },
-];
-
 const PRIORITIES = ["low", "medium", "high", "critical"];
 
-const STATUS_LABELS: Record<string, string> = {
-  open: "Open Request",
-  in_progress: "Working on it",
-  resolved: "Solved",
-  closed: "Closed",
+const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; iconBg: string; icon: any; border: string }> = {
+  open:      { label: "Open",       bg: "bg-amber-500/10",   text: "text-amber-500",   iconBg: "bg-amber-500/20",   icon: Ticket,       border: "border-amber-500/20" },
+  in_review: { label: "In Review",  bg: "bg-blue-500/10",    text: "text-blue-500",    iconBg: "bg-blue-500/20",    icon: Signal,       border: "border-blue-500/20" },
+  closed:    { label: "Closed",     bg: "bg-slate-500/10",   text: "text-slate-500",   iconBg: "bg-slate-500/20",   icon: CheckCircle2, border: "border-slate-500/20" },
+  rejected:  { label: "Rejected",   bg: "bg-rose-500/10",    text: "text-rose-500",    iconBg: "bg-rose-500/20",    icon: XCircle,      border: "border-rose-500/20" },
 };
 
-const STATUS_STYLES: Record<string, { bg: string; text: string; iconBg: string; icon: any; border: string }> = {
-  open: { bg: "bg-amber-500/10", text: "text-amber-500", iconBg: "bg-amber-500/20", icon: Ticket, border: "border-amber-500/20" },
-  in_progress: { bg: "bg-blue-500/10", text: "text-blue-500", iconBg: "bg-blue-500/20", icon: Signal, border: "border-blue-500/20" },
-  resolved: { bg: "bg-emerald-500/10", text: "text-emerald-500", iconBg: "bg-emerald-500/20", icon: CheckCircle2, border: "border-emerald-500/20" },
-  closed: { bg: "bg-slate-500/10", text: "text-slate-500", iconBg: "bg-slate-500/20", icon: X, border: "border-slate-500/20" },
-};
+const getStatusConf = (status: string) => STATUS_CONFIG[status] || STATUS_CONFIG.open;
 
-// ─── Main Hub ────────────────────────────────────────────────
+function StatusBadge({ status, className }: { status: string; className?: string }) {
+  const conf = getStatusConf(status);
+  return (
+    <span className={cn("text-[8px] px-2 py-0.5 rounded-md font-black uppercase tracking-widest border", conf.bg, conf.text, conf.border, className)}>
+      {conf.label}
+    </span>
+  );
+}
+
+// ─── Tracking Timeline ───────────────────────────────────────────────────────
+function TrackingTimeline({ log }: { log: TrackingEntry[] }) {
+  if (!log || log.length === 0) return null;
+  return (
+    <div className="space-y-0">
+      {log.map((entry, i) => (
+        <div key={i} className="flex gap-3 group">
+          <div className="flex flex-col items-center">
+            <div className={cn(
+              "h-6 w-6 rounded-full flex items-center justify-center border text-[9px] font-black shrink-0 z-10 mt-1",
+              i === log.length - 1
+                ? "bg-theme-primary/20 border-theme-primary/40 text-theme-primary"
+                : "bg-theme-raised/60 border-theme-border/50 text-theme-muted"
+            )}>
+              {i + 1}
+            </div>
+            {i < log.length - 1 && <div className="w-px flex-1 bg-theme-border/40 mt-1 mb-0 min-h-[16px]" />}
+          </div>
+          <div className={cn("pb-4 min-w-0 flex-1", i === log.length - 1 && "pb-0")}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black text-theme-fg">{entry.action}</p>
+                <p className="text-[9px] text-theme-muted mt-0.5">
+                  By: <span className="text-theme-fg font-bold">{entry.by_name}</span>
+                  {entry.by_role && <span className="text-theme-muted font-normal text-[8px]"> ({entry.by_role})</span>}
+                  {entry.to_name && (
+                    <>
+                      {" → "}
+                      <span className="text-theme-primary font-bold">{entry.to_name}</span>
+                      {entry.to_role && <span className="text-theme-muted font-normal text-[8px]"> ({entry.to_role})</span>}
+                    </>
+                  )}
+                </p>
+                {entry.notes && (
+                  <p className="text-[9px] text-theme-muted mt-1 italic bg-theme-raised/50 px-2 py-1 rounded-lg border border-theme-border/40">
+                    "{entry.notes}"
+                  </p>
+                )}
+              </div>
+              <span className="text-[8px] text-theme-muted font-bold whitespace-nowrap shrink-0 mt-0.5">
+                {formatDate(entry.timestamp)}
+              </span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main Hub ─────────────────────────────────────────────────────────────────
 export default function SupportHubPage() {
   const { showToast } = useToast();
   const { user } = useAuth();
-  
-  // State
-  const [activeTab, setActiveTab] = useState<"raise" | "solve">("raise");
-  const [tickets, setTickets] = useState<TicketRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  
-  // Realtime Employee List
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [loadingEmp, setLoadingEmp] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [orgTeams, setOrgTeams] = useState<any[]>([]);
 
-  // Form State
-  const [targetRole, setTargetRole] = useState("");
-  const [targetDepartment, setTargetDepartment] = useState("");
-  const [targetTeam, setTargetTeam] = useState("");
-  const [assigneeId, setAssigneeId] = useState("");
-  const [subject, setSubject] = useState("");
+  const [activeTab, setActiveTab]     = useState<"raise" | "solve">("raise");
+  const [tickets, setTickets]         = useState<TicketRow[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [isSyncing, setIsSyncing]     = useState(false);
+
+  // Form state (simplified — no manual assignment)
+  const [subject, setSubject]         = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("");
-  const [priority, setPriority] = useState("medium");
+  const [priority, setPriority]       = useState("medium");
   const [linkedTicketId, setLinkedTicketId] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  
-  // Routing Rules
-  const [routingRules, setRoutingRules] = useState<any[]>([]);
-  const [isRuleLocked, setIsRuleLocked] = useState(false);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [submitting, setSubmitting]   = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
 
-  // UI States
-  const [isFetchingRole, setIsFetchingRole] = useState(false);
-
-  // Detail Modal
+  // Detail drawer
   const [selectedTicket, setSelectedTicket] = useState<TicketRow | null>(null);
-  const [responses, setResponses] = useState<ResponseRow[]>([]);
+  const [responses, setResponses]     = useState<ResponseRow[]>([]);
   const [responseText, setResponseText] = useState("");
-  const [resolveNotes, setResolveNotes] = useState("");
-  const [pendingStatus, setPendingStatus] = useState<string>("");
-  const [sending, setSending] = useState(false);
-  const [resolving, setResolving] = useState(false);
+  const [sending, setSending]         = useState(false);
+  const [resolving, setResolving]     = useState(false);
 
+  // Desk actions (for TL / DL / solvers)
+  const [deskAction, setDeskAction]   = useState<"" | "route_dept" | "notify_dl" | "assign_member" | "reject" | "close">(""); 
+  const [actionNote, setActionNote]   = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [deskEmployees, setDeskEmployees] = useState<any[]>([]);
+  const [targetDeptName, setTargetDeptName] = useState("");
+  const [targetMemberId, setTargetMemberId] = useState("");
+  const [deptNames, setDeptNames]     = useState<string[]>([]);
+  const [performingAction, setPerformingAction] = useState(false);
+
+  // ── Data loading ─────────────────────────────────────────────────────────
   const loadTickets = useCallback(async () => {
     if (!user) return;
+    setIsSyncing(true);
     try {
       const res = await fetch(`/api/support?userId=${user.id}&userRole=${user.role}`);
       const json = await res.json();
       if (json.tickets) setTickets(json.tickets);
     } catch { showToast("Sync Error: Ticket list failed to refresh", "error"); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setIsSyncing(false); }
   }, [user, showToast]);
 
-  const loadEmployees = useCallback(async (role?: string) => {
-    setIsSyncing(true);
-    try {
-      let query = supabase
-        .from("employees")
-        .select("id, name, role, department, team_id, is_active")
-        .eq("is_active", true);
-      
-      if (role) {
-        query = query.eq("role", role);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      if (role) {
-        // Merge or replace? For "Assign To" we just need the filtered list, 
-        // but the main 'employees' state should probably hold everyone to avoid flickers.
-        // However, the user specifically asked for "fetching" when clicking.
-        setEmployees(data || []);
-      } else {
-        setEmployees(data || []);
-      }
-    } catch (e) {
-      console.error("Employee fetch failed:", e);
-    } finally {
-      setLoadingEmp(false);
-      setIsSyncing(false);
-      setIsFetchingRole(false);
+  const loadDeptNames = useCallback(async () => {
+    const { data } = await supabase.from("employees").select("department").eq("is_active", true);
+    if (data) {
+      const unique = [...new Set(data.map((e: any) => e.department).filter(Boolean))];
+      setDeptNames(unique as string[]);
     }
   }, []);
-
-  const loadOrg = useCallback(async () => {
-    const { data: teamsData } = await supabase.from("teams").select("id, name, type, parent_id");
-    if (teamsData) setOrgTeams(teamsData);
-  }, []);
-
-  const loadRules = useCallback(async () => {
-    const { data } = await supabase.from("support_routing_rules").select("*");
-    if (data) setRoutingRules(data);
-  }, []);
-
-  useEffect(() => {
-    if (routingRules.length > 0 && orgTeams.length > 0) {
-      const defaultRule = routingRules.find(r => r.category === category);
-      if (defaultRule) {
-        setTargetRole(defaultRule.target_role);
-        setTargetDepartment(defaultRule.target_department || "");
-        setIsRuleLocked(true);
-      } else if (user?.role === 'employee') {
-        const dept = orgTeams.find(t => t.name === user.department);
-        if (dept) setTargetDepartment(dept.id);
-      }
-    }
-  }, [routingRules, orgTeams, user, category]);
 
   useEffect(() => {
     if (user) {
       loadTickets();
-      loadEmployees();
-      loadOrg();
-      loadRules();
-      
-      // REAL-TIME: Employees table subscription
-      const empChannel = supabase.channel("realtime-employees-hub")
-        .on("postgres_changes", { event: "*", schema: "public", table: "employees" }, () => {
-          console.log("Realtime: Employee list updating...");
-          loadEmployees();
-        })
+      loadDeptNames();
+
+      const ch = supabase.channel("realtime-tickets-hub")
+        .on("postgres_changes", { event: "*", schema: "public", table: "support_tickets" }, loadTickets)
         .subscribe();
 
-      // REAL-TIME: Tickets table subscription
-      const ticketChannel = supabase.channel("realtime-tickets-hub")
-        .on("postgres_changes", { event: "*", schema: "public", table: "support_tickets" }, () => {
-          loadTickets();
-        })
-        .subscribe();
-
-      // REAL-TIME: Routing Rules subscription
-      const rulesChannel = supabase.channel("realtime-rules-hub")
-        .on("postgres_changes", { event: "*", schema: "public", table: "support_routing_rules" }, () => {
-          loadRules();
-        })
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(empChannel);
-        supabase.removeChannel(ticketChannel);
-        supabase.removeChannel(rulesChannel);
-      };
+      return () => { supabase.removeChannel(ch); };
     }
-  }, [user, loadTickets, loadEmployees]);
+  }, [user, loadTickets, loadDeptNames]);
 
-  // REAL-TIME: Support Thread Sync
+  // Thread responses realtime
   useEffect(() => {
     if (!selectedTicket) return;
-
     const channel = supabase
       .channel(`ticket-thread-${selectedTicket.id}`)
-      .on(
-        "postgres_changes",
+      .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "ticket_responses", filter: `ticket_id=eq.${selectedTicket.id}` },
         async (payload) => {
-          // Fetch the full sender info because the payload only has sender_id
-          const { data: responseData, error } = await supabase
+          const { data } = await supabase
             .from("ticket_responses")
             .select("*, sender:employees(id, name, role, department)")
             .eq("id", payload.new.id)
             .single();
-          
-          if (responseData && !error) {
-            setResponses(prev => {
-              if (prev.some(r => r.id === responseData.id)) return prev;
-              return [...prev, responseData];
-            });
-          }
+          if (data) setResponses(prev => prev.some(r => r.id === data.id) ? prev : [...prev, data]);
         }
-      )
-      .subscribe();
-
+      ).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [selectedTicket]);
 
-  // Keyboard accessibility: ESC to close
   useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelectedTicket(null);
-    };
-    if (selectedTicket) {
-      window.addEventListener("keydown", handleEsc);
-    }
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectedTicket(null); };
+    if (selectedTicket) window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, [selectedTicket]);
 
-  // Handle role change with actual database fetch to satisfy "realtime fetching" requirement
-  const handleRoleChange = (val: string) => {
-    setTargetRole(val);
-    setAssigneeId("");
-    setIsFetchingRole(true);
-    loadEmployees(val);
+  // ── File handling ─────────────────────────────────────────────────────────
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const incoming = Array.from(e.target.files || []);
+    const oversized = incoming.filter(f => f.size > MAX_FILE_SIZE);
+    if (oversized.length > 0) {
+      showToast(`File too large (max 50MB): ${oversized.map(f => f.name).join(", ")}`, "error");
+    }
+    const valid = incoming.filter(f => f.size <= MAX_FILE_SIZE);
+    setAttachments(prev => [...prev, ...valid].slice(0, 5));
+    e.target.value = "";
   };
 
+  // Upload via server-side API route — uses service role key, bypasses RLS
+  const uploadFiles = async (files: File[]): Promise<string[]> => {
+    const formData = new FormData();
+    formData.append("userId", user!.id);
+    files.forEach(f => formData.append("files", f));
+
+    const res = await fetch("/api/support/upload", {
+      method: "POST",
+      body: formData,
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Upload failed");
+    return json.paths as string[]; // array of storage paths
+  };
+
+  // Get a signed URL via server-side API route
+  const getFileUrl = async (storagePath: string): Promise<string> => {
+    const res = await fetch(`/api/support/upload?path=${encodeURIComponent(storagePath)}`);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Failed to get file URL");
+    return json.url as string;
+  };
+
+  // ── Ticket submission ─────────────────────────────────────────────────────
+  async function handleSubmit() {
+    if (!user || !subject.trim()) {
+      showToast("Subject is required.", "warning"); return;
+    }
+    setSubmitting(true);
+    try {
+      let attachmentUrls: string[] = [];
+      if (attachments.length > 0) {
+        setUploadingFiles(true);
+        attachmentUrls = await uploadFiles(attachments);
+        setUploadingFiles(false);
+      }
+
+      const res = await fetch("/api/support", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creator_id: user.id,
+          subject,
+          description,
+          priority,
+          linked_ticket_id: linkedTicketId,
+          attachments: attachmentUrls,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      showToast("Ticket raised. Auto-routed to your leads.", "success");
+      setSubject(""); setDescription(""); setPriority("medium"); setLinkedTicketId(null); setAttachments([]);
+      loadTickets();
+    } catch (e: any) {
+      showToast(e.message || "Failed to raise ticket.", "error");
+    }
+    finally { setSubmitting(false); setUploadingFiles(false); }
+  }
+
+  // ── Ticket detail ─────────────────────────────────────────────────────────
   const handleTicketSelect = async (ticket: TicketRow) => {
     setSelectedTicket(ticket);
-    setPendingStatus(ticket.status);
-    setResolveNotes(ticket.resolution_notes || "");
-    setResponses([]); // Reset while loading
-    
-    // Create a "Virtual" first message from the description
-    const originMessage: ResponseRow = {
+    setDeskAction("");
+    setActionNote(""); setRejectionReason(""); setTargetDeptName(""); setTargetMemberId("");
+    setResponses([]);
+
+    const origin: ResponseRow = {
       id: "origin",
       message: ticket.description || "No description provided.",
       created_at: ticket.created_at,
       sender: ticket.creator,
-      is_internal: false
+      is_internal: false,
     };
 
     try {
       const res = await fetch(`/api/support/responses?ticketId=${ticket.id}`);
       const json = await res.json();
-      if (json.responses) {
-        setResponses([originMessage, ...json.responses]);
-      } else {
-        setResponses([originMessage]);
-      }
-    } catch (err) {
-      console.error("Failed to load thread responses:", err);
-      setResponses([originMessage]);
+      setResponses(json.responses ? [origin, ...json.responses] : [origin]);
+    } catch {
+      setResponses([origin]);
+    }
+
+    // Load desk employee list if needed
+    if (user?.is_dept_lead || user?.is_team_lead) {
+      const { data } = await supabase
+        .from("employees")
+        .select("id, name, role, department, team_id, is_team_lead, is_dept_lead")
+        .eq("is_active", true)
+        .neq("id", user.id);
+      setDeskEmployees(data || []);
     }
   };
+
+  // ── Desk actions ─────────────────────────────────────────────────────────
+  async function performDeskAction() {
+    if (!selectedTicket || !user) return;
+    setPerformingAction(true);
+    try {
+      let payload: any = { ticket_id: selectedTicket.id, actor_id: user.id };
+
+      if (deskAction === "reject") {
+        if (!rejectionReason.trim()) { showToast("Rejection reason is required.", "warning"); return; }
+        payload.action = "reject";
+        payload.rejection_reason = rejectionReason;
+      } else if (deskAction === "route_dept") {
+        if (!targetDeptName) { showToast("Select a target department.", "warning"); return; }
+        payload.action = "route_to_dept";
+        payload.target_dept_name = targetDeptName;
+      } else if (deskAction === "notify_dl") {
+        if (!actionNote.trim()) { showToast("Add a note for the Department Lead.", "warning"); return; }
+        payload.action = "notify_dept_lead";
+        payload.note = actionNote;
+      } else if (deskAction === "assign_member") {
+        if (!targetMemberId) { showToast("Select a team member.", "warning"); return; }
+        payload.action = "assign_to_member";
+        payload.target_assignee_id = targetMemberId;
+        payload.note = actionNote;
+      } else if (deskAction === "close") {
+        if (selectedTicket.status !== "in_review") {
+          showToast("You must mark the ticket 'In Review' before closing.", "warning"); return;
+        }
+        payload.action = "update_status";
+        payload.status = "closed";
+        payload.resolution_notes = actionNote;
+        payload.resolved_by = user.id;
+      }
+
+      const res = await fetch("/api/support", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+
+      // Update local state
+      const updated = json.ticket;
+      setSelectedTicket(updated);
+      setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, ...updated } : t));
+      showToast("Action performed successfully.", "success");
+      setDeskAction(""); setActionNote(""); setRejectionReason(""); setTargetDeptName(""); setTargetMemberId("");
+    } catch (e: any) {
+      showToast(e.message || "Action failed.", "error");
+    }
+    finally { setPerformingAction(false); }
+  }
+
+  async function markInReview() {
+    if (!selectedTicket || !user) return;
+    setResolving(true);
+    try {
+      const res = await fetch("/api/support", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticket_id: selectedTicket.id, actor_id: user.id, action: "mark_in_review" }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      const updated = json.ticket;
+      setSelectedTicket(updated);
+      setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, ...updated } : t));
+      showToast("Ticket marked as In Review.", "success");
+    } catch (e: any) {
+      showToast(e.message || "Failed.", "error");
+    }
+    finally { setResolving(false); }
+  }
 
   async function sendResponse() {
     if (!responseText.trim() || !selectedTicket || !user) return;
@@ -300,364 +411,203 @@ export default function SupportHubPage() {
       });
       if (!res.ok) throw new Error();
       setResponseText("");
-      showToast("Response transmitted.", "success");
-    } catch { showToast("Failed to transmit response.", "error"); }
+      showToast("Message sent.", "success");
+    } catch { showToast("Failed to send message.", "error"); }
     finally { setSending(false); }
   }
 
-  async function updateTicketStatus(newStatus: string) {
-    if (!selectedTicket || !user) return;
-    setResolving(true);
-    try {
-      const res = await fetch("/api/support", {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          ticket_id: selectedTicket.id, 
-          status: newStatus, 
-          resolution_notes: resolveNotes || null,
-          resolved_by: user.id 
-        }),
-      });
-      if (!res.ok) throw new Error();
-      const json = await res.json();
-      if (json.ticket) {
-        setSelectedTicket({ ...selectedTicket, ...json.ticket });
-        setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, ...json.ticket } : t));
-      }
-      showToast(`Status updated to ${STATUS_LABELS[newStatus] || newStatus}`, "success");
-    } catch { showToast("Failed to update status.", "error"); }
-    finally { setResolving(false); }
-  }
+  const raisedTickets   = tickets.filter(t => t.creator?.id === user?.id);
+  const assignedTickets = tickets.filter(t =>
+    t.assignee?.id === user?.id || t.current_handler?.id === user?.id
+  );
 
-  const filteredEmployees = useMemo(() => {
-    let filtered = employees;
-    if (targetRole) filtered = filtered.filter(e => e.role === targetRole);
-    if (targetDepartment) {
-      const dept = orgTeams.find(t => t.id === targetDepartment);
-      if (dept) filtered = filtered.filter(e => e.department === dept.name);
-    }
-    if (targetTeam) filtered = filtered.filter(e => e.team_id === targetTeam);
-    return filtered;
-  }, [employees, targetRole, targetDepartment, targetTeam, orgTeams]);
+  const isCurrentHandler = selectedTicket
+    ? (selectedTicket.assignee?.id === user?.id || selectedTicket.current_handler?.id === user?.id)
+    : false;
+  const isDeptLead = !!user?.is_dept_lead;
+  const isTeamLead = !!user?.is_team_lead;
+  const isManager  = isDeptLead || isTeamLead;
 
-  const raisedTickets = tickets.filter(t => t.creator?.id === user?.id);
-  const assignedTickets = tickets.filter(t => t.assignee?.id === user?.id);
-
-  async function handleSubmit() {
-    if (!user || !assigneeId || !subject.trim()) {
-      showToast("Please complete the required assignment fields.", "warning"); return;
-    }
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/support", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          creator_id: user.id, 
-          target_role: targetRole, 
-          assignee_id: assigneeId, 
-          subject, 
-          description, 
-          category, 
-          priority,
-          linked_ticket_id: linkedTicketId
-        }),
-      });
-      if (!res.ok) throw new Error();
-      showToast("Ticket transmitted to the secure node.", "success");
-      setSubject(""); setDescription(""); setTargetRole(""); setTargetDepartment(""); setTargetTeam(""); setAssigneeId(""); setCategory("General"); setPriority("medium"); setLinkedTicketId(null);
-      loadTickets();
-    } catch { showToast("Transmission Failed: Server node unreachable.", "error"); }
-    finally { setSubmitting(false); }
-  }
-
-  const getDynamicAssignLabel = (roleId: string) => {
-    if (!roleId) return "Assign To Personnel";
-    const role = ROLES.find(r => r.id === roleId);
-    if (!role) return "Assign To Personnel";
-    
-    // Exact phrasing requested: "show admis are", "show your team leads are"
-    if (roleId === 'admin') return "Show Admins are...";
-    if (roleId === 'team_lead') return "Show your Team Leads are...";
-    if (roleId === 'dept_lead') return "Show Department Leads are...";
-    
-    return `Show ${role.label}s are...`;
-  };
+  // Determine available desk employees based on role
+  const deskMemberOptions = (() => {
+    if (!user || !selectedTicket) return deskEmployees;
+    if (isDeptLead) return deskEmployees; // Can assign to anyone
+    if (isTeamLead) return deskEmployees.filter((e: any) => e.team_id === user?.managed_team_id); // Only same team
+    return [];
+  })();
 
   return (
-    <DashboardShell 
-      moduleKey="support_user" 
-      title="Support Hub" 
-      subtitle="Distributed hierarchical support matrix for real-time issue resolution."
+    <DashboardShell
+      moduleKey="support_user"
+      title="Support Hub"
+      subtitle="Raise tickets — system auto-routes to your leads based on your org structure."
       actions={
         <div className="flex items-center gap-3">
           <div className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest transition-all",
+            "flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest",
             isSyncing ? "border-amber-500/20 text-amber-500 bg-amber-500/5" : "border-emerald-500/20 text-emerald-500 bg-emerald-500/5"
           )}>
             <div className={cn("h-1.5 w-1.5 rounded-full", isSyncing ? "bg-amber-500 animate-pulse" : "bg-emerald-500")} />
-            {isSyncing ? "Syncing Directory" : "Real-time Connected"}
+            {isSyncing ? "Syncing" : "Live"}
           </div>
-          <Button variant="outline" size="sm" onClick={() => { loadTickets(); loadEmployees(); }} className="h-8">
+          <Button variant="outline" size="sm" onClick={loadTickets} className="h-8">
             <RefreshCw size={12} className={cn("mr-1.5", isSyncing && "animate-spin")} /> Refresh
           </Button>
         </div>
       }
     >
       <div className="space-y-6">
-        {/* Tab Selection */}
+        {/* Tab Bar */}
         <div className="flex items-center gap-2 bg-theme-raised/30 p-1 rounded-2xl border border-theme-border w-fit">
           {[
             { id: "raise" as const, label: "Raise Ticket", icon: Plus, count: raisedTickets.length },
-            { id: "solve" as const, label: "My Desk", icon: Inbox, count: assignedTickets.filter(t => t.status === "open" || t.status === "in_progress").length },
-          ].map(t => (
-            <button 
-              key={t.id} 
-              onClick={() => setActiveTab(t.id)} 
+            { id: "solve" as const, label: "My Desk", icon: Inbox, count: assignedTickets.filter(t => t.status === "open" || t.status === "in_review").length },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
               className={cn(
                 "flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all",
-                activeTab === t.id 
-                  ? "bg-theme-surface text-theme-fg shadow-xl border border-theme-border" 
+                activeTab === tab.id
+                  ? "bg-theme-surface text-theme-fg shadow-xl border border-theme-border"
                   : "text-theme-muted hover:text-theme-fg"
               )}
             >
-              <t.icon size={14} className={activeTab === t.id ? "text-theme-primary" : ""} />
-              {t.label}
-              {t.count > 0 && (
-                <span className={cn("text-[9px] font-black px-1.5 py-0.5 rounded-md ml-1", activeTab === t.id ? "bg-theme-primary text-white" : "bg-theme-raised text-theme-muted")}>
-                  {t.count}
+              <tab.icon size={14} className={activeTab === tab.id ? "text-theme-primary" : ""} />
+              {tab.label}
+              {tab.count > 0 && (
+                <span className={cn("text-[9px] font-black px-1.5 py-0.5 rounded-md ml-1",
+                  activeTab === tab.id ? "bg-theme-primary text-white" : "bg-theme-raised text-theme-muted"
+                )}>
+                  {tab.count}
                 </span>
               )}
             </button>
           ))}
         </div>
 
+        {/* ── RAISE TAB ─────────────────────────────────────────────────── */}
         {activeTab === "raise" && (
           <div className="grid lg:grid-cols-5 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* Ticket Submission Form */}
-            <div className="lg:col-span-2 space-y-5">
-              <div className="page-card p-6 space-y-6 border-theme-strong/10 shadow-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-theme-primary/10 flex items-center justify-center border border-theme-primary/20">
-                      <Plus size={16} className="text-theme-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-black text-theme-fg">Create Request</p>
-                      <p className="text-[10px] text-theme-muted uppercase tracking-widest font-bold">Priority Workflow</p>
-                    </div>
+            {/* Form */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="page-card p-6 space-y-5 border-theme-strong/10 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-theme-primary/10 flex items-center justify-center border border-theme-primary/20">
+                    <Plus size={16} className="text-theme-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-theme-fg">Create Request</p>
+                    <p className="text-[10px] text-theme-muted uppercase tracking-widest font-bold">Auto-routed to your leads</p>
                   </div>
                 </div>
 
-                <div className="space-y-5">
-                  <div className="space-y-2 p-5 rounded-xl bg-theme-primary/[0.03] border border-theme-primary/10 shadow-inner">
-                    <label className="text-[11px] font-black text-theme-primary uppercase tracking-widest flex items-center gap-2 px-1">
-                      <Filter size={14} /> Step 1: Select Reason / Category
-                    </label>
-                    <Select value={category} onValueChange={(v) => {
-                      setCategory(v);
-                      const rule = routingRules.find(r => r.category === v);
-                      if (rule) {
-                        setTargetRole(rule.target_role);
-                        setTargetDepartment(rule.target_department || "");
-                        setTargetTeam("");
-                        setAssigneeId("");
-                        setIsRuleLocked(true);
-                        loadEmployees(rule.target_role);
-                      } else {
-                        setIsRuleLocked(false);
-                        if (user?.role === 'employee') {
-                          setTargetDepartment(orgTeams.find(t => t.name === user.department)?.id || "");
-                        }
-                      }
-                    }}>
-                      <SelectTrigger className="w-full h-12 rounded-xl bg-theme-surface font-black border-theme-border text-sm shadow-sm">
-                        <SelectValue placeholder="Select Reason..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {routingRules.length > 0 ? (
-                          routingRules.map(r => <SelectItem key={r.id} value={r.category}>{r.category}</SelectItem>)
-                        ) : (
-                          <div className="px-3 py-6 text-center">
-                            <p className="text-[10px] font-bold text-theme-muted italic">No categories defined by admin.</p>
-                          </div>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-5">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
-                        <ShieldCheck size={12} className="text-theme-primary" /> Target Role
-                      </label>
-                      <Select value={targetRole} onValueChange={handleRoleChange} disabled={isRuleLocked}>
-                        <SelectTrigger className={cn("w-full h-11 rounded-xl border-theme-border font-bold", isRuleLocked ? "bg-theme-bg opacity-70" : "bg-theme-raised/30")}>
-                          <SelectValue placeholder="Select target role…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="px-3 py-2 border-b border-theme-border/50 mb-1">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted opacity-60 italic">Hierarchy Selection</p>
-                          </div>
-                          {ROLES.filter(r => {
-                            if (isRuleLocked) return true;
-                            if (user?.role === 'employee' || user?.role === 'intern') return r.id === 'dept_lead' || r.id === 'team_lead';
-                            return r.id !== 'employee' && r.id !== 'intern';
-                          }).map(r => (
-                            <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
-                        <Zap size={12} className="text-theme-primary" /> Link Reference (Secure UUID)
-                      </label>
-                      <Select value={linkedTicketId || "none"} onValueChange={(v) => setLinkedTicketId(v === "none" ? null : v)}>
-                        <SelectTrigger className="w-full h-11 rounded-xl bg-theme-raised/30 border-theme-border font-bold text-xs">
-                          <SelectValue placeholder="Link previous ticket (optional)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No Link (New Instance)</SelectItem>
-                          {tickets.filter(t => t.creator?.id === user?.id).map(t => (
-                            <SelectItem key={t.id} value={t.id}>
-                              <div className="flex flex-col py-1">
-                                <span className="font-bold">#{t.id.slice(0, 8)} - {t.subject}</span>
-                                <span className="text-[9px] opacity-60 uppercase">{t.status} · {formatDate(t.created_at)}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
-                          <Building size={12} className="text-theme-primary" /> Target Department
-                        </label>
-                        <Select value={targetDepartment || "none"} onValueChange={(v) => { setTargetDepartment(v === "none" ? "" : v); setTargetTeam(""); setAssigneeId(""); }} disabled={isRuleLocked || (user?.role === 'employee' && !isRuleLocked)}>
-                          <SelectTrigger className={cn("w-full h-11 rounded-xl border-theme-border font-bold text-xs", (isRuleLocked || user?.role === 'employee') ? "bg-theme-bg opacity-70" : "bg-theme-raised/30")}>
-                            <SelectValue placeholder="All Departments" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">All Departments</SelectItem>
-                            {orgTeams.filter(t => t.type === 'department').map(d => (
-                              <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
-                          <Users size={12} className="text-theme-primary" /> Target Team
-                        </label>
-                        <Select value={targetTeam || "none"} onValueChange={(v) => { setTargetTeam(v === "none" ? "" : v); setAssigneeId(""); }} disabled={!targetDepartment}>
-                          <SelectTrigger className="w-full h-11 rounded-xl bg-theme-raised/30 border-theme-border font-bold text-xs">
-                            <SelectValue placeholder={targetDepartment ? "All Teams" : "Select Department First"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">All Teams</SelectItem>
-                            {orgTeams.filter(t => t.type === 'team' && t.parent_id === targetDepartment).map(t => (
-                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
-                        <UserCheck size={12} className="text-emerald-500" /> {getDynamicAssignLabel(targetRole)}
-                      </label>
-                      <Select value={assigneeId} onValueChange={setAssigneeId} disabled={!targetRole || loadingEmp}>
-                        <SelectTrigger className="w-full h-11 rounded-xl bg-theme-raised/30 border-theme-border font-bold" loading={isFetchingRole || loadingEmp}>
-                          <SelectValue placeholder={
-                            loadingEmp 
-                              ? "Connecting…" 
-                              : targetRole 
-                                ? `Searching ${ROLES.find(r=>r.id===targetRole)?.label}s…` 
-                                : "Awaiting Role…"
-                          } />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="px-3 py-2 border-b border-theme-border/50 mb-1">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-theme-muted opacity-60">Live Personnel Stream</p>
-                          </div>
-                          {filteredEmployees.length > 0 ? filteredEmployees.map(e => (
-                            <SelectItem key={e.id} value={e.id}>
-                              <div className="flex flex-col py-0.5">
-                                <span className="text-[11px] font-black">{e.name}</span>
-                                <span className="text-[9px] text-theme-muted font-normal uppercase tracking-tighter">{e.department || 'GLOBAL OPS'}</span>
-                              </div>
-                            </SelectItem>
-                          )) : (
-                            <div className="px-3 py-6 text-center">
-                              <p className="text-[10px] font-bold text-theme-muted italic">No personnel found for this role.</p>
-                            </div>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
-                      <Ticket size={12} className="text-sky-500" /> Issue Subject
-                    </label>
-                    <input 
-                      value={subject} 
-                      onChange={e => setSubject(e.target.value)} 
-                      placeholder="Summary of the request…"
-                      className="w-full h-11 rounded-xl border border-theme-border bg-theme-raised/30 px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-inner"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
-                      <Zap size={12} className="text-amber-500" /> Priority
-                    </label>
-                    <Select value={priority} onValueChange={setPriority}>
-                      <SelectTrigger className="w-1/2 h-11 rounded-xl bg-theme-raised/30 font-bold border-theme-border"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {PRIORITIES.map(p => <SelectItem key={p} value={p}>{p.toUpperCase()}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
-                      <MessageSquare size={12} className="text-theme-muted" /> Detailed Intel
-                    </label>
-                    <textarea 
-                      value={description} 
-                      onChange={e => setDescription(e.target.value)} 
-                      placeholder="Describe the issue in detail…"
-                      className="w-full h-28 rounded-xl border border-theme-border bg-theme-raised/30 p-4 text-sm font-semibold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-inner resize-none"
-                    />
-                  </div>
-
-                  <Button 
-                    className="w-full h-12 rounded-xl bg-theme-primary text-theme-surface font-black text-sm uppercase tracking-widest shadow-xl hover:shadow-theme-primary/20 transition-all group" 
-                    onClick={handleSubmit} 
-                    loading={submitting}
-                  >
-                    Raise Ticket <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
-                  </Button>
+                <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 flex gap-3">
+                  <GitBranch size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-theme-fg leading-relaxed">
+                    <span className="font-bold text-emerald-600">Smart Routing Active:</span> Your ticket will be automatically sent to your{" "}
+                    <span className="font-bold">Team Lead</span> and <span className="font-bold">Department Lead</span> based on your profile.
+                    No manual assignment needed.
+                  </p>
                 </div>
-              </div>
 
-              {/* Tips / Info */}
-              <div className="p-4 rounded-xl bg-theme-primary/5 border border-theme-primary/20 flex gap-3">
-                <AlertCircle size={18} className="text-theme-primary shrink-0 mt-0.5" />
-                <p className="text-[11px] text-theme-fg leading-relaxed">
-                  <span className="font-bold">Protocol Tip:</span> Assigning tickets to the correct <span className="italic font-bold">Target Role</span> ensures your request is triaged within the correct organizational hierarchy.
-                </p>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
+                    <Ticket size={12} className="text-sky-500" /> Issue Subject *
+                  </label>
+                  <input
+                    value={subject}
+                    onChange={e => setSubject(e.target.value)}
+                    placeholder="Brief summary of the issue…"
+                    className="w-full h-11 rounded-xl border border-theme-border bg-theme-raised/30 px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-inner"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
+                    <Zap size={12} className="text-amber-500" /> Priority
+                  </label>
+                  <Select value={priority} onValueChange={setPriority}>
+                    <SelectTrigger className="w-1/2 h-11 rounded-xl bg-theme-raised/30 font-bold border-theme-border">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRIORITIES.map(p => <SelectItem key={p} value={p}>{p.toUpperCase()}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
+                    <MessageSquare size={12} className="text-theme-muted" /> Detailed Description
+                  </label>
+                  <textarea
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Describe the issue in detail…"
+                    className="w-full h-28 rounded-xl border border-theme-border bg-theme-raised/30 p-4 text-sm font-semibold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-inner resize-none"
+                  />
+                </div>
+
+                {/* File attachments */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
+                    <Paperclip size={12} className="text-theme-muted" /> Attachments (up to 5)
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer px-4 h-10 rounded-xl border border-dashed border-theme-border hover:border-theme-primary/40 bg-theme-raised/20 text-[10px] font-bold text-theme-muted hover:text-theme-primary transition-all">
+                    <Paperclip size={12} /> Click to attach files
+                    <input type="file" multiple className="hidden" onChange={handleFilePick} accept="*/*" />
+                  </label>
+                  {attachments.length > 0 && (
+                    <div className="space-y-1">
+                      {attachments.map((f, i) => (
+                        <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-theme-raised/40 border border-theme-border/50">
+                          <Paperclip size={10} className="text-theme-muted shrink-0" />
+                          <span className="text-[10px] text-theme-fg font-bold truncate flex-1">{f.name}</span>
+                          <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} className="text-theme-muted hover:text-rose-500 transition-colors">
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Link reference */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2 px-1">
+                    <Zap size={12} className="text-theme-primary" /> Link Previous Ticket (Optional)
+                  </label>
+                  <Select value={linkedTicketId || "none"} onValueChange={v => setLinkedTicketId(v === "none" ? null : v)}>
+                    <SelectTrigger className="w-full h-11 rounded-xl bg-theme-raised/30 border-theme-border font-bold text-xs">
+                      <SelectValue placeholder="No link" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Link (New Instance)</SelectItem>
+                      {raisedTickets.map(t => (
+                        <SelectItem key={t.id} value={t.id}>
+                          <div className="flex flex-col py-1">
+                            <span className="font-bold">#{t.id.slice(0, 8)} – {t.subject}</span>
+                            <span className="text-[9px] opacity-60 uppercase">{t.status} · {formatDate(t.created_at)}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button
+                  className="w-full h-12 rounded-xl bg-theme-primary text-theme-surface font-black text-sm uppercase tracking-widest shadow-xl hover:shadow-theme-primary/20 transition-all group"
+                  onClick={handleSubmit}
+                  loading={submitting}
+                  disabled={submitting || !subject.trim()}
+                >
+                  {uploadingFiles ? <><Loader2 size={14} className="mr-2 animate-spin" />Uploading files…</> : <>Raise Ticket <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" /></>}
+                </Button>
               </div>
             </div>
 
-            {/* List of My Raised Tickets */}
+            {/* My Raised Tickets */}
             <div className="lg:col-span-3 space-y-4">
               <div className="flex items-center justify-between px-2">
                 <p className="text-xs font-black text-theme-fg uppercase tracking-widest">My Active Requests</p>
@@ -676,298 +626,440 @@ export default function SupportHubPage() {
                   </div>
                 ) : (
                   raisedTickets.map(t => {
-                    const style = STATUS_STYLES[t.status] || STATUS_STYLES.open;
-                    const StatusIcon = style.icon;
+                    const conf = getStatusConf(t.status);
+                    const StatusIcon = conf.icon;
                     return (
-                    <div 
-                      key={t.id} 
-                      onClick={() => handleTicketSelect(t)}
-                      className="group p-4 rounded-2xl bg-theme-surface border border-theme-border hover:border-theme-primary/30 transition-all hover:shadow-lg cursor-pointer flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-4 min-w-0">
-                        <div className={cn(
-                          "h-10 w-10 rounded-xl flex items-center justify-center border transition-colors",
-                          style.iconBg, style.border
-                        )}>
-                          <StatusIcon size={18} className={style.text} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-black text-theme-fg truncate group-hover:text-theme-primary transition-colors">{t.subject}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge className={cn("text-[8px] px-1.5 h-4 font-black uppercase tracking-widest", style.bg, style.text, style.border)}>
-                              {STATUS_LABELS[t.status] || t.status}
-                            </Badge>
-                            <span className="text-[10px] text-theme-muted font-bold">Assigned to: <span className="text-theme-fg">{t.assignee?.name || 'Unassigned'}</span></span>
+                      <div
+                        key={t.id}
+                        onClick={() => handleTicketSelect(t)}
+                        className="group p-4 rounded-2xl bg-theme-surface border border-theme-border hover:border-theme-primary/30 transition-all hover:shadow-lg cursor-pointer flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center border transition-colors", conf.iconBg, conf.border)}>
+                            <StatusIcon size={18} className={conf.text} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-theme-fg truncate group-hover:text-theme-primary transition-colors">{t.subject}</p>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <StatusBadge status={t.status} />
+                              {t.status === "rejected" && t.rejection_reason && (
+                                <span className="text-[9px] text-rose-500 font-bold italic truncate max-w-[180px]">
+                                  ⚠ {t.rejection_reason}
+                                </span>
+                              )}
+                              {t.current_handler && t.status !== "closed" && t.status !== "rejected" && (
+                                <span className="text-[9px] text-theme-muted font-bold">
+                                  With: <span className="text-theme-fg">{t.current_handler.name}</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-4 ml-4">
-                        <div className="text-right hidden sm:block">
-                          <p className="text-[10px] text-theme-muted font-bold uppercase tracking-tighter">{t.category}</p>
-                          <p className="text-[9px] text-theme-muted mt-0.5">{formatDate(t.created_at)}</p>
+                        <div className="flex items-center gap-3 ml-4">
+                          <div className="text-right hidden sm:block">
+                            <p className="text-[10px] text-theme-muted font-bold uppercase tracking-tighter">{t.priority}</p>
+                            <p className="text-[9px] text-theme-muted mt-0.5">{formatDate(t.created_at)}</p>
+                          </div>
+                          <ChevronRight size={16} className="text-theme-muted group-hover:text-theme-primary group-hover:translate-x-1 transition-all" />
                         </div>
-                        <ChevronRight size={16} className="text-theme-muted group-hover:text-theme-primary group-hover:translate-x-1 transition-all" />
                       </div>
-                    </div>
-                  )})
+                    );
+                  })
                 )}
               </div>
             </div>
           </div>
         )}
 
+        {/* ── SOLVE/DESK TAB ────────────────────────────────────────────── */}
         {activeTab === "solve" && (
-          <div className="animate-in fade-in slide-in-from-right-2 duration-300">
-             <div className="grid lg:grid-cols-4 gap-6">
-                <div className="lg:col-span-4 space-y-4">
-                  <div className="flex items-center justify-between px-2">
-                    <p className="text-xs font-black text-theme-fg uppercase tracking-widest">Incoming Support Intel</p>
-                  </div>
+          <div className="animate-in fade-in slide-in-from-right-2 duration-300 space-y-4">
+            <div className="flex items-center justify-between px-2">
+              <div>
+                <p className="text-xs font-black text-theme-fg uppercase tracking-widest">
+                  {isManager ? "Team Tickets — Your Desk" : "Assigned to Me"}
+                </p>
+                <p className="text-[10px] text-theme-muted mt-0.5">
+                  {isDeptLead ? "Department Lead Desk" : isTeamLead ? "Team Lead Desk" : "Resolver Desk"}
+                </p>
+              </div>
+              <Badge variant="secondary" className="text-[10px]">{assignedTickets.length} Tickets</Badge>
+            </div>
 
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {assignedTickets.length === 0 ? (
-                      <div className="col-span-full py-32 text-center bg-theme-raised/20 rounded-3xl border-2 border-dashed border-theme-border/50">
-                        <Inbox size={48} className="mx-auto text-theme-muted opacity-20 mb-4" />
-                        <p className="text-sm font-black text-theme-muted">Your Support Desk is clear.</p>
-                        <p className="text-xs text-theme-muted mt-1">No pending tickets assigned to your role.</p>
-                      </div>
-                    ) : (
-                      assignedTickets.map(t => {
-                        const style = STATUS_STYLES[t.status] || STATUS_STYLES.open;
-                        return (
-                        <div 
-                          key={t.id} 
-                          onClick={() => handleTicketSelect(t)}
-                          className="page-card p-5 border-theme-border hover:border-theme-primary/40 transition-all group flex flex-col h-full bg-theme-surface shadow-md hover:shadow-xl"
-                        >
-                          <div className="flex items-center justify-between mb-4">
-                            <Badge className={cn("text-[8px] px-1.5 h-4 font-black uppercase tracking-widest", style.bg, style.text, style.border)}>
-                              {STATUS_LABELS[t.status] || t.status}
-                            </Badge>
-                            <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-500 uppercase tracking-widest">
-                               <Zap size={10} fill="currentColor" /> {t.priority}
-                            </div>
-                          </div>
-                          
-                          <h4 className="text-sm font-black text-theme-fg line-clamp-2 mb-2 group-hover:text-theme-primary transition-colors h-10">{t.subject}</h4>
-                          
-                          <div className="mt-auto space-y-3">
-                            <div className="p-2.5 rounded-xl bg-theme-raised/50 border border-theme-border/50 flex items-center gap-3">
-                               <div className="h-7 w-7 rounded-lg bg-theme-primary text-theme-surface flex items-center justify-center text-[10px] font-black shadow-sm">
-                                  {t.creator?.name.split(' ').map(n=>n[0]).join('').slice(0,2)}
-                               </div>
-                               <div className="min-w-0">
-                                  <p className="text-[10px] font-black text-theme-fg truncate">{t.creator?.name}</p>
-                                  <p className="text-[9px] text-theme-muted uppercase font-bold tracking-tighter truncate">{t.creator?.role}</p>
-                                </div>
-                             </div>
-                             
-                             <div className="flex items-center justify-between text-[10px] text-theme-muted pt-2 border-t border-theme-border/50">
-                                <span className="font-bold uppercase tracking-tighter">{t.category}</span>
-                                <span>{formatDate(t.created_at)}</span>
-                             </div>
-                           </div>
-                         </div>
-                       )})
-                    )}
-                  </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {assignedTickets.length === 0 ? (
+                <div className="col-span-full py-32 text-center bg-theme-raised/20 rounded-3xl border-2 border-dashed border-theme-border/50">
+                  <Inbox size={48} className="mx-auto text-theme-muted opacity-20 mb-4" />
+                  <p className="text-sm font-black text-theme-muted">Your Desk is clear.</p>
+                  <p className="text-xs text-theme-muted mt-1">No pending tickets assigned to you.</p>
                 </div>
-             </div>
+              ) : (
+                assignedTickets.map(t => {
+                  const conf = getStatusConf(t.status);
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => handleTicketSelect(t)}
+                      className="page-card p-5 border-theme-border hover:border-theme-primary/40 transition-all group flex flex-col h-full bg-theme-surface shadow-md hover:shadow-xl cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <StatusBadge status={t.status} />
+                        <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-500 uppercase tracking-widest">
+                          <Zap size={10} fill="currentColor" /> {t.priority}
+                        </div>
+                      </div>
+                      <h4 className="text-sm font-black text-theme-fg line-clamp-2 mb-2 group-hover:text-theme-primary transition-colors h-10">
+                        {t.subject}
+                      </h4>
+                      <div className="mt-auto space-y-3">
+                        <div className="p-2.5 rounded-xl bg-theme-raised/50 border border-theme-border/50 flex items-center gap-3">
+                          <div className="h-7 w-7 rounded-lg bg-theme-primary text-theme-surface flex items-center justify-center text-[10px] font-black shadow-sm">
+                            {t.creator?.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-black text-theme-fg truncate">{t.creator?.name}</p>
+                            <p className="text-[9px] text-theme-muted uppercase font-bold tracking-tighter truncate">{t.creator?.role}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-theme-muted pt-2 border-t border-theme-border/50">
+                          <span className="font-bold uppercase tracking-tighter">{t.priority} priority</span>
+                          <span>{formatDate(t.created_at)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* TICKET DETAIL DRAWER */}
+      {/* ── TICKET DETAIL DRAWER ─────────────────────────────────────────── */}
       <AnimatePresence>
         {selectedTicket && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-[1001] flex justify-end bg-black/40 backdrop-blur-sm" 
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1001] flex justify-end bg-black/40 backdrop-blur-sm"
             onClick={() => setSelectedTicket(null)}
           >
-            <motion.div 
-              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} 
+            <motion.div
+              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 35, stiffness: 400 }}
-              className="w-full max-w-xl bg-theme-surface border-l border-theme-border h-full overflow-y-auto shadow-2xl flex flex-col" 
+              className="w-full max-w-xl bg-theme-surface border-l border-theme-border h-full overflow-y-auto shadow-2xl flex flex-col"
               onClick={e => e.stopPropagation()}
             >
-              {/* Header */}
+              {/* Drawer Header */}
               <div className="sticky top-0 z-10 bg-theme-surface/95 backdrop-blur-md border-b border-theme-border px-6 py-5">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-xl bg-theme-primary text-theme-surface flex items-center justify-center shadow-lg shadow-theme-primary/20">
-                      <Ticket size={20} />
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center border shrink-0", getStatusConf(selectedTicket.status).iconBg, getStatusConf(selectedTicket.status).border)}>
+                      {(() => { const I = getStatusConf(selectedTicket.status).icon; return <I size={18} className={getStatusConf(selectedTicket.status).text} />; })()}
                     </div>
-                    <div>
-                      <p className="text-sm font-black text-theme-fg leading-tight">{selectedTicket.subject}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest">{selectedTicket.category}</Badge>
-                        <span className="text-[10px] text-theme-muted font-bold">#{selectedTicket.id.slice(0, 8)}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-black text-theme-fg truncate">{selectedTicket.subject}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <StatusBadge status={selectedTicket.status} />
+                        <span className="text-[9px] text-theme-muted font-bold uppercase">{selectedTicket.priority} priority</span>
                       </div>
                     </div>
                   </div>
-                  <button onClick={() => setSelectedTicket(null)} className="p-2 rounded-xl hover:bg-theme-raised text-theme-muted transition-colors">
+                  <button onClick={() => setSelectedTicket(null)} className="p-2 rounded-xl hover:bg-theme-raised text-theme-muted transition-colors shrink-0">
                     <X size={20} />
                   </button>
                 </div>
               </div>
 
-              <div className="p-6 space-y-8 flex-1">
-                {/* Meta info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 rounded-2xl bg-theme-raised/40 border border-theme-border">
-                    <p className="text-[10px] text-theme-muted uppercase tracking-widest font-black mb-2">Requester Info</p>
-                    <div className="flex items-center gap-3">
-                       <div className="h-8 w-8 rounded-full bg-theme-primary/10 text-theme-primary flex items-center justify-center text-[10px] font-black">{selectedTicket.creator?.name[0]}</div>
-                       <div className="min-w-0">
-                          <p className="text-xs font-black text-theme-fg truncate">{selectedTicket.creator?.name}</p>
-                          <p className="text-[10px] text-theme-muted truncate uppercase tracking-tighter">{selectedTicket.creator?.role}</p>
-                       </div>
+              <div className="p-6 space-y-6 flex-1">
+                {/* Rejection Banner */}
+                {selectedTicket.status === "rejected" && selectedTicket.rejection_reason && (
+                  <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex gap-3">
+                    <AlertTriangle size={18} className="text-rose-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Ticket Rejected</p>
+                      <p className="text-xs text-theme-fg">{selectedTicket.rejection_reason}</p>
                     </div>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-theme-raised/40 border border-theme-border">
-                    <p className="text-[10px] text-theme-muted uppercase tracking-widest font-black mb-2">Primary Assignee</p>
-                    <div className="flex items-center gap-3">
-                       <div className="h-8 w-8 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-[10px] font-black">{selectedTicket.assignee?.name?.[0] || '?'}</div>
-                       <div className="min-w-0">
-                          <p className="text-xs font-black text-theme-fg truncate">{selectedTicket.assignee?.name || 'Unassigned'}</p>
-                          <p className="text-[10px] text-theme-muted truncate uppercase tracking-tighter">{selectedTicket.target_role}</p>
-                       </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <p className="text-[10px] text-theme-muted uppercase tracking-widest font-black flex items-center gap-2">
-                    <Signal size={12} className="text-theme-primary" /> Ticket Details
-                  </p>
-                  <div className="p-5 rounded-2xl bg-theme-surface border border-theme-border shadow-inner-sm">
-                    <p className="text-sm text-theme-fg leading-relaxed whitespace-pre-wrap">{selectedTicket.description || "No supplemental details provided."}</p>
-                  </div>
-                </div>
-
-                {selectedTicket.resolution_notes && (
-                  <div className="p-5 rounded-2xl bg-emerald-500/[0.03] border border-emerald-500/20 shadow-sm animate-in zoom-in-95">
-                    <div className="flex items-center gap-2 mb-3">
-                       <div className="h-6 w-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center"><CheckCircle2 size={12} /></div>
-                       <p className="text-[10px] text-emerald-600 uppercase tracking-widest font-black">Resolution Intel</p>
-                    </div>
-                    <p className="text-sm text-theme-fg leading-relaxed">{selectedTicket.resolution_notes}</p>
                   </div>
                 )}
 
-                {/* Status Control (Only for Assignee) */}
-                {selectedTicket.assignee?.id === user?.id && (
-                  <div className="space-y-4 pt-4 border-t border-theme-border">
-                    <p className="text-[10px] text-theme-muted uppercase tracking-widest font-black">Status & Notes</p>
-                    
-                    <div className="flex flex-col gap-3">
-                       <label className="text-[9px] font-black text-theme-muted uppercase tracking-tighter px-1">Update Status</label>
-                       <Select 
-                        value={pendingStatus} 
-                        onValueChange={setPendingStatus}
-                        disabled={resolving || selectedTicket.status === 'resolved' || selectedTicket.status === 'closed'}
-                       >
-                         <SelectTrigger className="h-11 rounded-2xl bg-theme-surface font-bold text-xs">
-                           <SelectValue placeholder="Change Status..." />
-                         </SelectTrigger>
-                         <SelectContent>
-                           <SelectItem value="open">Open Request</SelectItem>
-                           <SelectItem value="in_progress">Working on it</SelectItem>
-                           <SelectItem value="resolved">Solved</SelectItem>
-                         </SelectContent>
-                       </Select>
-                    </div>
+                {/* Creator / Handler Meta */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-4 rounded-2xl bg-theme-raised/40 border border-theme-border">
+                    <p className="text-[9px] text-theme-muted uppercase tracking-widest font-black mb-2">Raised By</p>
+                    <p className="text-xs font-black text-theme-fg">{selectedTicket.creator?.name}</p>
+                    <p className="text-[9px] text-theme-muted uppercase tracking-tighter mt-0.5">
+                      {selectedTicket.creator?.department} · {selectedTicket.creator?.role}
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-theme-raised/40 border border-theme-border">
+                    <p className="text-[9px] text-theme-muted uppercase tracking-widest font-black mb-2">Currently With</p>
+                    <p className="text-xs font-black text-theme-fg">{selectedTicket.current_handler?.name || selectedTicket.assignee?.name || "Unassigned"}</p>
+                    <p className="text-[9px] text-theme-muted uppercase tracking-tighter mt-0.5">
+                      {selectedTicket.current_handler?.department || selectedTicket.assignee?.department}
+                    </p>
+                  </div>
+                </div>
 
-                    <textarea 
-                      value={resolveNotes} 
-                      onChange={e => setResolveNotes(e.target.value)} 
-                      placeholder={selectedTicket.status === 'resolved' || selectedTicket.status === 'closed' ? "This ticket is closed." : "Add notes about the solution…"}
-                      disabled={selectedTicket.status === 'resolved' || selectedTicket.status === 'closed'}
-                      className="w-full p-4 rounded-2xl border border-theme-border bg-theme-surface text-sm text-theme-fg placeholder:text-theme-muted focus:border-theme-primary shadow-inner min-h-[100px] resize-none disabled:opacity-50" 
-                    />
-                    
-                    {selectedTicket.status !== 'resolved' && (
-                      <Button 
-                        variant={pendingStatus === 'resolved' ? "success" : "primary"}
-                        className="w-full rounded-2xl font-black text-[10px] uppercase tracking-widest h-11 shadow-lg" 
-                        loading={resolving} 
-                        onClick={() => updateTicketStatus(pendingStatus)}
-                        disabled={selectedTicket.status === pendingStatus && resolveNotes === (selectedTicket.resolution_notes || "")}
-                      >
-                        {pendingStatus === 'resolved' ? (
-                          <><CheckCircle2 size={14} className="mr-2" /> Mark as Solved</>
-                        ) : (
-                          <><RefreshCw size={14} className="mr-2" /> Update Status</>
-                        )}
+                {/* Attachments */}
+                {selectedTicket.attachments?.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-theme-muted uppercase tracking-widest font-black flex items-center gap-2">
+                      <Paperclip size={12} /> Attachments ({selectedTicket.attachments.length})
+                    </p>
+                    <div className="space-y-1.5">
+                      {selectedTicket.attachments.map((storagePath, i) => {
+                        // Extract original filename from path: "support/userId/timestamp_filename.ext"
+                        const rawName = storagePath.split("/").pop() || `file_${i + 1}`;
+                        // Remove timestamp prefix: "1234567890_filename.ext" → "filename.ext"
+                        const displayName = rawName.replace(/^\d+_/, "");
+                        const ext = displayName.split(".").pop()?.toLowerCase() || "";
+                        
+                        const fileTypeColors: Record<string, string> = {
+                          pdf: "text-rose-500 bg-rose-500/10",
+                          doc: "text-sky-500 bg-sky-500/10", docx: "text-sky-500 bg-sky-500/10",
+                          xls: "text-emerald-500 bg-emerald-500/10", xlsx: "text-emerald-500 bg-emerald-500/10",
+                          png: "text-purple-500 bg-purple-500/10", jpg: "text-purple-500 bg-purple-500/10",
+                          jpeg: "text-purple-500 bg-purple-500/10", gif: "text-purple-500 bg-purple-500/10",
+                          zip: "text-amber-500 bg-amber-500/10", rar: "text-amber-500 bg-amber-500/10",
+                          mp4: "text-indigo-500 bg-indigo-500/10", mov: "text-indigo-500 bg-indigo-500/10",
+                          txt: "text-slate-500 bg-slate-500/10",
+                          ppt: "text-orange-500 bg-orange-500/10", pptx: "text-orange-500 bg-orange-500/10",
+                        };
+                        const typeColor = fileTypeColors[ext] || "text-theme-muted bg-theme-raised/60";
+
+                        return (
+                          <button
+                            key={i}
+                            onClick={async () => {
+                              try {
+                                const url = await getFileUrl(storagePath);
+                                window.open(url, "_blank", "noopener,noreferrer");
+                              } catch {
+                                showToast("Failed to open file. Please try again.", "error");
+                              }
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-theme-raised/40 border border-theme-border/50 hover:border-theme-primary/40 transition-all group/att text-left"
+                          >
+                            <div className={`flex items-center justify-center h-8 w-8 rounded-lg text-[9px] font-black uppercase shrink-0 ${typeColor}`}>
+                              {ext || "?"}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] text-theme-fg font-bold truncate group-hover/att:text-theme-primary transition-colors">
+                                {displayName}
+                              </p>
+                              <p className="text-[9px] text-theme-muted uppercase tracking-wider">
+                                Click to open
+                              </p>
+                            </div>
+                            <ArrowUpRight size={12} className="text-theme-muted group-hover/att:text-theme-primary shrink-0 transition-colors" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+
+                {/* Tracking Timeline */}
+                {selectedTicket.tracking_log?.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] text-theme-muted uppercase tracking-widest font-black flex items-center gap-2">
+                      <GitBranch size={12} /> Routing Timeline
+                    </p>
+                    <div className="p-4 rounded-2xl bg-theme-page border border-theme-border/60">
+                      <TrackingTimeline log={selectedTicket.tracking_log} />
+                    </div>
+                  </div>
+                )}
+
+                {/* ── DESK ACTIONS (for assigned handlers / managers) ────── */}
+                {isCurrentHandler && selectedTicket.status !== "closed" && selectedTicket.status !== "rejected" && (
+                  <div className="space-y-3 p-5 rounded-2xl bg-theme-primary/[0.03] border border-theme-primary/15">
+                    <p className="text-[10px] text-theme-primary uppercase tracking-widest font-black flex items-center gap-2">
+                      <Zap size={12} /> Desk Actions
+                    </p>
+
+                    {/* Mark In Review (for solvers — non-managers) */}
+                    {!isManager && selectedTicket.status === "open" && (
+                      <Button size="sm" className="w-full h-10 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest"
+                        loading={resolving} onClick={markInReview}>
+                        <Signal size={12} className="mr-2" /> Mark as In Review
                       </Button>
+                    )}
+
+                    {/* Close (after in_review) */}
+                    {!isManager && selectedTicket.status === "in_review" && (
+                      <>
+                        {deskAction === "close" ? (
+                          <div className="space-y-3">
+                            <textarea value={actionNote} onChange={e => setActionNote(e.target.value)}
+                              placeholder="Add resolution notes (optional)…"
+                              className="w-full p-3 rounded-xl border border-theme-border bg-theme-surface text-xs font-bold text-theme-fg resize-none h-20 focus:border-theme-primary outline-none" />
+                            <div className="flex gap-2">
+                              <Button size="sm" className="flex-1 h-9 rounded-xl bg-emerald-600 text-white font-black text-[10px] uppercase tracking-widest"
+                                loading={performingAction} onClick={performDeskAction}>
+                                <CheckCircle2 size={12} className="mr-1" /> Confirm Close
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-9 rounded-xl font-black text-[10px]"
+                                onClick={() => setDeskAction("")}> Cancel </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <Button size="sm" className="w-full h-10 rounded-xl bg-emerald-600 text-white font-black text-[10px] uppercase tracking-widest"
+                            onClick={() => setDeskAction("close")}>
+                            <CheckCircle2 size={12} className="mr-2" /> Close Ticket
+                          </Button>
+                        )}
+                      </>
+                    )}
+
+                    {/* Manager Actions */}
+                    {isManager && (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Route to other department (TL and DL can both do this) */}
+                          <button onClick={() => setDeskAction(deskAction === "route_dept" ? "" : "route_dept")}
+                            className={cn("flex flex-col items-center gap-1.5 p-3 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all",
+                              deskAction === "route_dept" ? "bg-sky-500/10 border-sky-500/30 text-sky-500" : "border-theme-border text-theme-muted hover:border-theme-primary/30 hover:text-theme-primary"
+                            )}>
+                            <Building size={14} />Route to Dept
+                          </button>
+
+                          {/* Notify DL (TL only — cannot directly assign same-dept teams) */}
+                          {isTeamLead && !isDeptLead && (
+                            <button onClick={() => setDeskAction(deskAction === "notify_dl" ? "" : "notify_dl")}
+                              className={cn("flex flex-col items-center gap-1.5 p-3 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all",
+                                deskAction === "notify_dl" ? "bg-amber-500/10 border-amber-500/30 text-amber-500" : "border-theme-border text-theme-muted hover:border-theme-primary/30 hover:text-theme-primary"
+                              )}>
+                              <Bell size={14} />Notify Dept Lead
+                            </button>
+                          )}
+
+                          {/* Assign to team member (DL can assign; TL can only assign within their team) */}
+                          <button onClick={() => setDeskAction(deskAction === "assign_member" ? "" : "assign_member")}
+                            className={cn("flex flex-col items-center gap-1.5 p-3 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all",
+                              deskAction === "assign_member" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500" : "border-theme-border text-theme-muted hover:border-theme-primary/30 hover:text-theme-primary"
+                            )}>
+                            <Users size={14} />Assign Member
+                          </button>
+
+                          {/* Reject */}
+                          <button onClick={() => setDeskAction(deskAction === "reject" ? "" : "reject")}
+                            className={cn("flex flex-col items-center gap-1.5 p-3 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all",
+                              deskAction === "reject" ? "bg-rose-500/10 border-rose-500/30 text-rose-500" : "border-theme-border text-theme-muted hover:border-rose-500/30 hover:text-rose-500"
+                            )}>
+                            <XCircle size={14} />Reject
+                          </button>
+                        </div>
+
+                        {/* Action panels */}
+                        <AnimatePresence>
+                          {deskAction === "route_dept" && (
+                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                              className="space-y-3 overflow-hidden">
+                              <Select value={targetDeptName} onValueChange={setTargetDeptName}>
+                                <SelectTrigger className="h-10 rounded-xl font-bold text-xs">
+                                  <SelectValue placeholder="Select target department…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {deptNames.filter(d => d !== user?.department).map(d => (
+                                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button size="sm" className="w-full h-9 rounded-xl bg-sky-600 text-white font-black text-[10px] uppercase"
+                                loading={performingAction} disabled={!targetDeptName} onClick={performDeskAction}>
+                                <Building size={12} className="mr-1.5" /> Route to {targetDeptName || "Department"}
+                              </Button>
+                            </motion.div>
+                          )}
+
+                          {deskAction === "notify_dl" && (
+                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                              className="space-y-3 overflow-hidden">
+                              <textarea value={actionNote} onChange={e => setActionNote(e.target.value)}
+                                placeholder="Write note for Department Lead — explain why this needs re-routing within the department…"
+                                className="w-full p-3 rounded-xl border border-theme-border bg-theme-surface text-xs font-bold text-theme-fg resize-none h-24 focus:border-amber-500/50 outline-none" />
+                              <Button size="sm" className="w-full h-9 rounded-xl bg-amber-500 text-white font-black text-[10px] uppercase"
+                                loading={performingAction} disabled={!actionNote.trim()} onClick={performDeskAction}>
+                                <Bell size={12} className="mr-1.5" /> Notify Department Lead
+                              </Button>
+                            </motion.div>
+                          )}
+
+                          {deskAction === "assign_member" && (
+                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                              className="space-y-3 overflow-hidden">
+                              <Select value={targetMemberId} onValueChange={setTargetMemberId}>
+                                <SelectTrigger className="h-10 rounded-xl font-bold text-xs">
+                                  <SelectValue placeholder="Select team member…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {deskMemberOptions.map((e: any) => (
+                                    <SelectItem key={e.id} value={e.id}>
+                                      <div className="flex flex-col">
+                                        <span className="font-bold">{e.name}</span>
+                                        <span className="text-[9px] opacity-60 uppercase">{e.department} · {e.role}</span>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <textarea value={actionNote} onChange={e => setActionNote(e.target.value)}
+                                placeholder="Add note (optional)…"
+                                className="w-full p-3 rounded-xl border border-theme-border bg-theme-surface text-xs font-bold text-theme-fg resize-none h-16 focus:border-emerald-500/50 outline-none" />
+                              <Button size="sm" className="w-full h-9 rounded-xl bg-emerald-600 text-white font-black text-[10px] uppercase"
+                                loading={performingAction} disabled={!targetMemberId} onClick={performDeskAction}>
+                                <Users size={12} className="mr-1.5" /> Assign Member
+                              </Button>
+                            </motion.div>
+                          )}
+
+                          {deskAction === "reject" && (
+                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                              className="space-y-3 overflow-hidden">
+                              <textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)}
+                                placeholder="Required: State the reason for rejection…"
+                                className="w-full p-3 rounded-xl border border-rose-500/30 bg-theme-surface text-xs font-bold text-theme-fg resize-none h-20 focus:border-rose-500/60 outline-none" />
+                              <Button size="sm" className="w-full h-9 rounded-xl bg-rose-600 text-white font-black text-[10px] uppercase"
+                                loading={performingAction} disabled={!rejectionReason.trim()} onClick={performDeskAction}>
+                                <XCircle size={12} className="mr-1.5" /> Confirm Rejection
+                              </Button>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </>
                     )}
                   </div>
                 )}
 
-                {/* Linked Ticket Context */}
-                {(() => {
-                  const linked = Array.isArray(selectedTicket.linked_ticket) ? selectedTicket.linked_ticket[0] : selectedTicket.linked_ticket;
-                  if (!linked) return null;
-                  return (
-                    <div className="p-5 rounded-2xl bg-theme-primary/5 border border-theme-primary/10 space-y-3">
-                      <p className="text-[10px] text-theme-primary uppercase tracking-widest font-black flex items-center gap-2">
-                        <Signal size={14} /> Linked Reference Intel
-                      </p>
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-theme-surface border border-theme-border shadow-sm">
-                        <div>
-                          <p className="text-xs font-black text-theme-fg">{linked.subject}</p>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
-                            <p className="text-[9px] text-theme-muted font-bold uppercase tracking-tighter">
-                              ID: #{linked.id?.slice(0, 8) || "N/A"} · Status: {linked.status}
-                            </p>
-                            <span className="text-[8px] text-theme-border">•</span>
-                            <p className="text-[9px] text-theme-primary font-bold uppercase tracking-tighter">
-                              By: {linked.creator?.name || "Unknown"}
-                            </p>
-                            <span className="text-[8px] text-theme-border">•</span>
-                            <p className="text-[9px] text-theme-muted font-bold uppercase tracking-tighter">
-                              {formatDate(linked.created_at)}
-                            </p>
-                          </div>
-                        </div>
-                        <Badge variant="secondary" className="text-[9px] font-black h-5 uppercase tracking-widest">
-                          {linked.priority}
-                        </Badge>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Conversation Thread */}
+                {/* Thread / Messages */}
                 <div className="space-y-4 pt-4 border-t border-theme-border">
                   <p className="text-[10px] text-theme-muted uppercase tracking-widest font-black flex items-center gap-2">
-                    <MessageSquare size={12} /> Chat Messages
+                    <MessageSquare size={12} /> Thread
                   </p>
-                  
                   <div className="space-y-4">
                     {responses.length === 0 ? (
-                      <div className="py-10 text-center rounded-2xl bg-theme-raised/20 border border-theme-border/50">
-                        <MessageSquare size={24} className="mx-auto text-theme-muted opacity-20 mb-2" />
-                        <p className="text-[10px] font-bold text-theme-muted italic">No activity detected in the thread.</p>
+                      <div className="py-12 text-center bg-theme-raised/20 rounded-2xl border border-theme-border/50 opacity-40">
+                        <MessageSquare size={24} className="mx-auto text-theme-muted mb-2" />
+                        <p className="text-[10px] font-black uppercase tracking-widest">No messages yet</p>
                       </div>
                     ) : responses.map(r => (
-                      <div 
-                        key={r.id} 
-                        className={cn(
-                          "p-4 rounded-2xl border relative transition-all shadow-sm",
-                          r.id === "origin" 
-                            ? "bg-theme-raised/50 border-theme-border/50 border-dashed"
-                            : r.sender?.id === user?.id 
-                              ? "bg-theme-primary/5 border-theme-primary/20 ml-10" 
-                              : "bg-theme-surface border-theme-border mr-10"
-                        )}
-                      >
-                        <div className="flex items-center justify-between mb-2">
+                      <div key={r.id} className={cn("p-4 rounded-2xl border shadow-sm",
+                        r.id === "origin" ? "bg-theme-raised/40 border-theme-border/50 border-dashed"
+                          : r.sender?.id === selectedTicket.creator?.id
+                            ? "bg-theme-primary/[0.03] border-theme-primary/10 mr-8"
+                            : "bg-theme-surface border-theme-border ml-8"
+                      )}>
+                        <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-2">
-                            <p className="text-[10px] font-black text-theme-fg">{r.sender?.name} <span className="text-theme-muted font-normal">· {r.sender?.role}</span></p>
+                            <p className="text-[10px] font-black text-theme-fg">
+                              {r.sender?.name} <span className="text-theme-muted font-normal">· {r.sender?.role}</span>
+                            </p>
                             {r.id === "origin" && (
-                              <Badge variant="secondary" className="text-[8px] h-4 px-1.5 font-black uppercase tracking-widest text-theme-primary border-theme-primary/30">Initial Request</Badge>
+                              <Badge variant="secondary" className="text-[8px] h-4 px-1.5 font-black uppercase text-theme-primary border-theme-primary/30">
+                                Initial Request
+                              </Badge>
                             )}
                           </div>
                           <p className="text-[9px] text-theme-muted font-bold">{formatDate(r.created_at)}</p>
@@ -976,18 +1068,16 @@ export default function SupportHubPage() {
                       </div>
                     ))}
                   </div>
-
-                  {selectedTicket.status !== 'resolved' && selectedTicket.status !== 'closed' && (
-                    <div className="flex gap-2 sticky bottom-0 bg-theme-surface pt-2 pb-6">
-                      <input 
-                        value={responseText} 
-                        onChange={e => setResponseText(e.target.value)} 
-                        placeholder="Type your message here…"
+                  {selectedTicket.status !== "closed" && selectedTicket.status !== "rejected" && (
+                    <div className="flex gap-2 sticky bottom-0 bg-theme-surface/95 py-3">
+                      <input
+                        value={responseText} onChange={e => setResponseText(e.target.value)}
+                        placeholder="Type a message…"
                         onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendResponse()}
-                        className="flex-1 px-4 py-3 rounded-xl border border-theme-border bg-theme-raised/30 text-xs font-bold text-theme-fg outline-none focus:border-theme-primary shadow-inner" 
+                        className="flex-1 px-4 py-3 rounded-xl border border-theme-border bg-theme-raised/30 text-xs font-bold text-theme-fg outline-none focus:border-theme-primary shadow-inner"
                       />
-                      <Button size="sm" className="rounded-xl px-5 h-10 shadow-lg" loading={sending} onClick={sendResponse} disabled={!responseText.trim()}>
-                        <Send size={14} />
+                      <Button size="sm" className="rounded-xl px-5 h-11 shadow-lg" loading={sending} onClick={sendResponse} disabled={!responseText.trim()}>
+                        <Send size={16} />
                       </Button>
                     </div>
                   )}

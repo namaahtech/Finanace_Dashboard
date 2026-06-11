@@ -5,8 +5,8 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ProjectModal } from "@/components/projects/ProjectModal";
 import { supabase } from "@/lib/supabase";
@@ -25,7 +25,7 @@ import {
   Check,
   LayoutGrid
 } from "lucide-react";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 
 interface TeamMember {
   id: string;

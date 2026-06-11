@@ -11,6 +11,11 @@ import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import axios from "axios";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 dayjs.extend(relativeTime);
 
@@ -89,92 +94,78 @@ export default function PresentationsPage() {
       title="Presentations"
       subtitle="Slide decks and visual stories"
       actions={
-        <button
-          onClick={createPpt}
-          disabled={creating}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          <Plus size={14} /> New Presentation
-        </button>
+        <Button onClick={createPpt} disabled={creating} size="sm">
+          <Plus /> New Presentation
+        </Button>
       }
     >
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
-          <input
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search presentations…"
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-theme-border bg-theme-surface text-sm text-theme-fg placeholder:text-theme-muted focus:outline-none focus:border-theme-strong transition-colors"
+            className="pl-9 pr-9"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2">
-              <X size={13} className="text-theme-muted" />
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors" aria-label="Clear search">
+              <X size={13} />
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-1 bg-theme-raised rounded-lg p-0.5">
-          {(["all", "pinned"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all",
-                filter === f ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
-              )}
-            >
-              {f === "all" ? `All (${ppts.length})` : `Pinned (${ppts.filter(p => p.is_pinned).length})`}
-            </button>
-          ))}
-        </div>
+        <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+          <TabsList>
+            <TabsTrigger value="all" className="gap-2 data-[state=active]:font-semibold">
+              All
+              <span className={cn(
+                "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
+                filter === "all" ? "bg-primary text-primary-foreground" : "bg-muted-foreground/15 text-muted-foreground"
+              )}>{ppts.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="pinned" className="gap-2 data-[state=active]:font-semibold">
+              Pinned
+              <span className={cn(
+                "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
+                filter === "pinned" ? "bg-amber-500 text-white" : "bg-muted-foreground/15 text-muted-foreground"
+              )}>{ppts.filter(p => p.is_pinned).length}</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-        <div className="flex items-center gap-1 bg-theme-raised rounded-lg p-0.5">
-          <button
-            onClick={() => setView("grid")}
-            className={cn("p-2 rounded-md transition-all", view === "grid" ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}
-          >
-            <Grid3X3 size={14} />
-          </button>
-          <button
-            onClick={() => setView("list")}
-            className={cn("p-2 rounded-md transition-all", view === "list" ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}
-          >
-            <List size={14} />
-          </button>
-        </div>
+        <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as typeof view)} variant="outline" size="sm">
+          <ToggleGroupItem value="grid" aria-label="Grid view"><Grid3X3 className="size-3.5" /></ToggleGroupItem>
+          <ToggleGroupItem value="list" aria-label="List view"><List className="size-3.5" /></ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {loading ? (
         <div className={cn("grid gap-4", view === "grid" ? "grid-cols-2 md:grid-cols-3" : "grid-cols-1")}>
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="rounded-xl bg-theme-raised border border-theme-border animate-pulse" style={{ aspectRatio: "16/9" }} />
+            <Skeleton key={i} className={view === "grid" ? "" : "h-14"} style={view === "grid" ? { aspectRatio: "16/9" } : undefined} />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-          <div className="h-14 w-14 rounded-xl bg-theme-raised border border-theme-border flex items-center justify-center">
-            <Presentation size={24} className="text-theme-muted opacity-40" />
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center rounded-xl border border-dashed border-border bg-card">
+          <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center">
+            <Presentation size={20} className="text-muted-foreground" />
           </div>
           <div>
-            <p className="font-semibold text-theme-fg mb-1">No presentations yet</p>
-            <p className="text-sm text-theme-muted">Create your first presentation to get started.</p>
+            <p className="font-semibold text-foreground mb-1 text-sm">No presentations yet</p>
+            <p className="text-xs text-muted-foreground">Create your first presentation to get started.</p>
           </div>
-          <button
-            onClick={createPpt}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold"
-          >
-            <Plus size={14} /> Create Presentation
-          </button>
+          <Button onClick={createPpt} size="sm">
+            <Plus /> Create Presentation
+          </Button>
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Pinned */}
           {pinned.length > 0 && (
             <div className="space-y-3">
-              <p className="section-label px-1 flex items-center gap-2">
-                <Pin size={10} /> Pinned · {pinned.length}
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
+                <Pin size={11} fill="currentColor" /> Pinned · {pinned.length}
               </p>
               <div className={cn("grid gap-4", view === "grid" ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3" : "grid-cols-1")}>
                 {pinned.map((p) => (
@@ -184,10 +175,9 @@ export default function PresentationsPage() {
             </div>
           )}
 
-          {/* Rest */}
           {rest.length > 0 && (
             <div className="space-y-3">
-              {pinned.length > 0 && <p className="section-label px-1">All Presentations · {rest.length}</p>}
+              {pinned.length > 0 && <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">All Presentations · {rest.length}</p>}
               <div className={cn("grid gap-4", view === "grid" ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3" : "grid-cols-1")}>
                 {rest.map((p) => (
                   <PptItem key={p.id} p={p} view={view} onOpen={() => router.push(`/admin/workspace/presentations/${p.id}`)} onPin={() => togglePin(p)} onArchive={() => archivePpt(p)} onDelete={() => deletePpt(p)} />

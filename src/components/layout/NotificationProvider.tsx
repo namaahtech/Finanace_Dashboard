@@ -205,7 +205,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
               </div>
               <div>
                 <p className="text-sm font-black text-theme-fg">{activeCall.title}</p>
-                <p className="text-[10px] text-theme-muted font-mono">{activeCall.roomName}</p>
+                <p className="text-[10px] text-theme-muted tabular-nums">{activeCall.roomName}</p>
               </div>
             </div>
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-black border border-emerald-500/20">

@@ -174,7 +174,8 @@ def poll_onboarding_tasks():
                 config_res = supabase.table("system_config").select("id").limit(1).single().execute()
                 if config_res.data:
                     supabase.table("system_config").update({
-                        "consultant_agreement_text": refined_text
+                        "consultant_agreement_text": refined_text,
+                        "consultant_agreement_url": pdf_url
                     }).eq("id", config_res.data["id"]).execute()
                 
                 # 5. Finalize Task

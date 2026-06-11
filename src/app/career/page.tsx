@@ -18,8 +18,8 @@ import {
   Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/BadgeLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { supabase } from "@/lib/supabase";
 
 interface JobCluster {

@@ -1,0 +1,67 @@
+-- ============================================================================
+-- 00000000_baseline.sql
+--
+-- THIS FILE IS A PLACEHOLDER.
+--
+-- Replace its contents with a `pg_dump --schema-only --no-owner --no-acl` of
+-- the CURRENT production Supabase project before deploying to a new project.
+--
+-- The old 97 layered migrations at src/supabase/migrations/ accumulated mutual
+-- dependencies, duplicate file numbers, role enum DROP+recreate cycles, and
+-- hardcoded seed data that prevent a clean replay on a fresh DB. The clean
+-- solution is to capture the current SCHEMA STATE as a single baseline and
+-- treat that as migration zero.
+--
+-- ─── How to generate this file ──────────────────────────────────────────────
+--
+-- 1. Get the database URL from the CURRENT (old) Supabase project:
+--      Settings → Database → Connection string → URI (use the direct connection,
+--      not the pooler). It looks like:
+--        postgres://postgres.<ref>:<password>@aws-0-...pooler.supabase.com:5432/postgres
+--
+-- 2. Run pg_dump locally (requires postgres client tools — `brew install libpq` on Mac):
+--      pg_dump \
+--        --schema-only \
+--        --no-owner \
+--        --no-acl \
+--        --schema=public \
+--        --schema=storage \
+--        "<DATABASE_URL>" \
+--        > supabase/migrations/00000000_baseline.sql
+--
+-- 3. Manually clean the dump:
+--      - Remove `CREATE EXTENSION` lines that target system schemas Supabase
+--        already manages (extensions, auth, pgsodium).
+--      - Remove any `SET` statements at the top that reference roles that
+--        don't exist on the new project.
+--      - Keep all CREATE TABLE / CREATE TYPE / CREATE FUNCTION / CREATE TRIGGER
+--        / CREATE INDEX / CREATE POLICY statements in public schema.
+--
+-- 4. Verify on a fresh local Supabase:
+--      npx supabase stop && npx supabase start
+--      npx supabase db reset    # runs all migrations from scratch
+--      # If it errors, fix the dump and retry.
+--
+-- 5. Once green locally, you're ready to `supabase db push` to the new project.
+--
+-- ─── What goes on top of this baseline ──────────────────────────────────────
+--
+-- After this file replays the current schema, `00000001_role_model.sql` runs
+-- next. That migration:
+--   - Adds 'hr' and 'accounts' to the user_role enum (if not present)
+--   - Adds is_dept_lead, is_team_lead, managed_department_id, managed_team_id
+--     columns to employees
+--   - Migrates existing 'dept_lead'/'team_lead' users → 'employee' with flags
+--   - Creates employee_permissions table for per-user overrides
+--   - Creates effective_permissions view
+--
+-- It is idempotent and safe to re-run.
+--
+-- ─── Until you generate the real dump ───────────────────────────────────────
+--
+-- This placeholder is intentionally non-executable so you don't accidentally
+-- deploy an empty schema. Replace the SELECT below with the actual dump.
+-- ============================================================================
+
+-- Baseline placeholder is a no-op since remote schema is already initialized.
+SELECT 1;

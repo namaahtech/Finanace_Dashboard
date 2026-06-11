@@ -10,6 +10,18 @@ import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import axios from "axios";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 dayjs.extend(relativeTime);
 
@@ -44,8 +56,6 @@ function NoteCard({ note, onUpdate, onDelete }: {
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(note.title);
   const [draftContent, setDraftContent] = useState(note.content);
-  const [colorPicker, setColorPicker] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
   function save() {
@@ -71,40 +81,40 @@ function NoteCard({ note, onUpdate, onDelete }: {
     <div
       ref={cardRef}
       className={cn(
-        "group relative rounded-xl border transition-all overflow-hidden",
-        editing ? "shadow-lg z-20 border-theme-strong" : "hover:shadow-md cursor-pointer",
-        isColored ? "border-transparent" : "border-theme-border bg-theme-card"
+        "group relative rounded-md border transition-shadow overflow-hidden",
+        editing ? "shadow-lg z-20 border-primary/40" : "hover:shadow-md cursor-pointer border-border",
+        !isColored && "bg-card"
       )}
       style={cardStyle}
       onClick={() => { if (!editing) setEditing(true); }}
     >
       <div className="p-4">
         {editing ? (
-          <input
+          <Input
             autoFocus
             value={draftTitle}
             onChange={(e) => setDraftTitle(e.target.value)}
             placeholder="Title"
-            className="w-full bg-transparent font-bold text-sm text-theme-fg focus:outline-none mb-2 placeholder:text-theme-muted"
+            className="mb-2 h-8 px-0 bg-transparent border-0 font-semibold text-sm focus-visible:ring-0"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
           note.title && note.title !== "Untitled Note" && (
-            <p className="font-semibold text-sm text-theme-fg mb-2 truncate">{note.title}</p>
+            <p className="font-semibold text-sm text-foreground mb-2 truncate">{note.title}</p>
           )
         )}
 
         {editing ? (
-          <textarea
+          <Textarea
             value={draftContent}
             onChange={(e) => setDraftContent(e.target.value)}
             placeholder="Write something…"
             rows={5}
-            className="w-full bg-transparent text-sm text-theme-fg focus:outline-none resize-none placeholder:text-theme-muted leading-relaxed"
+            className="bg-transparent border-0 px-0 resize-none focus-visible:ring-0 text-sm leading-relaxed"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <p className="text-sm text-theme-muted whitespace-pre-wrap line-clamp-6 leading-relaxed">
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-6 leading-relaxed">
             {note.content || <span className="italic opacity-50">Empty note</span>}
           </p>
         )}
@@ -112,94 +122,96 @@ function NoteCard({ note, onUpdate, onDelete }: {
         {note.tags?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-3">
             {note.tags.map((t) => (
-              <span key={t} className="text-[10px] bg-theme-raised text-theme-muted px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide">{t}</span>
+              <Badge key={t} variant="secondary" className="text-xs font-normal">
+                {t}
+              </Badge>
             ))}
           </div>
         )}
 
         {editing ? (
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-theme-border" onClick={(e) => e.stopPropagation()}>
-            <div className="relative">
-              <button
-                onClick={() => setColorPicker(!colorPicker)}
-                className="h-7 w-7 rounded-lg hover:bg-theme-raised flex items-center justify-center text-theme-muted transition-all"
-              >
-                <Palette size={14} />
-              </button>
-              {colorPicker && (
-                <div className="absolute bottom-9 left-0 z-50 bg-theme-surface border border-theme-border rounded-xl shadow-xl p-2.5 flex gap-2">
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7">
+                  <Palette size={14} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-auto p-2.5">
+                <div className="flex gap-2">
                   {NOTE_COLORS.map((c) => (
                     <button
                       key={c.bg}
-                      onClick={() => { onUpdate(note.id, { color: c.bg }); setColorPicker(false); }}
+                      type="button"
+                      onClick={() => onUpdate(note.id, { color: c.bg })}
                       className={cn(
-                        "w-6 h-6 rounded-full border-2 transition-all hover:scale-110",
-                        note.color === c.bg ? "border-theme-strong scale-110" : "border-theme-border"
+                        "w-6 h-6 rounded-full border-2 transition-transform hover:scale-110",
+                        note.color === c.bg ? "border-foreground scale-110" : "border-border"
                       )}
                       style={{ background: c.bg }}
                       title={c.label}
                     />
                   ))}
                 </div>
-              )}
-            </div>
+              </PopoverContent>
+            </Popover>
             <div className="flex items-center gap-2">
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => { setEditing(false); setDraftTitle(note.title); setDraftContent(note.content); }}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-theme-muted hover:bg-theme-raised transition-all"
               >
                 Discard
-              </button>
-              <button
-                onClick={save}
-                className="px-4 py-1.5 rounded-lg bg-theme-primary text-white text-xs font-semibold transition-all"
-              >
+              </Button>
+              <Button type="button" size="sm" onClick={save}>
                 Save
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
-          <p className="text-[10px] text-theme-muted mt-3 font-medium">{dayjs(note.last_edited_at).fromNow()}</p>
+          <p className="text-xs text-muted-foreground mt-3">{dayjs(note.last_edited_at).fromNow()}</p>
         )}
       </div>
 
-      {/* Hover actions */}
       {!editing && (
         <div
-          className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all"
+          className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
           onClick={(e) => e.stopPropagation()}
         >
-          <button
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 bg-card/80 backdrop-blur"
             onClick={() => onUpdate(note.id, { is_pinned: !note.is_pinned })}
-            className="w-7 h-7 rounded-lg bg-theme-surface/80 backdrop-blur border border-theme-border flex items-center justify-center transition-all hover:bg-theme-raised"
             title={note.is_pinned ? "Unpin" : "Pin"}
           >
-            <Pin size={12} className={note.is_pinned ? "text-amber-500" : "text-theme-muted"} fill={note.is_pinned ? "currentColor" : "none"} />
-          </button>
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="w-7 h-7 rounded-lg bg-theme-surface/80 backdrop-blur border border-theme-border flex items-center justify-center transition-all hover:bg-theme-raised"
-            >
-              <MoreVertical size={12} className="text-theme-muted" />
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-8 z-50 w-36 bg-theme-surface border border-theme-border rounded-xl shadow-xl p-1">
-                <button
-                  onClick={() => { onUpdate(note.id, { status: "archived" }); setMenuOpen(false); }}
-                  className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-theme-raised text-theme-fg flex items-center gap-2"
-                >
-                  <Archive size={12} /> Archive
-                </button>
-                <button
-                  onClick={() => { onDelete(note.id); setMenuOpen(false); }}
-                  className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-rose-500/10 text-rose-500 flex items-center gap-2"
-                >
-                  <Trash2 size={12} /> Delete
-                </button>
-              </div>
-            )}
-          </div>
+            <Pin size={12} className={note.is_pinned ? "text-amber-500" : "text-muted-foreground"} fill={note.is_pinned ? "currentColor" : "none"} />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 bg-card/80 backdrop-blur"
+              >
+                <MoreVertical size={12} className="text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              <DropdownMenuItem onClick={() => onUpdate(note.id, { status: "archived" })}>
+                <Archive size={12} className="mr-2" /> Archive
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onDelete(note.id)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 size={12} className="mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
     </div>
@@ -280,27 +292,24 @@ export default function NotesPage() {
       title="Notes"
       subtitle="Quick notes, ideas and checklists"
       actions={
-        <button
-          onClick={() => setQuickOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity"
-        >
-          <Plus size={14} /> New Note
-        </button>
+        <Button onClick={() => setQuickOpen(true)} size="sm">
+          <Plus /> New Note
+        </Button>
       }
     >
       {/* Search */}
       <div className="flex items-center gap-3 mb-6">
         <div className="relative flex-1 max-w-sm">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
-          <input
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search notes…"
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-theme-border bg-theme-surface text-sm text-theme-fg placeholder:text-theme-muted focus:outline-none focus:border-theme-strong transition-colors"
+            className="pl-9 pr-9"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2">
-              <X size={13} className="text-theme-muted" />
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors" aria-label="Clear search">
+              <X size={13} />
             </button>
           )}
         </div>
@@ -312,8 +321,8 @@ export default function NotesPage() {
           ref={quickRef}
           onClick={() => setQuickOpen(true)}
           className={cn(
-            "rounded-xl border transition-all cursor-text bg-theme-card",
-            quickOpen ? "shadow-md border-theme-strong p-4" : "border-theme-border p-3 hover:border-theme-strong"
+            "rounded-xl border bg-card transition-all cursor-text",
+            quickOpen ? "shadow-sm border-foreground/20 p-4" : "border-border p-3 hover:border-foreground/20"
           )}
         >
           {quickOpen ? (
@@ -323,36 +332,26 @@ export default function NotesPage() {
                 value={quickTitle}
                 onChange={(e) => setQuickTitle(e.target.value)}
                 placeholder="Title"
-                className="w-full bg-transparent font-semibold text-sm text-theme-fg focus:outline-none placeholder:text-theme-muted"
+                className="w-full bg-transparent font-semibold text-sm text-foreground focus:outline-none placeholder:text-muted-foreground"
               />
-              <textarea
+              <Textarea
                 value={quickContent}
                 onChange={(e) => setQuickContent(e.target.value)}
                 placeholder="What's on your mind?"
                 rows={3}
-                className="w-full bg-transparent text-sm text-theme-fg focus:outline-none resize-none placeholder:text-theme-muted leading-relaxed"
+                className="border-0 px-0 py-0 bg-transparent shadow-none focus-visible:ring-0 resize-none leading-relaxed"
               />
-              <div className="flex items-center justify-between pt-2 border-t border-theme-border">
-                <div />
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { setQuickOpen(false); setQuickTitle(""); setQuickContent(""); }}
-                    className="px-3 py-1.5 text-xs font-semibold text-theme-muted hover:text-theme-fg transition-all"
-                  >
-                    Discard
-                  </button>
-                  <button
-                    onClick={saveQuick}
-                    disabled={creating}
-                    className="px-4 py-1.5 rounded-lg bg-theme-primary text-white text-xs font-semibold disabled:opacity-50"
-                  >
-                    Save Note
-                  </button>
-                </div>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                <Button variant="ghost" size="sm" onClick={() => { setQuickOpen(false); setQuickTitle(""); setQuickContent(""); }}>
+                  Discard
+                </Button>
+                <Button size="sm" onClick={saveQuick} disabled={creating}>
+                  Save Note
+                </Button>
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-3 text-theme-muted">
+            <div className="flex items-center gap-3 text-muted-foreground">
               <StickyNote size={16} />
               <span className="text-sm">Take a note…</span>
             </div>
@@ -363,29 +362,27 @@ export default function NotesPage() {
       {loading ? (
         <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4">
           {[...Array(8)].map((_, i) => (
-            <div
-              key={i}
-              className="mb-4 break-inside-avoid rounded-xl bg-theme-card border border-theme-border animate-pulse"
-              style={{ height: `${160 + (i % 3) * 50}px` }}
-            />
+            <div key={i} className="mb-4 break-inside-avoid">
+              <Skeleton style={{ height: `${160 + (i % 3) * 50}px` }} />
+            </div>
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-          <div className="h-14 w-14 rounded-xl bg-theme-raised border border-theme-border flex items-center justify-center">
-            <StickyNote size={24} className="text-theme-muted opacity-40" />
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center rounded-xl border border-dashed border-border bg-card">
+          <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center">
+            <StickyNote size={20} className="text-muted-foreground" />
           </div>
           <div>
-            <p className="font-semibold text-theme-fg mb-1">{search ? "No notes match your search" : "No notes yet"}</p>
-            <p className="text-sm text-theme-muted">{search ? "Try a different keyword" : "Create your first note above."}</p>
+            <p className="font-semibold text-foreground mb-1 text-sm">{search ? "No notes match your search" : "No notes yet"}</p>
+            <p className="text-xs text-muted-foreground">{search ? "Try a different keyword" : "Create your first note above."}</p>
           </div>
         </div>
       ) : (
         <div className="space-y-8">
           {pinned.length > 0 && (
             <div className="space-y-3">
-              <p className="section-label px-1 flex items-center gap-2">
-                <Pin size={10} fill="currentColor" /> Pinned · {pinned.length}
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground px-1">
+                <Pin size={11} fill="currentColor" /> Pinned · {pinned.length}
               </p>
               <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4">
                 {pinned.map((note) => (
@@ -399,7 +396,7 @@ export default function NotesPage() {
 
           {rest.length > 0 && (
             <div className="space-y-3">
-              {pinned.length > 0 && <p className="section-label px-1">All Notes · {rest.length}</p>}
+              {pinned.length > 0 && <p className="text-xs font-semibold text-muted-foreground px-1">All notes · {rest.length}</p>}
               <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4">
                 {rest.map((note) => (
                   <div key={note.id} className="mb-4 break-inside-avoid">

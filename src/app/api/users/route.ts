@@ -1,29 +1,44 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import nodemailer from "nodemailer";
+import { provisionZohoMailbox, generateTempPassword } from "@/lib/zoho-provisioning";
 
 export async function POST(req: Request) {
   try {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
 
-    const { name, email, role, department, designation, matrix_role, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary, salary_min, salary_max, kpi_weight, kra_weight, behavioral_weight, enable_salary_linkage, commission_enabled, monthly_sales_target, salary_slab_id } = body;
+    const { name, email, role, department, designation, matrix_role, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary, salary_min, salary_max, kpi_weight, kra_weight, behavioral_weight, enable_salary_linkage, commission_enabled, monthly_sales_target, salary_slab_id, create_zoho_mail } = body;
 
     if (!name || !email || !role) {
       return NextResponse.json({ error: "Missing highly critical parameters (Name, Email, Role)" }, { status: 400 });
     }
 
-    const VALID_ROLES = ["admin", "dept_lead", "team_lead", "employee", "intern"];
+    const VALID_ROLES = ["admin", "hr", "accounts", "employee", "intern", "dept_lead", "team_lead"];
     if (!VALID_ROLES.includes(role)) {
       return NextResponse.json({ error: `Invalid role "${role}". Must be one of: ${VALID_ROLES.join(", ")}` }, { status: 400 });
     }
 
-    // 1. Generate an automated generic password (e.g. Namaah@1234)
-    const generatedPassword = `Namaah@1234`;
+    // Build professional email address: firstname.lastname@domain
+    const parts        = name.trim().toLowerCase().split(/\s+/);
+    const localPart    = parts.length >= 2
+      ? `${parts[0]}.${parts[parts.length - 1]}`
+      : parts[0];
+    
+    // Prefer env var, then default to mail.namaah.io, then dynamically query configuration
+    let mailDomain = process.env.ZOHO_MAIL_DOMAIN || "mail.namaah.io";
+    const { data: orgCfg } = await supabase.from("zoho_config").select("org_domain").maybeSingle();
+    if (orgCfg?.org_domain) {
+      mailDomain = orgCfg.org_domain;
+    }
+    const professionalEmail = `${localPart}@${mailDomain}`;
+
+    // 1. Generate an automated temporary password (avoid sequential characters)
+    const generatedPassword = generateTempPassword();
 
     // 2. Map robust Auth user via Backend Service Role
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
+      email: professionalEmail,
       password: generatedPassword,
       email_confirm: true,
       user_metadata: { role, full_name: name, department }
@@ -41,7 +56,9 @@ export async function POST(req: Request) {
     const insertData: any = {
       id: user.id,   // Mapped to strict auth.user (RLS)
       name,
-      email,
+      email: professionalEmail, // Primary login identity matches Supabase Auth email
+      personal_email: email, // Store personal email in personal_email column
+      zoho_email: professionalEmail, // Store professional email in zoho_email column
       employee_id: body.employee_id || employee_id_gen,
       role,
       department,
@@ -79,6 +96,39 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Database Reference Matrix Failed: " + dbError.message }, { status: 500 });
     }
 
+    // ── Zoho Mail Auto-Provisioning Gate ──────────────────────────────────────
+    if (create_zoho_mail) {
+      try {
+        const zohoResult = await provisionZohoMailbox({
+          employeeId:  user.id,
+          name,
+          designation: designation || "",
+          department:  department  || "",
+          tempPassword: generatedPassword,
+        });
+
+        if (!zohoResult?.zoho_account_id) {
+          // Rollback Database entry
+          await supabase.from("employees").delete().eq("id", user.id);
+          // Rollback Auth user
+          await supabase.auth.admin.deleteUser(user.id);
+          
+          return NextResponse.json({ 
+            error: "Zoho Mail account creation failed: Zoho did not return an active account/mailbox ID. Please check seat availability or console credentials." 
+          }, { status: 400 });
+        }
+      } catch (zohoErr: any) {
+        // Rollback Database entry
+        await supabase.from("employees").delete().eq("id", user.id);
+        // Rollback Auth user
+        await supabase.auth.admin.deleteUser(user.id);
+
+        return NextResponse.json({ 
+          error: `Zoho Mail account creation failed: ${zohoErr.message}` 
+        }, { status: 400 });
+      }
+    }
+
     // 4. Fetch the dynamic SMTP overrides from the active System Config node
     const { data: config } = await supabase.from("system_config").select("smtp_host, smtp_port, smtp_user, smtp_pass, company_name").single();
 
@@ -99,35 +149,52 @@ export async function POST(req: Request) {
         to: email,
         subject: `Welcome to ${config.company_name || "Namaah Nexus"} - Onboarding Initiated`,
         html: `
-          <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+          <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
             <div style="background-color: #0f172a; color: #ffffff; padding: 32px 20px; text-align: center;">
               <h1 style="margin:0; letter-spacing: 4px; font-size: 24px; font-weight: 800; text-transform: uppercase;">${config.company_name || "NAMAAH PULSE"}</h1>
               <p style="margin-top: 8px; opacity: 0.8; font-size: 14px;">Onboarding Portal & Identity Management</p>
             </div>
             <div style="padding: 40px; color: #1e293b; line-height: 1.6;">
               <h2 style="margin-top: 0; font-size: 20px; font-weight: 700;">Welcome Onboard, ${name}!</h2>
-              <p>Your professional account at <b>${config.company_name || "Namaah Nexus"}</b> has been successfully initialized. You now have access to the enterprise portal with the following credentials:</p>
+              <p>Your professional account at <b>${config.company_name || "Namaah Nexus"}</b> has been successfully initialized. Please follow these step-by-step instructions to connect to your workspace:</p>
               
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 24px; border-radius: 8px; margin: 24px 0;">
-                <div style="margin-bottom: 12px; display: flex; align-items: center;">
-                  <strong style="width: 120px; color: #64748b; font-size: 12px; text-transform: uppercase;">Portal Role</strong>
-                  <span style="color: #0f172a; font-weight: 600; text-transform: capitalize;">${role}</span>
+              <div style="margin: 24px 0; font-size: 13px;">
+                <div style="margin-bottom: 16px; padding: 16px; border-left: 4px solid #3b82f6; background-color: #f0f9ff; border-radius: 8px;">
+                  <strong style="color: #1d4ed8; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px; letter-spacing: 1px;">Step 1: First-Time Login (Personal Email)</strong>
+                  Log in to the portal using your <b>Personal Email</b>: <span style="font-family: monospace; font-weight: bold; color: #0f172a; background: #e0f2fe; padding: 2px 6px; border-radius: 4px;">${email}</span> and the Temporary Password below.
                 </div>
-                <div style="margin-bottom: 12px; display: flex; align-items: center;">
-                  <strong style="width: 120px; color: #64748b; font-size: 12px; text-transform: uppercase;">Login Email</strong>
-                  <span style="color: #0f172a; font-weight: 600;">${email}</span>
+
+                <div style="margin-bottom: 16px; padding: 16px; border-left: 4px solid #f59e0b; background-color: #fefbeb; border-radius: 8px;">
+                  <strong style="color: #b45309; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px; letter-spacing: 1px;">Step 2: Password Reset & Onboarding</strong>
+                  Once logged in, a <b>Change Password</b> modal will prompt you. Enter your new password and sign the Onboarding Consent Form to initialize your identity profile.
                 </div>
-                <div style="display: flex; align-items: center;">
-                  <strong style="width: 120px; color: #64748b; font-size: 12px; text-transform: uppercase;">Temporary Pass</strong>
-                  <code style="background:#e2e8f0; color: #0f172a; padding:4px 8px; border-radius:4px; font-family: monospace; font-size: 14px; font-weight: 700;">${generatedPassword}</code>
+
+                <div style="margin-bottom: 16px; padding: 16px; border-left: 4px solid #10b981; background-color: #ecfdf5; border-radius: 8px;">
+                  <strong style="color: #047857; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px; letter-spacing: 1px;">Step 3: Future Logins (Professional Email Only)</strong>
+                  After completing onboarding, access using your personal email will be permanently blocked. Moving forward, you must log in using your official <b>Professional Email</b>: <span style="font-family: monospace; font-weight: bold; color: #0f172a; background: #d1fae5; padding: 2px 6px; border-radius: 4px;">${professionalEmail}</span> with your newly updated password.
                 </div>
               </div>
 
-              <p style="font-size: 13px; color: #fbbf24; background: #fffbeb; border: 1px solid #fef3c7; padding: 12px; border-radius: 6px;">
-                <b>Security Action Required:</b> Please log in to the portal and update this generic password in your profile settings immediately to ensure account integrity.
-              </p>
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 24px; border-radius: 8px; margin: 24px 0;">
+                <div style="margin-bottom: 12px; display: flex; align-items: center;">
+                  <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">Portal Role</strong>
+                  <span style="color: #0f172a; font-weight: 600; text-transform: capitalize;">${role}</span>
+                </div>
+                <div style="margin-bottom: 12px; display: flex; align-items: center;">
+                  <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">1st Login Email</strong>
+                  <span style="color: #0f172a; font-weight: 600;">${email}</span>
+                </div>
+                <div style="margin-bottom: 12px; display: flex; align-items: center;">
+                  <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">Future Login Email</strong>
+                  <span style="color: #0f172a; font-weight: 600;">${professionalEmail}</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                  <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">Temporary Pass</strong>
+                  <code style="background:#e2e8f0; color: #0f172a; padding:4px 8px; border-radius:4px; font-family: monospace; font-size: 14px; font-weight: 700;">${generatedPassword}</code>
+                </div>
+              </div>
               
-              <div style="margin-top: 32px; border-top: 1px solid #f1f5f9; pt: 24px;">
+              <div style="margin-top: 32px; border-top: 1px solid #f1f5f9; padding-top: 24px;">
                 <p style="margin: 0; font-weight: 700; color: #0f172a;">Identity Management System</p>
                 <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 12px;">Automated Onboarding Engine · ${config.company_name || "Namaah Nexus"}</p>
               </div>
@@ -159,7 +226,7 @@ export async function GET(req: Request) {
     const search = searchParams.get("search");
     const role = searchParams.get("role");
 
-    let query = supabase.from("employees").select("*", { count: 'exact' });
+    let query = supabase.from("employees").select("*, deactivator:deactivated_by(name, email, employee_id, role)", { count: 'exact' });
 
     if (role) {
       query = query.eq("role", role);
@@ -180,7 +247,7 @@ export async function GET(req: Request) {
 
       let fallbackQuery = supabase
         .from("employees")
-        .select("id, name, email, employee_id, role, department, designation, team_id, joining_date, employment_type, salary_structure, base_salary, is_active, created_at, updated_at", { count: 'exact' });
+        .select("id, name, email, personal_email, zoho_email, employee_id, role, department, designation, team_id, joining_date, employment_type, salary_structure, base_salary, is_active, deactivated_by, deactivated_at, created_at, updated_at", { count: 'exact' });
 
       if (role) {
         fallbackQuery = fallbackQuery.eq("role", role);

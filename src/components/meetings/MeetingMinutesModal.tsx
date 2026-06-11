@@ -264,7 +264,7 @@ export function MeetingMinutesModal({ meeting, currentUserId, onClose, isAdmin =
                   onChange={e => setTranscript(e.target.value)}
                   placeholder="Paste the full transcript here. You can paste from Zoom, Google Meet recordings, or type meeting notes. The AI will analyze and extract key information automatically..."
                   rows={16}
-                  className="w-full bg-theme-bg border border-theme-border rounded-xl px-4 py-3 text-sm text-theme-fg outline-none focus:border-theme-primary/50 resize-none font-mono leading-relaxed placeholder:font-sans"
+                  className="w-full bg-theme-bg border border-theme-border rounded-xl px-4 py-3 text-sm text-theme-fg outline-none focus:border-theme-primary/50 resize-none tabular-nums leading-relaxed placeholder:font-sans"
                 />
               </div>
               <button
@@ -469,7 +469,7 @@ export function MeetingMinutesModal({ meeting, currentUserId, onClose, isAdmin =
                   {/* Transcript preview (read-only collapsed) */}
                   {minutes.transcript && (
                     <Section icon={FileText} title="Transcript" defaultOpen={false}>
-                      <pre className="text-xs text-theme-muted whitespace-pre-wrap leading-relaxed font-mono max-h-64 overflow-y-auto">
+                      <pre className="text-xs text-theme-muted whitespace-pre-wrap leading-relaxed tabular-nums max-h-64 overflow-y-auto">
                         {minutes.transcript}
                       </pre>
                     </Section>

@@ -3,9 +3,16 @@
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useToast } from "@/components/ui/Toast";
-import { Badge } from "@/components/ui/Badge";
+import { useToast } from "@/components/ui/ToastLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
   Layers, Plus, X, Edit2, Trash2, Copy, Check, Search, Loader2,
@@ -306,10 +313,12 @@ export default function TemplatesPage() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-theme-muted">Category</label>
-                  <select value={form.category} onChange={(e)=>setForm({...form,category:e.target.value})}
-                    className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-sm text-theme-fg outline-none focus:border-theme-primary">
-                    {["general","hr","finance","ops","sales"].map(c=><option key={c} value={c}>{c.toUpperCase()}</option>)}
-                  </select>
+                  <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+                    <SelectTrigger className="w-full h-10"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["general","hr","finance","ops","sales"].map(c => <SelectItem key={c} value={c}>{c.toUpperCase()}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -326,7 +335,7 @@ export default function TemplatesPage() {
                 <label className="text-xs font-semibold text-theme-muted">Variables JSON <span className="text-theme-muted font-normal">(optional)</span></label>
                 <input value={form.variables} onChange={(e)=>setForm({...form,variables:e.target.value})}
                   placeholder='[{"name":"employee_name"},{"name":"joining_date"}]'
-                  className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-xs text-theme-fg outline-none focus:border-theme-primary font-mono" />
+                  className="w-full h-10 px-3 rounded-xl border border-theme-border bg-theme-page text-xs text-theme-fg outline-none focus:border-theme-primary tabular-nums" />
               </div>
             </div>
             <div className="flex justify-end gap-2 px-6 py-4 border-t border-theme-border">
@@ -362,7 +371,7 @@ export default function TemplatesPage() {
                   <p className="text-[10px] font-bold text-theme-muted uppercase mb-2">Variables</p>
                   <div className="flex flex-wrap gap-1.5">
                     {preview.variables.map(v=>(
-                      <span key={v.name} className="px-2 py-1 rounded-lg bg-theme-primary/10 text-theme-primary text-xs font-mono">{`{{${v.name}}}`}</span>
+                      <span key={v.name} className="px-2 py-1 rounded-lg bg-theme-primary/10 text-theme-primary text-xs tabular-nums">{`{{${v.name}}}`}</span>
                     ))}
                   </div>
                 </div>

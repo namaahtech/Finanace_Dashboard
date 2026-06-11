@@ -16,9 +16,9 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { cn, formatDate } from "@/lib/utils";
-import { Badge } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { supabase } from "@/lib/supabase";
 

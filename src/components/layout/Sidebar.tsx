@@ -2,20 +2,38 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard, CalendarDays, TrendingUp, Wallet, FileText, Zap, Users,
   Settings, LogOut, Sun, Moon, ChevronRight, Building2,
   GitBranch, Receipt, CreditCard, Tag, PiggyBank, Handshake,
   MessageSquare, CalendarClock, IndianRupee,
   Shield, RefreshCw, Mail, Ticket,
-  Network, Briefcase, ChevronLeft, BarChart3, ClipboardList, Folder, User,
-  BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award,
+  Network, Briefcase, BarChart3, ClipboardList, Folder, User,
+  BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award, GraduationCap,
   Inbox, PenLine, Send, Paperclip, Layers, KeyRound,
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import {
+  Sidebar as ShadcnSidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/components/ui/ToastLegacy";
+import { playMessagePing } from "@/lib/sounds";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -23,21 +41,21 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.ElementType;
-  moduleKey: string; // must match role_permissions.module_key in DB
+  moduleKey: string;
 };
 type NavSection = { title: string; items: NavItem[] };
 
 // ─── MASTER NAV ───────────────────────────────────────────────
-// Single source of truth for ALL possible routes in the app.
-// The DB (role_permissions) controls which items are visible per role.
-// Admin enables/disables any module for any role from /admin/permissions.
-// When a module is enabled, the FULL existing page renders — no code changes needed.
+// Single source of truth for ALL possible routes. The DB (role_permissions)
+// controls which items are visible per role.
 
 const MASTER_NAV: NavSection[] = [
   {
     title: "Organization",
     items: [
       { href: "/admin",             label: "Admin Overview",   icon: LayoutDashboard, moduleKey: "admin_dashboard" },
+      { href: "/hr",                label: "HR Hub",           icon: LayoutDashboard, moduleKey: "hr_dashboard" },
+      { href: "/accounts",          label: "Accounts Hub",     icon: LayoutDashboard, moduleKey: "accounts_dashboard" },
       { href: "/department-lead/dashboard", label: "Manager Hub",      icon: LayoutDashboard, moduleKey: "manager_dashboard" },
       { href: "/dashboard",         label: "My Dashboard",     icon: LayoutDashboard, moduleKey: "my_dashboard" },
       { href: "/admin/projects",    label: "Projects",         icon: Folder,          moduleKey: "projects" },
@@ -79,13 +97,13 @@ const MASTER_NAV: NavSection[] = [
     title: "Operations",
     items: [
       { href: "/admin/attendance",     label: "Attendance",      icon: CalendarDays,  moduleKey: "attendance" },
+      { href: "/admin/priority",       label: "Priority Payout", icon: Zap,           moduleKey: "priority_payout" },
+      { href: "/admin/claims",         label: "Claims",          icon: FileText,      moduleKey: "claims" },
+      { href: "/admin/reimbursements", label: "Reimbursements",  icon: Receipt,       moduleKey: "reimbursements" },
+      { href: "/admin/incentives",     label: "Incentives",      icon: Wallet,        moduleKey: "incentives" },
       { href: "/admin/kpi",            label: "KPI / KRA",       icon: TrendingUp,    moduleKey: "kpi_kra" },
       { href: "/admin/payroll",        label: "Payroll",         icon: IndianRupee,   moduleKey: "payroll" },
       { href: "/admin/payslips",       label: "Payslips",        icon: FileText,      moduleKey: "payslips_management" },
-      { href: "/admin/incentives",     label: "Incentives",      icon: Wallet,        moduleKey: "incentives" },
-      { href: "/admin/claims",         label: "Claims",          icon: FileText,      moduleKey: "claims" },
-      { href: "/admin/reimbursements", label: "Reimbursements",  icon: Receipt,       moduleKey: "reimbursements" },
-      { href: "/admin/priority",       label: "Priority Payout", icon: Zap,           moduleKey: "priority_payout" },
       { href: "/admin/support",        label: "Support Center",  icon: Ticket,        moduleKey: "support_admin" },
     ],
   },
@@ -124,18 +142,26 @@ const MASTER_NAV: NavSection[] = [
   {
     title: "My Account",
     items: [
+      // Identity
       { href: "/dashboard/profile",        label: "My Profile",      icon: User,         moduleKey: "my_profile" },
+      // Daily workflow
       { href: "/dashboard/attendance",     label: "My Attendance",   icon: CalendarDays, moduleKey: "my_attendance" },
+      { href: "/dashboard/calendar",       label: "My Calendar",     icon: CalendarDays, moduleKey: "my_calendar" },
+      { href: "/dashboard/meetings",       label: "Meetings",        icon: CalendarClock,moduleKey: "my_meetings" },
+      { href: "/dashboard/messages",       label: "Messages",        icon: MessageSquare,moduleKey: "my_messages" },
+      { href: "/dashboard/projects",       label: "My Projects",     icon: Folder,       moduleKey: "my_projects" },
+      // Manager visibility
+      { href: "/department-lead/teams",     label: "My Teams",        icon: Building2,    moduleKey: "manager_teams" },
+      { href: "/department-lead/org-chart", label: "My Org Chart",    icon: Network,      moduleKey: "manager_org_chart" },
+      // Performance & compensation (periodic)
       { href: "/dashboard/performance",    label: "Performance",     icon: TrendingUp,   moduleKey: "my_performance" },
-      { href: "/dashboard/incentives",     label: "My Incentives",   icon: Wallet,       moduleKey: "my_incentives" },
       { href: "/dashboard/payslips",       label: "My Payslips",     icon: IndianRupee,  moduleKey: "my_payslips" },
+      { href: "/dashboard/incentives",     label: "My Incentives",   icon: Wallet,       moduleKey: "my_incentives" },
       { href: "/dashboard/reimbursements", label: "Reimbursements",  icon: Receipt,      moduleKey: "my_reimbursements" },
       { href: "/dashboard/priority",       label: "Priority Payout", icon: Zap,          moduleKey: "my_priority_payout" },
-      { href: "/dashboard/messages",       label: "Messages",        icon: MessageSquare,moduleKey: "my_messages" },
-      { href: "/dashboard/meetings",       label: "Meetings",        icon: CalendarClock,moduleKey: "my_meetings" },
-      { href: "/dashboard/calendar",       label: "My Calendar",     icon: CalendarDays, moduleKey: "my_meetings" },
-      { href: "/department-lead/teams",     label: "My Teams",        icon: Building2,    moduleKey: "manager_teams" },
-      { href: "/department-lead/org-chart", label: "My Org Chart",   icon: Network,      moduleKey: "manager_org_chart" },
+      // Growth
+      { href: "/dashboard/academy",        label: "Academy",         icon: GraduationCap,moduleKey: "my_academy" },
+      // Help (last)
       { href: "/dashboard/support",        label: "Support & Help",  icon: Ticket,       moduleKey: "support_user" },
     ],
   },
@@ -144,52 +170,184 @@ const MASTER_NAV: NavSection[] = [
     items: [
       { href: "/admin/analytics",   label: "Analytics",     icon: BarChart3,    moduleKey: "analytics" },
       { href: "/admin/permissions", label: "Permissions",   icon: Shield,       moduleKey: "permissions_control" },
-      { href: "/admin/audit",       label: "Audit Log",     icon: ClipboardList,moduleKey: "system_config" },
+      { href: "/admin/audit",       label: "Audit Log",     icon: ClipboardList,moduleKey: "audit_log" },
       { href: "/admin/report",      label: "Feature Report",icon: ClipboardList,moduleKey: "feature_report" },
       { href: "/admin/config",      label: "System Config", icon: Settings,     moduleKey: "system_config" },
     ],
   },
 ];
 
-// ─── Role badge styles ────────────────────────────────────────
+// ─── Role badge variant ───────────────────────────────────────
 
-const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
-  admin:     { label: "Admin",          cls: "bg-purple-500/10 text-purple-500" },
-  dept_lead: { label: "Dept Lead",      cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-  team_lead: { label: "Team Lead",      cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
-  employee:  { label: "Employee",       cls: "bg-theme-raised text-theme-muted" },
-  intern:    { label: "Intern",         cls: "bg-indigo-500/10 text-indigo-500" },
-};
+function roleBadge(role?: string) {
+  const map: Record<string, { label: string; className: string }> = {
+    admin:    { label: "Admin",    className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/20" },
+    hr:       { label: "HR",       className: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/20" },
+    accounts: { label: "Accounts", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
+    employee: { label: "Employee", className: "" },
+    intern:   { label: "Intern",   className: "bg-indigo-500/15 text-indigo-500 border-indigo-500/20" },
+    dept_lead: { label: "Dept Lead", className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/20" },
+    team_lead: { label: "Team Lead", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
+  };
+  return map[role ?? "employee"] ?? map.employee;
+}
+
+function initials(name?: string) {
+  return (name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+}
 
 // ─── Sidebar component ────────────────────────────────────────
 
-interface SidebarProps {
-  collapsed?: boolean;
-  onToggle?: () => void;
-}
-
-export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
+export function Sidebar() {
   const { user, permissions, logout } = useAuth();
-  const pathname  = usePathname();
+  const pathname = usePathname();
   const { theme, setTheme } = useTheme();
-  const navRef    = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
 
-  const roleInfo = ROLE_BADGE[user?.role ?? "employee"] ?? ROLE_BADGE.employee;
+  const role = roleBadge(user?.role);
+
+  const [unreadCount, setUnreadCount] = useState(0);
+  const { showToast } = useToast();
+
+  // Play dual-tone chime sound programmatically via browser Web Audio API
+  const playChimeSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const now = ctx.currentTime;
+
+      // Note E5
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(659.25, now);
+      gain1.gain.setValueAtTime(0.15, now);
+      gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.35);
+
+      // Note A5 starting slightly later
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = "sine";
+      osc2.frequency.setValueAtTime(880, now + 0.12);
+      gain2.gain.setValueAtTime(0.15, now + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.5);
+    } catch (e) {
+      console.error("Audio Context playback failed", e);
+    }
+  };
+
+  // Show desktop Notification
+  const showDesktopNotification = (msg: { id: string; sender_name: string; subject: string; is_internal?: boolean }) => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      const typeLabel = msg.is_internal ? "INTERNAL" : "EXTERNAL";
+      const notification = new Notification(`[${typeLabel}] New Mail from ${msg.sender_name}`, {
+        body: msg.subject || "(No Subject)",
+        icon: "/icon.png",
+        tag: msg.id,
+      });
+
+      notification.onclick = () => {
+        window.focus();
+        window.location.href = `/admin/mail/inbox?select_id=${msg.id}`;
+      };
+    }
+  };
+
+  // Request browser notification permissions on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+  }, []);
+
+  // Fetch initial unread count and subscribe to realtime broadcast channels
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchCount = async () => {
+      const { count, error } = await supabase
+        .from("mail_messages")
+        .select("*", { count: "exact", head: true })
+        .eq("employee_id", user.id)
+        .eq("folder", "Inbox")
+        .eq("is_read", false);
+
+      if (!error && count !== null) {
+        setUnreadCount(count);
+      }
+    };
+
+    fetchCount();
+
+    const channel = supabase
+      .channel("mail_realtime_sidebar")
+      .on("broadcast", { event: "new_mail" }, (payload: any) => {
+        if (payload.payload && payload.payload.employee_id === user.id) {
+          playMessagePing();
+          fetchCount();
+          showDesktopNotification(payload.payload);
+
+          const isInternal = payload.payload.is_internal;
+          const senderName = payload.payload.sender_name || "Namaah";
+          const subject = payload.payload.subject || "(No Subject)";
+
+          const typeBadge = isInternal ? (
+            <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-md">
+              Internal
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-500 border border-rose-500/25 rounded-md shadow-sm animate-pulse">
+              External
+            </span>
+          );
+
+          showToast(
+            <div className="flex flex-col gap-1 text-left">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-zinc-900 dark:text-white text-xs">New Mail from {senderName}</span>
+                {typeBadge}
+              </div>
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                {subject}
+              </span>
+            </div>,
+            "info",
+            () => {
+              window.location.href = `/admin/mail/inbox?select_id=${payload.payload.id}`;
+            }
+          );
+        }
+      })
+      .on("broadcast", { event: "mail_status_changed" }, (payload: any) => {
+        if (payload.payload && payload.payload.employee_id === user.id) {
+          fetchCount();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   // ── Permission filtering ──────────────────────────────────
-  // Uses MASTER_NAV so ANY module enabled in DB will show up, regardless of role.
-  // - permissions null  → permissions still loading (AuthProvider ensures this is very brief)
-  //                       show all items as safe fallback (DashboardShell loading state hides the flash)
-  // - perm not found    → module not in DB for this role → hidden
-  // - perm.can_view     → respect the DB value
   const sections: NavSection[] = MASTER_NAV
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => {
-        // While permissions are loading, hide all (DashboardShell loading state handles the wait)
         if (!permissions) return false;
         const perm = permissions[item.moduleKey];
-        // No DB row for this module/role = not enabled = hidden
         if (!perm) return false;
         return perm.can_view;
       }),
@@ -204,7 +362,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
     }
   }, []);
 
-  const handleScroll = (e: React.UIEvent<HTMLElement>) => {
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     sessionStorage.setItem("sidebar-scroll", e.currentTarget.scrollTop.toString());
   };
 
@@ -224,129 +382,182 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
     return false;
   };
 
+  // ── Accordion section state — only one open at a time ──
+  const activeSectionTitle = useMemo(() => {
+    for (const s of sections) {
+      if (s.items.some((i) => isActive(i.href))) return s.title;
+    }
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections, pathname]);
+
+  const [openSection, setOpenSection] = useState<string | null | undefined>(undefined);
+  const hydrated = useRef(false);
+
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    try {
+      const raw = sessionStorage.getItem("sidebar-open-section");
+      if (raw !== null) setOpenSection(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  const toggleSection = (title: string) => {
+    setOpenSection((prev) => {
+      const current = prev === undefined ? activeSectionTitle : prev;
+      const next = current === title ? null : title;
+      try { sessionStorage.setItem("sidebar-open-section", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const isSectionOpen = (title: string) => {
+    const current = openSection === undefined ? activeSectionTitle : openSection;
+    return current === title;
+  };
+
   return (
-    <aside className={cn(
-      "relative flex h-screen flex-col flex-shrink-0 transition-all duration-300 ease-in-out z-50",
-      "bg-sidebar/95 backdrop-blur-xl border-r border-sidebar shadow-2xl shadow-black/10",
-      collapsed ? "w-[72px]" : "w-64"
-    )}>
-      {/* Header */}
-      <div className={cn(
-        "flex h-[60px] items-center border-b border-sidebar transition-all duration-300",
-        collapsed ? "justify-center px-0" : "justify-between px-5"
-      )}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-theme-primary text-white font-black text-sm">
+    <ShadcnSidebar collapsible="icon" className="border-r border-sidebar-border">
+      <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-semibold">
             N
           </div>
-          {!collapsed && (
-            <span className="text-sm font-bold text-theme-fg tracking-tight truncate">
-              Namaah Nexus
-            </span>
-          )}
+          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+            <p className="text-sm font-semibold tracking-tight truncate">Namaah Nexus</p>
+            <p className="text-[11px] text-muted-foreground truncate">Workspace</p>
+          </div>
         </div>
-        {!collapsed && (
-          <button
-            onClick={onToggle}
-            className="p-1.5 rounded-md hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-colors"
-          >
-            <ChevronLeft size={15} strokeWidth={2.5} />
-          </button>
-        )}
-      </div>
+      </SidebarHeader>
 
-      {/* Expand button when collapsed */}
-      {collapsed && (
-        <button
-          onClick={onToggle}
-          className="absolute -right-3 top-[82px] z-20 flex h-6 w-6 items-center justify-center rounded-full bg-theme-surface border border-theme-border text-theme-muted hover:text-theme-fg shadow-sm transition-all"
-        >
-          <ChevronRight size={12} strokeWidth={2.5} />
-        </button>
-      )}
+      <SidebarContent ref={navRef} onScroll={handleScroll} className="gap-0 px-2 py-2">
+        {sections.map((section) => {
+          const open = isSectionOpen(section.title);
+          const sectionHasActive = section.items.some((i) => isActive(i.href));
+          return (
+            <SidebarGroup key={section.title} className="py-0.5">
+              <button
+                type="button"
+                onClick={() => toggleSection(section.title)}
+                aria-expanded={open}
+                className="group/label group-data-[collapsible=icon]:hidden flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent/40"
+              >
+                <SidebarGroupLabel asChild>
+                  <span
+                    className={cn(
+                      "text-xs font-semibold transition-colors",
+                      sectionHasActive || open
+                        ? "text-foreground"
+                        : "text-muted-foreground group-hover/label:text-foreground",
+                    )}
+                  >
+                    {section.title}
+                  </span>
+                </SidebarGroupLabel>
+                <ChevronRight
+                  size={13}
+                  className={cn(
+                    "text-muted-foreground transition-transform duration-200 ease-out",
+                    open && "rotate-90 text-foreground",
+                  )}
+                />
+              </button>
 
-      {/* Nav */}
-      <nav
-        ref={navRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5 scrollbar-hide"
-      >
-        {sections.map((section) => (
-          <div key={section.title}>
-            {!collapsed && (
-              <p className="section-label px-2 mb-2">{section.title}</p>
-            )}
-            <ul className="space-y-0.5">
-              {section.items.map(({ href, label, icon: Icon }) => {
-                const active = isActive(href);
-                return (
-                  <li key={href}>
-                    <Link
-                      href={href}
-                      scroll={false}
-                      title={collapsed ? label : undefined}
-                      className={cn(
-                        "flex items-center rounded-lg transition-all duration-150",
-                        collapsed ? "h-10 w-10 mx-auto justify-center" : "gap-2.5 px-3 py-2",
-                        active
-                          ? "bg-theme-primary/10 text-theme-primary"
-                          : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg"
-                      )}
-                    >
-                      <Icon size={15} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
-                      {!collapsed && (
-                        <span className="truncate text-sm font-medium">{label}</span>
-                      )}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </nav>
+              {/* Animated expand/collapse — grid-rows trick (no JS height calc) */}
+              <div
+                className={cn(
+                  "grid transition-[grid-template-rows] duration-200 ease-out",
+                  "group-data-[collapsible=icon]:grid-rows-[1fr]",
+                  open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                )}
+              >
+                <div className="overflow-hidden">
+                  <SidebarGroupContent
+                    className={cn(
+                      "mt-1 ml-3 border-l border-sidebar-border/60 pl-2",
+                      // No indent / guide in icon-collapsed mode
+                      "group-data-[collapsible=icon]:ml-0 group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:border-l-0 group-data-[collapsible=icon]:mt-0",
+                    )}
+                  >
+                    <SidebarMenu className="gap-0.5">
+                      {section.items.map(({ href, label, icon: Icon }) => {
+                        const active = isActive(href);
+                        return (
+                          <SidebarMenuItem key={href}>
+                            <SidebarMenuButton
+                              asChild
+                              isActive={active}
+                              tooltip={label}
+                              className="h-8 rounded-md text-sm font-normal data-[active=true]:bg-sidebar-accent data-[active=true]:text-foreground data-[active=true]:font-medium"
+                            >
+                              <Link href={href} scroll={false} className="flex items-center justify-between w-full">
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <Icon className="size-4 shrink-0" />
+                                  <span className="truncate">{label}</span>
+                                </span>
+                                {(label === "Inbox" || label === "Mail Hub") && unreadCount > 0 && (
+                                  <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white leading-none">
+                                    {unreadCount}
+                                  </span>
+                                )}
+                              </Link>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </div>
+              </div>
+            </SidebarGroup>
+          );
+        })}
+      </SidebarContent>
 
-      {/* Footer */}
-      <div className="border-t border-sidebar p-3 space-y-2">
-        {!collapsed && (
-          <div className="rounded-xl bg-gradient-to-br from-theme-raised/80 to-theme-raised/30 border border-theme-border/50 px-3 py-3 shadow-sm mb-2 group">
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-              <p className="text-xs font-bold text-theme-fg truncate group-hover:text-theme-primary transition-colors">{user?.name ?? "—"}</p>
-              <span className={cn(
-                "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0 shadow-sm",
-                roleInfo.cls
-              )}>
-                {roleInfo.label}
-              </span>
+      <SidebarFooter className="gap-2 border-t border-sidebar-border p-2">
+        {/* User card */}
+        <div className="group-data-[collapsible=icon]:hidden flex items-center gap-2.5 rounded-md px-2 py-1.5">
+          <Avatar className="h-8 w-8">
+            <AvatarFallback className="text-xs font-medium">{initials(user?.name)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium text-foreground truncate">{user?.name ?? "—"}</p>
             </div>
-            <p className="text-[10px] text-theme-muted truncate font-medium opacity-70 italic">{user?.email ?? "—"}</p>
+            <p className="text-xs text-muted-foreground truncate">{user?.email ?? "—"}</p>
           </div>
-        )}
-        <div className={cn("flex gap-2", collapsed && "flex-col items-center")}>
-          <button
+          <Badge variant="secondary" className={cn("text-[10px] font-medium border", role.className)}>
+            {role.label}
+          </Badge>
+        </div>
+
+        {/* Theme toggle + Logout */}
+        <div className="flex gap-1.5 group-data-[collapsible=icon]:flex-col">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className={cn(
-              "flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs text-theme-muted hover:text-theme-fg hover:bg-theme-raised transition-colors",
-              collapsed ? "w-10 h-10" : "flex-1"
-            )}
+            className="flex-1 justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:p-0"
             title={theme === "dark" ? "Light mode" : "Dark mode"}
           >
             {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-            {!collapsed && (theme === "dark" ? "Light" : "Dark")}
-          </button>
-          <button
+            <span className="group-data-[collapsible=icon]:hidden">{theme === "dark" ? "Light" : "Dark"}</span>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => logout()}
-            className={cn(
-              "flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs text-red-500 hover:bg-red-500/10 transition-colors",
-              collapsed ? "w-10 h-10" : "flex-1"
-            )}
+            className="flex-1 justify-center gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:p-0"
             title="Logout"
           >
             <LogOut size={14} />
-            {!collapsed && "Logout"}
-          </button>
+            <span className="group-data-[collapsible=icon]:hidden">Logout</span>
+          </Button>
         </div>
-      </div>
-    </aside>
+      </SidebarFooter>
+    </ShadcnSidebar>
   );
 }

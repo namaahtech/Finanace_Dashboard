@@ -4,8 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useToast } from "@/components/ui/Toast";
-import { Badge } from "@/components/ui/Badge";
+import { useToast } from "@/components/ui/ToastLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { cn } from "@/lib/utils";
 import {
   Paperclip, Upload, Download, Trash2, Share2, Search, X, Loader2,

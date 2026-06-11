@@ -31,8 +31,8 @@ import {
   Network
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
-import { useToast } from "@/components/ui/Toast";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from "framer-motion";
 

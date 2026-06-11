@@ -9,11 +9,18 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
-import { TimePicker } from "@/components/ui/TimePicker";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
+import { TimePicker } from "@/components/ui/TimePickerLegacy";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { usePermission } from "@/hooks/usePermission";
 import dayjs from "dayjs";
 
@@ -672,13 +679,13 @@ export default function AdminAttendancePage() {
                             <td className="px-5 py-3"><p className="text-xs font-semibold text-theme-fg">{emp.department}</p><p className="text-xs text-theme-muted">{emp.designation}</p></td>
                             <td className="px-5 py-3">
                               <div className="flex flex-col">
-                                <span className="font-mono text-xs font-bold text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}</span>
+                                <span className="tabular-nums text-xs font-bold text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}</span>
                                 {log?.clock_in && <span className="text-[10px] text-theme-subtle font-medium mt-0.5">{dayjs(selectedDate).format("DD MMM, YYYY")}</span>}
                               </div>
                             </td>
                             <td className="px-5 py-3">
                               <div className="flex flex-col">
-                                <span className="font-mono text-xs font-bold text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}</span>
+                                <span className="tabular-nums text-xs font-bold text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}</span>
                                 {log?.clock_out && <span className="text-[10px] text-theme-subtle font-medium mt-0.5">{dayjs(selectedDate).format("DD MMM, YYYY")}</span>}
                               </div>
                             </td>
@@ -1034,7 +1041,7 @@ export default function AdminAttendancePage() {
                         {holi && (
                           <div className="mt-auto space-y-1 rounded px-1.5 py-1 mb-1 shadow-sm relative group/holi z-20" style={{ backgroundColor: `${holi.color}20`, borderLeft: `3px solid ${holi.color}` }}>
                             <span className="block text-[9px] font-black uppercase tracking-widest truncate" style={{ color: holi.color }}>{holi.title}</span>
-                            {holi.is_half_day && <span className="block text-[9px] font-bold font-mono opacity-100" style={{ color: holi.color }}>{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>}
+                            {holi.is_half_day && <span className="block text-[9px] font-bold tabular-nums opacity-100" style={{ color: holi.color }}>{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>}
 
                             {/* Hover Tooltip Popup */}
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-theme-surface border border-theme-border rounded-xl shadow-2xl p-4 opacity-0 pointer-events-none group-hover/holi:opacity-100 transition-all duration-200 z-[100] transform scale-95 group-hover/holi:scale-100">
@@ -1043,7 +1050,7 @@ export default function AdminAttendancePage() {
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">{holi.type}</span>
                                 {holi.is_half_day ? (
-                                  <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider font-mono">{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>
+                                  <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider tabular-nums">{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>
                                 ) : (
                                   <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">Full Day</span>
                                 )}
@@ -1092,9 +1099,9 @@ export default function AdminAttendancePage() {
                         </td>
                         <td className="px-5 py-3">
                            <div className="flex items-center gap-2">
-                             <Badge variant="default" className="font-mono text-[10px] uppercase">{dayjs(`2000-01-01 ${p.check_in_time}`).format("hh:mm A")}</Badge>
+                             <Badge variant="default" className="tabular-nums text-[10px] uppercase">{dayjs(`2000-01-01 ${p.check_in_time}`).format("hh:mm A")}</Badge>
                              <span className="text-theme-subtle">to</span>
-                             <Badge variant="default" className="font-mono text-[10px] uppercase">{dayjs(`2000-01-01 ${p.check_out_time}`).format("hh:mm A")}</Badge>
+                             <Badge variant="default" className="tabular-nums text-[10px] uppercase">{dayjs(`2000-01-01 ${p.check_out_time}`).format("hh:mm A")}</Badge>
                            </div>
                         </td>
                         <td className="px-5 py-3 text-xs font-semibold text-theme-fg">{p.type}</td>
@@ -1188,16 +1195,15 @@ export default function AdminAttendancePage() {
                 <div>
                   <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Category</label>
                   <div className="hidden">
-                    <select
-                    value={holidayForm.type}
-                    onChange={e => setHolidayForm({ ...holidayForm, type: e.target.value })}
-                    className="w-full h-12 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm cursor-pointer"
-                  >
-                    <option value="government">Government Holiday</option>
-                    <option value="public">Public Holiday</option>
-                    <option value="company">Company Holiday</option>
-                    <option value="restricted">Restricted Holiday</option>
-                    </select>
+                    <Select value={holidayForm.type} onValueChange={(v) => setHolidayForm({ ...holidayForm, type: v })}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="government">Government Holiday</SelectItem>
+                        <SelectItem value="public">Public Holiday</SelectItem>
+                        <SelectItem value="company">Company Holiday</SelectItem>
+                        <SelectItem value="restricted">Restricted Holiday</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="relative">
                     <button
@@ -1353,14 +1359,12 @@ export default function AdminAttendancePage() {
             <div className="p-6 space-y-5">
               <div>
                 <label className="block text-xs font-medium text-theme-muted mb-1.5">Select Employee</label>
-                <select
-                  value={leaveForm.empId}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, empId: e.target.value })}
-                  className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
-                >
-                  <option value="">Choose Employee...</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.name} ({e.employee_id})</option>)}
-                </select>
+                <Select value={leaveForm.empId || undefined} onValueChange={(v) => setLeaveForm({ ...leaveForm, empId: v })}>
+                  <SelectTrigger className="w-full h-11"><SelectValue placeholder="Choose Employee..." /></SelectTrigger>
+                  <SelectContent>
+                    {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name} ({e.employee_id})</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1448,14 +1452,13 @@ export default function AdminAttendancePage() {
 
                  <div>
                     <label className="block text-xs font-black uppercase tracking-widest text-theme-muted mb-2">Target Scope</label>
-                    <select 
-                       value={protocolForm.type}
-                       onChange={(e) => setProtocolForm({...protocolForm, type: e.target.value})}
-                       className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
-                    >
-                       <option value="All">Global - All Employees</option>
-                       {depts.filter(d => d !== "All").map(d => <option key={d} value={`Department:${d}`}>{d} Department</option>)}
-                    </select>
+                    <Select value={protocolForm.type} onValueChange={(v) => setProtocolForm({...protocolForm, type: v})}>
+                      <SelectTrigger className="w-full h-11"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All">Global - All Employees</SelectItem>
+                        {depts.filter(d => d !== "All").map(d => <SelectItem key={d} value={`Department:${d}`}>{d} Department</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                  </div>
 
                  <div>

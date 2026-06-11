@@ -6,8 +6,8 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useApi } from "@/hooks/useApi";
 import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { formatCurrency, cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import {
@@ -357,7 +357,7 @@ function SalesTracker({
               </p>
 
               {/* Threshold */}
-              <p style={{ fontSize: "9px", color: "#64748b", marginTop: "3px", fontFamily: "monospace" }}>
+              <p style={{ fontSize: "9px", color: "#64748b", marginTop: "3px" }}>
                 {cp.min_target > 0 ? `≥ ₹${cp.min_target.toLocaleString("en-IN")}` : "Base tier"}
               </p>
 
@@ -398,7 +398,7 @@ function SalesTracker({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <span style={{ fontSize: "10px", color: "#64748b" }}>Est. earnings:</span>
-          <span style={{ fontSize: "14px", fontWeight: 900, color: "#10b981", fontFamily: "monospace", letterSpacing: "-0.02em" }}>
+          <span style={{ fontSize: "14px", fontWeight: 900, color: "#10b981", letterSpacing: "-0.02em" }}>
             ₹{Math.round(estimatedCommission).toLocaleString("en-IN")}
           </span>
         </div>
@@ -414,6 +414,17 @@ function SalesTracker({
     </div>
   );
 }
+
+const ROLE_LABEL: Record<string, string> = {
+  employee: "Employee",
+  hr: "HR",
+  accounts: "Accounts",
+  admin: "Admin",
+  intern: "Intern",
+  dept_lead: "Department Lead",
+  team_lead: "Team Lead",
+  sales: "Sales",
+};
 
 // ── Main Profile Page ─────────────────────────────────────
 export default function EmployeeProfile() {
@@ -604,7 +615,7 @@ export default function EmployeeProfile() {
                   </div>
                   <div>
                     <p className="text-xs text-theme-muted">Employee ID</p>
-                    <p className="text-sm font-mono font-bold text-theme-primary mt-0.5">{employee.employee_id}</p>
+                    <p className="text-sm tabular-nums font-bold text-theme-primary mt-0.5">{employee.employee_id}</p>
                   </div>
                   <div className="pt-2 border-t border-theme-border">
                     <a href={`mailto:${employee.email}`}>
@@ -630,6 +641,12 @@ export default function EmployeeProfile() {
                   <div>
                     <p className="text-xs text-theme-muted">Designation</p>
                     <p className="text-sm font-semibold text-theme-fg mt-0.5">{employee.designation || "Not specified"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-theme-muted">Matrix Role</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5">
+                      {employee.commission_enabled ? "Sales" : (ROLE_LABEL[employee.role] || employee.role || "Not specified")}
+                    </p>
                   </div>
                   <div className="pt-2 border-t border-theme-border">
                     <p className="text-xs text-theme-muted">Salary Structure</p>

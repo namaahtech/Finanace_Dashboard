@@ -3,7 +3,10 @@
 //
 // Manual type definitions below — replace with generated types after Supabase project is set up
 
-export type Role = "admin" | "dept_lead" | "team_lead" | "employee" | "intern";
+// Final role model. Manager-ness (dept_lead / team_lead) is now expressed via
+// is_dept_lead / is_team_lead boolean flags on the employees table, NOT as a
+// separate role. See supabase/migrations/00000001_role_model.sql.
+export type Role = "admin" | "hr" | "accounts" | "employee" | "intern" | "dept_lead" | "team_lead";
 
 export type Database = {
   public: {

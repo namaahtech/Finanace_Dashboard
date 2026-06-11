@@ -1,17 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/Button";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { Mail, Lock, ShieldCheck, ArrowRight, Eye, EyeOff } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
-import { useToast } from "@/components/ui/Toast";
+import { Badge } from "@/components/ui/BadgeLegacy";
+import { useToast } from "@/components/ui/ToastLegacy";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-current border-t-transparent opacity-60" /></div>}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const { user, loading: authLoading, login } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams?.get("next");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
@@ -19,9 +29,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace("/");
+      // If middleware redirected with ?next=<path>, honor it; else role-router
+      router.replace(nextPath && nextPath.startsWith("/") ? nextPath : "/");
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, nextPath]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -122,7 +133,10 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-8 pt-5 border-t border-theme-border/60 flex items-center justify-between">
-            <a href="#" className="text-[11px] font-bold text-theme-muted hover:text-theme-fg transition-colors">
+            <a 
+              href={`/forgot-credentials?email=${encodeURIComponent(email)}`} 
+              className="text-[11px] font-bold text-theme-muted hover:text-theme-fg transition-colors"
+            >
               Forgot credentials?
             </a>
             <Badge variant="success" className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/10 py-1 px-3">

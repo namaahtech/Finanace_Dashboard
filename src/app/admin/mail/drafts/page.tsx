@@ -1,10 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { FileText, Trash2, Edit2, PenLine, Clock, Loader2, MailOpen } from "lucide-react";
@@ -59,7 +59,7 @@ export default function DraftsPage() {
     >
       <div className="flex h-[calc(100vh-168px)] gap-0 overflow-hidden rounded-2xl border border-theme-border shadow-sm">
         {/* Draft List */}
-        <div className="w-80 flex-shrink-0 border-r border-theme-border flex flex-col bg-theme-page">
+        <div className="w-96 flex-shrink-0 border-r border-theme-border flex flex-col bg-theme-page">
           <div className="px-4 py-3 border-b border-theme-border">
             <p className="text-xs font-bold text-theme-fg">{drafts.length} Draft{drafts.length !== 1 ? "s" : ""}</p>
           </div>

@@ -15,12 +15,19 @@ import {
   Layout,
   CheckCircle2
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const STEPS = [
   { id: 1, label: "Foundation", icon: BookOpen },
@@ -175,17 +182,16 @@ export default function NewCoursePage() {
                     </div>
                     <div>
                       <label className="text-[10px] font-black uppercase text-theme-muted tracking-widest block mb-2">Category</label>
-                      <select 
-                        value={courseData.category}
-                        onChange={e => setCourseData({...courseData, category: e.target.value})}
-                        className="w-full bg-theme-page border border-theme-border rounded-xl h-12 px-4 text-sm font-bold text-theme-fg focus:outline-none focus:ring-1 focus:ring-theme-primary transition-all"
-                      >
-                        <option>Engineering</option>
-                        <option>Sales</option>
-                        <option>Marketing</option>
-                        <option>Compliance</option>
-                        <option>Design</option>
-                      </select>
+                      <Select value={courseData.category} onValueChange={(v) => setCourseData({ ...courseData, category: v })}>
+                        <SelectTrigger className="w-full h-12"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Engineering">Engineering</SelectItem>
+                          <SelectItem value="Sales">Sales</SelectItem>
+                          <SelectItem value="Marketing">Marketing</SelectItem>
+                          <SelectItem value="Compliance">Compliance</SelectItem>
+                          <SelectItem value="Design">Design</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   <div>

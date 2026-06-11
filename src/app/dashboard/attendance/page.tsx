@@ -11,9 +11,9 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import dayjs from "dayjs";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { useToast } from "@/components/ui/Toast";
+import { Badge } from "@/components/ui/BadgeLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { useToast } from "@/components/ui/ToastLegacy";
 
 type AttStatus = "present" | "late" | "absent" | "leave" | "holiday" | "half_day" | "on_duty";
 
@@ -144,39 +144,43 @@ export default function AttendancePage() {
         if (error) throw error;
         if (data && !data.success) { showToast(data.error, "error"); return; }
       } else {
-        // 1. Determine hierarchy target roles based on the employee's current role
-        let searchRoles: string[] = [];
-        if (["intern", "employee"].includes(user.role)) {
-          searchRoles = ["team_lead", "dept_lead"];
-        } else if (user.role === "team_lead") {
-          searchRoles = ["dept_lead"];
-        }
-
+        // Leave approver hierarchy (new model uses manager flags, not roles):
+        //   regular employee/intern → look for team_lead in same dept, then dept_lead
+        //   team_lead (is_team_lead=true) → escalate to dept_lead
+        //   dept_lead (is_dept_lead=true) → escalate to admin
         targetId = user.id;
         targetRole = "hr";
         let foundLead = false;
 
-        // 2. Try to find the immediate superior in their own department
-        if (searchRoles.length > 0) {
+        if (!user.is_team_lead && !user.is_dept_lead) {
+          // Look for a team lead or manager in the same department
           const { data: leads } = await supabase.from("employees")
             .select("id, role")
             .eq("department", user.department)
-            .in("role", searchRoles)
             .limit(1);
-
           if (leads && leads.length > 0) {
             targetId = leads[0].id;
-            targetRole = leads[0].role;
+            targetRole = leads[0].role === "admin" || leads[0].role === "hr" ? leads[0].role : "team_lead";
+            foundLead = true;
+          }
+        } else if (user.is_team_lead && !user.is_dept_lead) {
+          // Escalate to a department head or admin
+          const { data: leads } = await supabase.from("employees")
+            .select("id, role")
+            .eq("role", "admin")
+            .limit(1);
+          if (leads && leads.length > 0) {
+            targetId = leads[0].id;
+            targetRole = "admin";
             foundLead = true;
           }
         }
 
-        // 3. Escalation fallback if no direct lead exists, or if user is already a manager/hr
+        // Final fallback: admin
         if (!foundLead) {
-          const fallbackRole = (user.role === "dept_lead" || user.role === "admin") ? "admin" : "admin";
           const { data: admins } = await supabase.from("employees")
             .select("id, role")
-            .eq("role", fallbackRole)
+            .eq("role", "admin")
             .limit(1);
 
           if (admins && admins.length > 0) {
@@ -436,8 +440,8 @@ export default function AttendancePage() {
                             <div className="flex-1 flex flex-col justify-end">
                               {log && (
                                 <div className="mt-auto bg-white/50 dark:bg-black/20 p-1 rounded space-y-0.5">
-                                  {log.clock_in && <div className="flex justify-between text-[7px] font-mono text-theme-fg/80"><span className="text-[6px] font-semibold text-theme-muted">IN</span>{dayjs(`2000-01-01 ${log.clock_in}`).format("HH:mm")}</div>}
-                                  {log.clock_out && <div className="flex justify-between text-[7px] font-mono text-theme-fg/80"><span className="text-[6px] font-semibold text-theme-muted">OUT</span>{dayjs(`2000-01-01 ${log.clock_out}`).format("HH:mm")}</div>}
+                                  {log.clock_in && <div className="flex justify-between text-[7px] tabular-nums text-theme-fg/80"><span className="text-[6px] font-semibold text-theme-muted">IN</span>{dayjs(`2000-01-01 ${log.clock_in}`).format("HH:mm")}</div>}
+                                  {log.clock_out && <div className="flex justify-between text-[7px] tabular-nums text-theme-fg/80"><span className="text-[6px] font-semibold text-theme-muted">OUT</span>{dayjs(`2000-01-01 ${log.clock_out}`).format("HH:mm")}</div>}
                                 </div>
                               )}
                             </div>
@@ -500,8 +504,8 @@ export default function AttendancePage() {
                                 : log ? <div className="flex items-center gap-1.5"><div className={cn("w-1.5 h-1.5 rounded-full", STATUS_BADGE[log.status]==="success"?"bg-emerald-500":STATUS_BADGE[log.status]==="warning"?"bg-amber-500":STATUS_BADGE[log.status]==="danger"?"bg-red-500":"bg-theme-muted")} /><span className="text-xs text-theme-fg capitalize">{log.status.replace("_"," ")}</span></div>
                                 : <span className="text-xs text-theme-subtle">{isWeekend?"Weekend":"—"}</span>}
                               </td>
-                              <td className="px-5 py-2.5 font-mono text-xs text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("HH:mm") : "—"}</td>
-                              <td className="px-5 py-2.5 font-mono text-xs text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("HH:mm") : "—"}</td>
+                              <td className="px-5 py-2.5 tabular-nums text-xs text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("HH:mm") : "—"}</td>
+                              <td className="px-5 py-2.5 tabular-nums text-xs text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("HH:mm") : "—"}</td>
                               <td className="px-5 py-2.5 text-xs text-theme-muted">
                                 {log?.clock_in && log?.clock_out ? `${Math.floor(dayjs(`2000-01-01 ${log.clock_out}`).diff(dayjs(`2000-01-01 ${log.clock_in}`),"minute")/60)}h ${dayjs(`2000-01-01 ${log.clock_out}`).diff(dayjs(`2000-01-01 ${log.clock_in}`),"minute")%60}m` : "—"}
                               </td>
@@ -600,7 +604,7 @@ export default function AttendancePage() {
                             {req.status}
                           </Badge>
                         </div>
-                        <p className="text-[10px] text-theme-subtle font-mono">
+                        <p className="text-[10px] text-theme-subtle tabular-nums">
                           {dayjs(req.start_date).format("MMM DD")} – {dayjs(req.end_date).format("MMM DD")}
                         </p>
                       </li>
@@ -644,13 +648,13 @@ export default function AttendancePage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-xl bg-emerald-500/10 border border-theme-border p-3">
                       <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 mb-1">Check In</p>
-                      <p className="text-xl font-black text-emerald-600 font-mono">
+                      <p className="text-xl font-black text-emerald-600 tabular-nums">
                         {logs[selectedDateForCheck]?.clock_in ? dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_in}`).format("HH:mm:ss") : "—"}
                       </p>
                     </div>
                     <div className="rounded-xl bg-amber-500/10 border border-theme-border p-3">
                       <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 mb-1">Check Out</p>
-                      <p className="text-xl font-black text-amber-600 font-mono">
+                      <p className="text-xl font-black text-amber-600 tabular-nums">
                         {logs[selectedDateForCheck]?.clock_out ? dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_out}`).format("HH:mm:ss") : "—"}
                       </p>
                     </div>
@@ -659,7 +663,7 @@ export default function AttendancePage() {
                     <div className="flex items-center gap-2 rounded-xl bg-theme-raised border border-theme-border px-4 py-3">
                       <CheckCircle2 size={16} className="text-emerald-500" />
                       <p className="text-xs font-semibold text-theme-fg">Session Completed</p>
-                      <span className="text-xs text-theme-muted ml-auto font-mono">
+                      <span className="text-xs text-theme-muted ml-auto tabular-nums">
                         {Math.floor(dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_out}`).diff(dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_in}`),"minute")/60)}h {dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_out}`).diff(dayjs(`2000-01-01 ${logs[selectedDateForCheck].clock_in}`),"minute")%60}m
                       </span>
                     </div>

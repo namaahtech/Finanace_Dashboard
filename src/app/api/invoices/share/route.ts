@@ -67,7 +67,7 @@ export async function POST(req: Request) {
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Invoice ${invoice.invoiceNumber}</title>
 </head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;color:#1e293b;">
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Inter',Arial,sans-serif;color:#1e293b;">
 
   <!-- Wrapper -->
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 16px;">

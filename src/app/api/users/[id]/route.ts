@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import nodemailer from "nodemailer";
+import { getActiveToken } from "@/lib/zoho-mail";
+import { ZOHO_API } from "@/lib/zoho-auth";
+import { generateTempPassword, updateZohoPassword } from "@/lib/zoho-provisioning";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -49,7 +52,60 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const body = await req.json();
 
   const updates: Record<string, any> = {};
-  if (typeof body.isActive === "boolean") updates.is_active = body.isActive;
+  if (typeof body.isActive === "boolean") {
+    // Prevent self-deactivation: you cannot deactivate your own account
+    if (body.isActive === false && body.deactivatedBy && body.deactivatedBy === id) {
+      return NextResponse.json({
+        error: "SELF_DEACTIVATION_BLOCKED",
+        message: "You are not permitted to deactivate your own account."
+      }, { status: 403 });
+    }
+
+    if (body.isActive === true) {
+      // Fetch the current record to check who deactivated it
+      const { data: currentEmp } = await supabase
+        .from("employees")
+        .select("is_active, deactivated_by")
+        .eq("id", id)
+        .single();
+      
+      if (currentEmp && currentEmp.is_active === false && currentEmp.deactivated_by) {
+        // Enforce: only the admin who deactivated it OR a super admin (role = 'admin') can reactivate it.
+        if (body.deactivatedBy && body.deactivatedBy !== currentEmp.deactivated_by) {
+          // Fetch the requesting user's details to verify their role
+          const { data: requester } = await supabase
+            .from("employees")
+            .select("role")
+            .eq("id", body.deactivatedBy)
+            .single();
+
+          if (requester && requester.role !== "admin") {
+            // Fetch the deactivating admin's details
+            const { data: deactivator } = await supabase
+              .from("employees")
+              .select("name, role, employee_id")
+              .eq("id", currentEmp.deactivated_by)
+              .single();
+
+            return NextResponse.json({
+              error: "UNAUTHORIZED_REACTIVATION",
+              message: `This account was suspended by ${deactivator?.name || "another administrator"}. Only the suspending administrator or a Super Admin is authorized to reactivate this account.`,
+              deactivator: deactivator || { name: "System Admin", role: "admin", employee_id: "System" }
+            }, { status: 403 });
+          }
+        }
+      }
+    }
+
+    updates.is_active = body.isActive;
+    if (body.isActive === false) {
+      updates.deactivated_by = body.deactivatedBy || null;
+      updates.deactivated_at = new Date().toISOString();
+    } else {
+      updates.deactivated_by = null;
+      updates.deactivated_at = null;
+    }
+  }
   if (body.name) updates.name = body.name;
   if (body.designation) updates.designation = body.designation;
   if (body.role) updates.role = body.role;
@@ -99,14 +155,74 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
   console.log(`[DELETE] Deleting employee: ${id}`);
 
   try {
-    // Delete employee record (triggers cascade deletion via RLS)
+    // 1. Fetch employee to get zoho_email / zoho_account_id before deleting from database
+    const { data: emp } = await supabase
+      .from("employees")
+      .select("zoho_account_id, zoho_email, email")
+      .eq("id", id)
+      .maybeSingle();
+
+    const zohoAccountId = emp?.zoho_account_id;
+    const zohoEmail = emp?.zoho_email || emp?.email;
+
+    // 2. If zohoEmail is present (or zohoAccountId), try to delete it from Zoho organization Mail Console
+    if (zohoEmail || zohoAccountId) {
+      try {
+        const token = await getActiveToken();
+        if (token) {
+          const { data: config } = await supabase
+            .from("zoho_config")
+            .select("zoid")
+            .limit(1)
+            .maybeSingle();
+
+          let zoid = config?.zoid;
+          if (!zoid && process.env.ZOHO_ORG_ID) {
+            zoid = process.env.ZOHO_ORG_ID;
+          }
+
+          if (zoid) {
+            const zohoUrl = `${ZOHO_API.mail}/organization/${zoid}/accounts`;
+            console.log(`[DELETE] Deleting Zoho account for email: ${zohoEmail}, accountId: ${zohoAccountId} under org: ${zoid}`);
+            
+            // Prefer deleting by emailList first as it is verified to work flawlessly
+            const payload: Record<string, any> = {};
+            if (zohoEmail) {
+              payload.emailList = [zohoEmail];
+            } else if (zohoAccountId) {
+              payload.accountList = [zohoAccountId];
+            }
+
+            const zohoRes = await fetch(zohoUrl, {
+              method: "DELETE",
+              headers: {
+                Authorization: `Zoho-oauthtoken ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(payload),
+            });
+
+            if (!zohoRes.ok) {
+              const text = await zohoRes.text();
+              console.error(`[DELETE] Zoho API error: ${zohoRes.status} - ${text}`);
+            } else {
+              console.log(`[DELETE] Successfully deleted Zoho account for: ${zohoEmail || zohoAccountId}`);
+            }
+          }
+        }
+      } catch (zohoErr: any) {
+        console.error("[DELETE] Zoho user deletion exception:", zohoErr.message);
+      }
+    }
+
+    // 3. Delete employee record (triggers cascade deletion via RLS)
     const { error: dbErr } = await supabase.from("employees").delete().eq("id", id);
     if (dbErr) {
       console.error("[DELETE] Database error:", dbErr);
       return NextResponse.json({ error: dbErr.message }, { status: 500 });
     }
 
-    // Delete auth user
+    // 4. Delete auth user
     const { error: authErr } = await supabase.auth.admin.deleteUser(id);
     if (authErr) {
       console.error("[DELETE] Auth error:", authErr);
@@ -133,39 +249,106 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (empErr || !emp) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
 
   if (action === "resend_credentials") {
-    const newPass = `Namaah@1234`;
+    const newPass = generateTempPassword();
     const { error: authErr } = await supabase.auth.admin.updateUserById(id, { password: newPass });
     if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 });
 
-    try {
-      await sendMail(emp.email, `Account Credentials Resent - ${config?.company_name || "Namaah Nexus"}`, `
-        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
-          <div style="background-color: #0f172a; color: #ffffff; padding: 32px 20px; text-align: center;">
-            <h1 style="margin:0; letter-spacing: 4px; font-size: 24px; font-weight: 800; text-transform: uppercase;">${config?.company_name || "NAMAAH PULSE"}</h1>
-            <p style="margin-top: 8px; opacity: 0.8; font-size: 14px;">Credentials Recovery Service</p>
-          </div>
-          <div style="padding: 40px; color: #1e293b; line-height: 1.6;">
-            <p>Hi <b>${emp.name}</b>,</p>
-            <p>As per your administrator's request, your login credentials for the portal have been reset to the standard temporary access key.</p>
-            
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 24px; border-radius: 8px; margin: 24px 0;">
-              <div style="margin-bottom: 12px; display: flex; align-items: center;">
-                <strong style="width: 120px; color: #64748b; font-size: 12px; text-transform: uppercase;">Login Email</strong>
-                <span style="color: #0f172a; font-weight: 600;">${emp.email}</span>
-              </div>
-              <div style="display: flex; align-items: center;">
-                <strong style="width: 120px; color: #64748b; font-size: 12px; text-transform: uppercase;">Temporary Pass</strong>
-                <code style="background:#e2e8f0; color: #0f172a; padding:4px 8px; border-radius:4px; font-family: monospace; font-size: 14px; font-weight: 700;">${newPass}</code>
-              </div>
-            </div>
+    if (emp.zoho_account_id) {
+      console.log(`[Resend Credentials] Syncing new temporary password to Zoho for account ID: ${emp.zoho_account_id}`);
+      await updateZohoPassword(emp.zoho_account_id, newPass);
+    }
 
-            <p style="font-size: 13px; color: #666;">If you did not request this, please contact your security officer immediately.</p>
-            <div style="margin-top: 32px; border-top: 1px solid #f1f5f9; pt: 24px;">
-              <p style="margin: 0; font-weight: 700; color: #0f172a;">Identity Management System</p>
+    const { data: onboarding } = await supabase
+      .from("user_onboarding")
+      .select("status")
+      .eq("user_id", id)
+      .maybeSingle();
+    const onboardingCompleted = onboarding?.status === "completed";
+    const recipientEmail = (!onboardingCompleted && emp.personal_email) ? emp.personal_email : emp.email;
+
+    try {
+      if (!onboardingCompleted) {
+        await sendMail(recipientEmail, `Account Credentials Resent - ${config?.company_name || "Namaah Nexus"}`, `
+          <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+            <div style="background-color: #0f172a; color: #ffffff; padding: 32px 20px; text-align: center;">
+              <h1 style="margin:0; letter-spacing: 4px; font-size: 24px; font-weight: 800; text-transform: uppercase;">${config?.company_name || "NAMAAH PULSE"}</h1>
+              <p style="margin-top: 8px; opacity: 0.8; font-size: 14px;">Credentials Recovery Service</p>
+            </div>
+            <div style="padding: 40px; color: #1e293b; line-height: 1.6;">
+              <h2 style="margin-top: 0; font-size: 20px; font-weight: 700;">Hi <b>${emp.name}</b>,</h2>
+              <p>As per your administrator's request, your login credentials for the portal have been reset. Please follow these step-by-step instructions to connect to your workspace:</p>
+              
+              <div style="margin: 24px 0; font-size: 13px;">
+                <div style="margin-bottom: 16px; padding: 16px; border-left: 4px solid #3b82f6; background-color: #f0f9ff; border-radius: 8px;">
+                  <strong style="color: #1d4ed8; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px; letter-spacing: 1px;">Step 1: First-Time Login (Personal Email)</strong>
+                  Log in to the portal using your <b>Personal Email</b>: <span style="font-family: monospace; font-weight: bold; color: #0f172a; background: #e0f2fe; padding: 2px 6px; border-radius: 4px;">${emp.personal_email}</span> and the Temporary Password below.
+                </div>
+
+                <div style="margin-bottom: 16px; padding: 16px; border-left: 4px solid #f59e0b; background-color: #fefbeb; border-radius: 8px;">
+                  <strong style="color: #b45309; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px; letter-spacing: 1px;">Step 2: Password Reset & Onboarding</strong>
+                  Once logged in, a <b>Change Password</b> modal will prompt you. Enter your new password and sign the Onboarding Consent Form to initialize your identity profile.
+                </div>
+
+                <div style="margin-bottom: 16px; padding: 16px; border-left: 4px solid #10b981; background-color: #ecfdf5; border-radius: 8px;">
+                  <strong style="color: #047857; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px; letter-spacing: 1px;">Step 3: Future Logins (Professional Email Only)</strong>
+                  After completing onboarding, access using your personal email will be permanently blocked. Moving forward, you must log in using your official <b>Professional Email</b>: <span style="font-family: monospace; font-weight: bold; color: #0f172a; background: #d1fae5; padding: 2px 6px; border-radius: 4px;">${emp.email}</span> with your newly updated password.
+                </div>
+              </div>
+
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 24px; border-radius: 8px; margin: 24px 0;">
+                <div style="margin-bottom: 12px; display: flex; align-items: center;">
+                  <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">1st Login Email</strong>
+                  <span style="color: #0f172a; font-weight: 600;">${emp.personal_email}</span>
+                </div>
+                <div style="margin-bottom: 12px; display: flex; align-items: center;">
+                  <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">Future Login Email</strong>
+                  <span style="color: #0f172a; font-weight: 600;">${emp.email}</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                  <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">Temporary Pass</strong>
+                  <code style="background:#e2e8f0; color: #0f172a; padding:4px 8px; border-radius:4px; font-family: monospace; font-size: 14px; font-weight: 700;">${newPass}</code>
+                </div>
+              </div>
+
+              <p style="font-size: 13px; color: #666;">If you did not request this, please contact your security officer immediately.</p>
+              <div style="margin-top: 32px; border-top: 1px solid #f1f5f9; padding-top: 24px;">
+                <p style="margin: 0; font-weight: 700; color: #0f172a;">Identity Management System</p>
+                <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 12px;">Automated Onboarding Engine · ${config?.company_name || "Namaah Nexus"}</p>
+              </div>
             </div>
           </div>
-        </div>
-      `);
+        `);
+      } else {
+        await sendMail(recipientEmail, `Account Credentials Resent - ${config?.company_name || "Namaah Nexus"}`, `
+          <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+            <div style="background-color: #0f172a; color: #ffffff; padding: 32px 20px; text-align: center;">
+              <h1 style="margin:0; letter-spacing: 4px; font-size: 24px; font-weight: 800; text-transform: uppercase;">${config?.company_name || "NAMAAH PULSE"}</h1>
+              <p style="margin-top: 8px; opacity: 0.8; font-size: 14px;">Credentials Recovery Service</p>
+            </div>
+            <div style="padding: 40px; color: #1e293b; line-height: 1.6;">
+              <p>Hi <b>${emp.name}</b>,</p>
+              <p>As per your administrator's request, your login credentials for the portal have been reset to the standard temporary access key.</p>
+              
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 24px; border-radius: 8px; margin: 24px 0;">
+                <div style="margin-bottom: 12px; display: flex; align-items: center;">
+                  <strong style="width: 120px; color: #64748b; font-size: 12px; text-transform: uppercase;">Login Email</strong>
+                  <span style="color: #0f172a; font-weight: 600;">${emp.email}</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                  <strong style="width: 120px; color: #64748b; font-size: 12px; text-transform: uppercase;">Temporary Pass</strong>
+                  <code style="background:#e2e8f0; color: #0f172a; padding:4px 8px; border-radius:4px; font-family: monospace; font-size: 14px; font-weight: 700;">${newPass}</code>
+                </div>
+              </div>
+
+              <p style="font-size: 13px; color: #666;">If you did not request this, please contact your security officer immediately.</p>
+              <div style="margin-top: 32px; border-top: 1px solid #f1f5f9; padding-top: 24px;">
+                <p style="margin: 0; font-weight: 700; color: #0f172a;">Identity Management System</p>
+                <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 12px;">Automated Onboarding Engine · ${config?.company_name || "Namaah Nexus"}</p>
+              </div>
+            </div>
+          </div>
+        `);
+      }
       return NextResponse.json({ success: true, message: "Credentials resent successfully." });
     } catch (e: any) {
       return NextResponse.json({ warning: "Account updated but email failed: " + e.message });

@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useApi } from "@/hooks/useApi";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ProjectModal } from "@/components/projects/ProjectModal";
 import { supabase } from "@/lib/supabase";
@@ -14,8 +14,8 @@ import {
   Building2, PieChart, BarChart3, ShieldCheck, TrendingUp, Users, Target, Zap, LayoutGrid, Filter, 
   CalendarDays, ClipboardList, Search, Clock, ArrowRight, UserCheck, AlertCircle, Briefcase, ChevronRight, X, User, CheckCircle2
 } from "lucide-react";
-import { MultiSelect } from "@/components/ui/MultiSelect";
-import { useToast } from "@/components/ui/Toast";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { DelegationModal } from "@/components/projects/DelegationModal";
 

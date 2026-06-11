@@ -2,17 +2,34 @@
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useToast } from "@/components/ui/Toast";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
-import { 
-  Users, Search, Filter, Briefcase, Mail, Phone, 
-  MapPin, Calendar, CheckCircle2, XCircle, Clock,
-  MoreVertical, FileText, Send, Zap, Plus, Trash2,
-  ChevronRight, BrainCircuit, Star, ArrowUpRight,
-  Loader2, Sparkles, ShieldCheck, AlertCircle
+import {
+  Users, Search, Briefcase, Mail, Phone,
+  CheckCircle2, XCircle, Clock,
+  Zap, Plus,
+  BrainCircuit, Star,
+  Loader2, Sparkles, ShieldCheck, AlertCircle, Send,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Candidate {
   id: string;
@@ -46,10 +63,20 @@ const defaultJobForm = {
   gemma_keywords: "",
 };
 
+function initials(name: string) {
+  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function decisionVariant(decision: Candidate["decision"]) {
+  if (decision === "accepted") return "bg-emerald-500 hover:bg-emerald-500/90 text-white";
+  if (decision === "rejected") return "bg-rose-500 hover:bg-rose-500/90 text-white";
+  return "";
+}
+
 export default function RecruitmentHubPage() {
-  const { user, permissions } = useAuth();
+  const { permissions } = useAuth();
   const canCreate = permissions?.recruitment?.can_create ?? false;
-  
+
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -57,7 +84,6 @@ export default function RecruitmentHubPage() {
   const [postJobOpen, setPostJobOpen] = useState(false);
   const [jobForm, setJobForm] = useState(defaultJobForm);
   const [savingJob, setSavingJob] = useState(false);
-  const { showToast } = useToast();
 
   useEffect(() => {
     fetchCandidates();
@@ -108,14 +134,13 @@ export default function RecruitmentHubPage() {
     try {
       const { error } = await supabase.from("applications").update({ decision }).eq("id", id);
       if (error) throw error;
-      
-      showToast(`Decision updated to ${decision}`, "success");
-      
-      // AUTO-ONBOARDING: If accepted, trigger employee creation
+
+      toast.success(`Decision updated to ${decision}`);
+
       if (decision === 'accepted') {
         const candidate = candidates.find(c => c.id === id);
         if (candidate) {
-          showToast("Initializing automated onboarding...", "info");
+          toast.info("Initializing automated onboarding…");
           const res = await fetch("/api/users", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -128,10 +153,10 @@ export default function RecruitmentHubPage() {
             }),
           });
           if (res.ok) {
-            showToast("Employee record created and synced.", "success");
+            toast.success("Employee record created and synced.");
           } else {
             const errJson = await res.json();
-            showToast(`Sync warning: ${errJson.error || 'Check Admin panel'}`, "warning");
+            toast.warning(`Sync warning: ${errJson.error || 'Check Admin panel'}`);
           }
         }
       }
@@ -139,7 +164,7 @@ export default function RecruitmentHubPage() {
       fetchCandidates();
       setSelected(prev => prev?.id === id ? { ...prev, decision } : prev);
     } catch {
-      showToast("Failed to update decision", "error");
+      toast.error("Failed to update decision");
     }
   }
 
@@ -154,11 +179,11 @@ export default function RecruitmentHubPage() {
       };
       const { error } = await supabase.from("job_clusters").insert(payload);
       if (error) throw error;
-      showToast("Job posted successfully", "success");
+      toast.success("Job posted successfully");
       setPostJobOpen(false);
       setJobForm(defaultJobForm);
     } catch (err: any) {
-      showToast(err.message || "Failed to post job", "error");
+      toast.error(err.message || "Failed to post job");
     } finally {
       setSavingJob(false);
     }
@@ -167,9 +192,9 @@ export default function RecruitmentHubPage() {
   async function triggerScan(appId: string) {
     try {
       await supabase.from("applications").update({ processing_status: "pending" }).eq("application_id", appId);
-      showToast("Scan triggered", "info");
+      toast.info("Scan triggered");
     } catch {
-      showToast("Failed to trigger scan", "error");
+      toast.error("Failed to trigger scan");
     }
   }
 
@@ -182,16 +207,12 @@ export default function RecruitmentHubPage() {
     ? Math.round(candidates.reduce((a, b) => a + b.score, 0) / candidates.length)
     : 0;
 
-  if (loading) {
-    return (
-      <DashboardShell moduleKey="recruitment" title="Recruitment Hub" subtitle="...">
-        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-theme-primary" />
-          <p className="text-xs font-bold text-theme-muted uppercase tracking-widest animate-pulse">Syncing Candidate Pipeline...</p>
-        </div>
-      </DashboardShell>
-    );
-  }
+  const stats = [
+    { label: "Total pipeline", value: candidates.length, icon: Users, color: "text-sky-500" },
+    { label: "Avg match score", value: `${avgScore}%`, icon: Star, color: "text-amber-500" },
+    { label: "Pending scan", value: candidates.filter(c => c.status === 'pending').length, icon: Clock, color: "text-zinc-500" },
+    { label: "Hired today", value: candidates.filter(c => c.decision === 'accepted').length, icon: CheckCircle2, color: "text-emerald-500" },
+  ];
 
   return (
     <DashboardShell
@@ -200,171 +221,173 @@ export default function RecruitmentHubPage() {
       subtitle="Candidate pipeline and hiring decisions"
       actions={
         canCreate ? (
-          <button
-            onClick={() => { setJobForm(defaultJobForm); setPostJobOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity"
-          >
+          <Button onClick={() => { setJobForm(defaultJobForm); setPostJobOpen(true); }} size="sm">
             <Plus size={13} /> Post New Job
-          </button>
+          </Button>
         ) : null
       }
     >
       <div className="space-y-5">
-        {/* Summary Stats */}
+        {/* Summary stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {[
-            { label: "Total Pipeline", value: candidates.length, icon: Users, color: "text-sky-500" },
-            { label: "Avg Match Score", value: `${avgScore}%`, icon: Star, color: "text-amber-500" },
-            { label: "Pending Scan", value: candidates.filter(c=>c.status==='pending').length, icon: Clock, color: "text-zinc-500" },
-            { label: "Hired Today", value: candidates.filter(c=>c.decision==='accepted').length, icon: CheckCircle2, color: "text-emerald-500" },
-          ].map((s, i) => (
-            <div key={i} className="page-card p-4 flex items-center gap-4">
-              <div className={cn("p-2 rounded-lg bg-theme-raised shadow-inner", s.color)}>
-                <s.icon size={18} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">{s.label}</p>
-                <p className="text-lg font-black text-theme-fg">{s.value}</p>
-              </div>
-            </div>
-          ))}
+          {loading
+            ? [...Array(4)].map((_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)
+            : stats.map((s, i) => (
+                <Card key={i}>
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className={cn("p-2 rounded-lg bg-muted", s.color)}>
+                      <s.icon size={18} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">{s.label}</p>
+                      <p className="text-lg font-bold text-foreground tabular-nums">{s.value}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
         </div>
 
         <div className="grid lg:grid-cols-12 gap-6">
-          {/* List Section */}
+          {/* List */}
           <div className="lg:col-span-4 space-y-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={14} />
-              <input
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
+              <Input
                 type="text"
-                placeholder="Filter candidates..."
+                placeholder="Filter candidates…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-theme-border bg-theme-raised/50 text-xs font-bold outline-none focus:border-theme-primary transition-all"
+                className="pl-9"
               />
             </div>
 
-            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-              {filtered.map((c) => (
-                <div
-                  key={c.id}
-                  onClick={() => setSelected(c)}
-                  className={cn(
-                    "page-card p-4 cursor-pointer transition-all hover:border-theme-primary/40 group",
-                    selected?.id === c.id ? "border-theme-primary bg-theme-primary/5 ring-1 ring-theme-primary/20" : "border-theme-border"
-                  )}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-theme-raised flex items-center justify-center text-[10px] font-black border border-theme-border">
-                        {c.name.split(' ').map(n=>n[0]).join('')}
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-theme-fg line-clamp-1">{c.name}</p>
-                        <p className="text-[9px] font-bold text-theme-muted uppercase tracking-tighter">{c.role}</p>
-                      </div>
-                    </div>
-                    <div className={cn(
-                      "px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest",
-                      c.decision === 'accepted' ? "bg-emerald-500/10 text-emerald-500" :
-                      c.decision === 'rejected' ? "bg-rose-500/10 text-rose-500" : "bg-zinc-500/10 text-theme-muted"
-                    )}>
-                      {c.decision}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between mt-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-1.5 bg-theme-raised rounded-full overflow-hidden">
-                        <div className="h-full bg-theme-primary" style={{ width: `${c.score}%` }} />
-                      </div>
-                      <span className="text-[10px] font-black text-theme-fg">{c.score}%</span>
-                    </div>
-                    <p className="text-[9px] font-bold text-theme-muted">{c.appliedDate}</p>
-                  </div>
+            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+              {loading ? (
+                [...Array(5)].map((_, i) => <Skeleton key={i} className="h-[92px] rounded-xl" />)
+              ) : filtered.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-2 text-center rounded-xl border border-dashed border-border bg-card">
+                  <Users size={28} className="text-muted-foreground opacity-40" />
+                  <p className="text-sm font-medium text-foreground">No candidates</p>
+                  <p className="text-xs text-muted-foreground">Applications will appear here.</p>
                 </div>
-              ))}
+              ) : (
+                filtered.map((c) => (
+                  <Card
+                    key={c.id}
+                    onClick={() => setSelected(c)}
+                    className={cn(
+                      "p-0 cursor-pointer transition-colors hover:border-primary/40",
+                      selected?.id === c.id && "border-primary ring-1 ring-primary/20 bg-primary/5"
+                    )}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start mb-3 gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="text-[10px] font-semibold">{initials(c.name)}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
+                            <p className="text-xs text-muted-foreground capitalize truncate">{c.role}</p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant={c.decision === "pending" ? "secondary" : "default"}
+                          className={cn("capitalize flex-shrink-0", decisionVariant(c.decision))}
+                        >
+                          {c.decision}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <Progress value={c.score} className="h-1.5 flex-1" />
+                          <span className="text-xs font-semibold text-foreground tabular-nums">{c.score}%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground flex-shrink-0">{c.appliedDate}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </div>
           </div>
 
-          {/* Detail Section */}
+          {/* Detail */}
           <div className="lg:col-span-8">
             {selected ? (
-              <div className="page-card min-h-[600px] flex flex-col animate-in fade-in slide-in-from-right-4 duration-300">
-                <div className="p-6 border-b border-theme-border bg-theme-raised/20">
-                  <div className="flex justify-between items-start">
+              <Card className="min-h-[600px] flex flex-col p-0 overflow-hidden">
+                <div className="p-6 border-b border-border bg-muted/30">
+                  <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                     <div className="flex gap-4">
-                      <div className="h-14 w-14 rounded-2xl bg-theme-surface border border-theme-border flex items-center justify-center text-xl font-black text-theme-primary shadow-sm">
-                        {selected.name.split(' ').map(n=>n[0]).join('')}
-                      </div>
+                      <Avatar className="h-14 w-14 rounded-xl">
+                        <AvatarFallback className="rounded-xl text-lg font-semibold text-primary">{initials(selected.name)}</AvatarFallback>
+                      </Avatar>
                       <div>
-                        <h2 className="text-xl font-black text-theme-fg">{selected.name}</h2>
-                        <p className="text-xs font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2">
-                          <Briefcase size={12} /> {selected.role}
+                        <h2 className="text-xl font-bold text-foreground">{selected.name}</h2>
+                        <p className="text-sm text-muted-foreground capitalize flex items-center gap-1.5 mt-0.5">
+                          <Briefcase size={13} /> {selected.role}
                         </p>
-                        <div className="flex gap-3 mt-2">
-                          <p className="text-[10px] font-bold text-theme-muted flex items-center gap-1.5"><Mail size={10} /> {selected.email}</p>
-                          <p className="text-[10px] font-bold text-theme-muted flex items-center gap-1.5"><Phone size={10} /> {selected.phone}</p>
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Mail size={11} /> {selected.email}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Phone size={11} /> {selected.phone}</p>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button 
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        variant={selected.decision === "accepted" ? "default" : "outline"}
+                        className={selected.decision === "accepted" ? "bg-emerald-500 hover:bg-emerald-500/90" : ""}
                         onClick={() => handleDecision(selected.id, 'accepted')}
-                        className={cn(
-                          "px-4 py-2 rounded-lg text-xs font-black flex items-center gap-2 transition-all",
-                          selected.decision === 'accepted' ? "bg-emerald-500 text-white" : "bg-theme-surface text-theme-fg border border-theme-border hover:border-emerald-500/50"
-                        )}
                       >
-                        <CheckCircle2 size={14} /> Hire Candidate
-                      </button>
-                      <button 
-                         onClick={() => handleDecision(selected.id, 'rejected')}
-                        className={cn(
-                          "px-4 py-2 rounded-lg text-xs font-black flex items-center gap-2 transition-all",
-                          selected.decision === 'rejected' ? "bg-rose-500 text-white" : "bg-theme-surface text-theme-fg border border-theme-border hover:border-rose-500/50"
-                        )}
+                        <CheckCircle2 size={14} /> Hire
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={selected.decision === "rejected" ? "destructive" : "outline"}
+                        onClick={() => handleDecision(selected.id, 'rejected')}
                       >
                         <XCircle size={14} /> Reject
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-6 space-y-8">
                   {selected.analysis ? (
                     <>
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                          <BrainCircuit className="text-theme-primary" size={18} />
-                          <h3 className="text-sm font-black text-theme-fg uppercase tracking-widest">AI Profile Summary</h3>
+                          <BrainCircuit className="text-primary" size={18} />
+                          <h3 className="text-sm font-semibold text-foreground">AI Profile Summary</h3>
                         </div>
-                        <p className="text-xs font-bold text-theme-muted leading-relaxed bg-theme-raised/30 p-4 rounded-xl border border-theme-border/50">
+                        <p className="text-sm text-muted-foreground leading-relaxed bg-muted/40 p-4 rounded-lg border border-border">
                           {selected.analysis.summary}
                         </p>
                       </div>
 
                       <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-3">
-                          <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
-                            <Sparkles size={12} /> Key Strengths
+                          <p className="text-xs font-semibold text-emerald-600 flex items-center gap-2">
+                            <Sparkles size={13} /> Key Strengths
                           </p>
                           <div className="space-y-2">
                             {selected.analysis.pros.map((p, i) => (
-                              <div key={i} className="flex items-start gap-2 text-xs font-bold text-theme-fg bg-emerald-500/5 p-2 rounded-lg border border-emerald-500/10">
-                                <CheckCircle2 size={12} className="text-emerald-500 mt-0.5 shrink-0" />
+                              <div key={i} className="flex items-start gap-2 text-sm text-foreground bg-emerald-500/5 p-2.5 rounded-md border border-emerald-500/20">
+                                <CheckCircle2 size={13} className="text-emerald-500 mt-0.5 shrink-0" />
                                 <span>{p}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                         <div className="space-y-3">
-                          <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-2">
-                            <Zap size={12} /> Gap Analysis
+                          <p className="text-xs font-semibold text-rose-600 flex items-center gap-2">
+                            <Zap size={13} /> Gap Analysis
                           </p>
                           <div className="space-y-2">
                             {selected.analysis.cons.map((c, i) => (
-                              <div key={i} className="flex items-start gap-2 text-xs font-bold text-theme-fg bg-rose-500/5 p-2 rounded-lg border border-rose-500/10">
-                                <AlertCircle size={12} className="text-rose-500 mt-0.5 shrink-0" />
+                              <div key={i} className="flex items-start gap-2 text-sm text-foreground bg-rose-500/5 p-2.5 rounded-md border border-rose-500/20">
+                                <AlertCircle size={13} className="text-rose-500 mt-0.5 shrink-0" />
                                 <span>{c}</span>
                               </div>
                             ))}
@@ -372,16 +395,16 @@ export default function RecruitmentHubPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         <div className="flex items-center gap-2">
                           <ShieldCheck className="text-sky-500" size={18} />
-                          <h3 className="text-sm font-black text-theme-fg uppercase tracking-widest">Recommended Interview Questions</h3>
+                          <h3 className="text-sm font-semibold text-foreground">Recommended Interview Questions</h3>
                         </div>
                         <div className="grid gap-3">
                           {selected.analysis.questions.map((q: any, i: number) => (
-                            <div key={i} className="p-4 rounded-xl bg-theme-raised/50 border border-theme-border group hover:border-sky-500/30 transition-all">
-                              <p className="text-xs font-black text-theme-fg mb-1">Q{i+1}: {q.question || q}</p>
-                              {q.reason && <p className="text-[10px] font-bold text-theme-muted italic">Focus: {q.reason}</p>}
+                            <div key={i} className="p-4 rounded-lg bg-muted/40 border border-border">
+                              <p className="text-sm font-medium text-foreground mb-1">Q{i + 1}: {q.question || q}</p>
+                              {q.reason && <p className="text-xs text-muted-foreground italic">Focus: {q.reason}</p>}
                             </div>
                           ))}
                         </div>
@@ -391,117 +414,107 @@ export default function RecruitmentHubPage() {
                     <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
                       {selected.status === 'processing' || selected.status === 'pending' ? (
                         <>
-                          <div className="h-12 w-12 rounded-full border-2 border-theme-primary border-t-transparent animate-spin" />
+                          <Loader2 className="h-10 w-10 animate-spin text-primary" />
                           <div>
-                            <p className="text-sm font-black text-theme-fg">Neural Analysis in Progress</p>
-                            <p className="text-[10px] font-bold text-theme-muted uppercase tracking-widest mt-1">Gemma-4 Engine is auditing resume...</p>
+                            <p className="text-sm font-semibold text-foreground">Neural Analysis in Progress</p>
+                            <p className="text-xs text-muted-foreground mt-1">Gemma-4 engine is auditing the resume…</p>
                           </div>
                         </>
                       ) : (
                         <>
-                          <div className="h-16 w-16 rounded-full bg-theme-raised flex items-center justify-center border border-theme-border">
-                            <BrainCircuit size={32} className="text-theme-muted" />
+                          <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center border border-border">
+                            <BrainCircuit size={30} className="text-muted-foreground" />
                           </div>
-                          <div>
-                            <p className="text-sm font-black text-theme-fg">No Analysis Ready</p>
-                            <button 
-                              onClick={() => triggerScan(selected.application_id)}
-                              className="mt-4 px-6 py-2 rounded-full bg-theme-primary text-white text-[10px] font-black uppercase tracking-widest hover:shadow-lg transition-all"
-                            >
+                          <div className="space-y-3">
+                            <p className="text-sm font-semibold text-foreground">No Analysis Ready</p>
+                            <Button size="sm" onClick={() => triggerScan(selected.application_id)}>
                               Trigger Audit Scan
-                            </button>
+                            </Button>
                           </div>
                         </>
                       )}
                     </div>
                   )}
                 </div>
-              </div>
+              </Card>
             ) : (
-              <div className="page-card min-h-[600px] flex flex-col items-center justify-center text-center p-10 opacity-60">
-                <div className="h-20 w-20 rounded-3xl bg-theme-raised flex items-center justify-center mb-6 border border-theme-border">
-                  <Users size={40} className="text-theme-muted" />
+              <Card className="min-h-[600px] flex flex-col items-center justify-center text-center p-10">
+                <div className="h-20 w-20 rounded-2xl bg-muted flex items-center justify-center mb-6 border border-border">
+                  <Users size={40} className="text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-black text-theme-fg mb-2">Personnel Selection Required</h3>
-                <p className="text-xs font-bold text-theme-muted max-w-xs leading-relaxed">
-                  Select a candidate from the recruitment pipeline to view neural analysis and make hiring decisions.
+                <h3 className="text-lg font-semibold text-foreground mb-2">Select a candidate</h3>
+                <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
+                  Choose a candidate from the pipeline to view AI analysis and make hiring decisions.
                 </p>
-              </div>
+              </Card>
             )}
           </div>
         </div>
       </div>
 
-      {/* Post Job Modal */}
-      {postJobOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="page-card w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-theme-border bg-theme-raised/30 flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-black text-theme-fg">Post New Job Opportunity</h2>
-                <p className="text-[10px] font-bold text-theme-muted uppercase tracking-widest">Global Hiring Matrix</p>
-              </div>
-              <button onClick={() => setPostJobOpen(false)} className="p-2 hover:bg-theme-surface rounded-full transition-all">
-                <XCircle size={20} className="text-theme-muted" />
-              </button>
+      {/* Post Job Dialog */}
+      <Dialog open={postJobOpen} onOpenChange={setPostJobOpen}>
+        <DialogContent className="sm:max-w-2xl !grid-rows-[auto_1fr_auto] !grid p-0 overflow-hidden gap-0 max-h-[calc(100vh-6rem)] sm:max-h-[80vh]">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0 border-b border-border px-6 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
+              <Briefcase size={16} />
             </div>
-            
-            <form onSubmit={handlePostJob} className="p-6 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Company</label>
-                  <input 
-                    required
-                    value={jobForm.company}
-                    onChange={e => setJobForm({...jobForm, company: e.target.value})}
-                    className="w-full h-10 px-4 rounded-lg border border-theme-border bg-theme-raised/50 text-xs font-bold outline-none focus:border-theme-primary" 
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Job Title / Variants (comma separated)</label>
-                  <input 
-                    required
-                    placeholder="Software Engineer, Backend Developer..."
-                    value={jobForm.job_title_variants}
-                    onChange={e => setJobForm({...jobForm, job_title_variants: e.target.value})}
-                    className="w-full h-10 px-4 rounded-lg border border-theme-border bg-theme-raised/50 text-xs font-bold outline-none focus:border-theme-primary" 
-                  />
-                </div>
-              </div>
+            <div className="flex-1 text-left">
+              <DialogTitle className="text-sm font-semibold">Post New Job Opportunity</DialogTitle>
+              <DialogDescription className="text-xs">Define a hiring cluster for AI candidate matching</DialogDescription>
+            </div>
+          </DialogHeader>
 
+          <form id="post-job-form" onSubmit={handlePostJob} className="min-h-0 overflow-y-auto px-6 py-5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-theme-muted uppercase tracking-widest ml-1">Gemma Keywords (comma separated)</label>
-                <textarea 
+                <Label className="text-xs">Company</Label>
+                <Input
                   required
-                  placeholder="Python, React, AWS, Distributed Systems..."
-                  value={jobForm.gemma_keywords}
-                  onChange={e => setJobForm({...jobForm, gemma_keywords: e.target.value})}
-                  className="w-full h-24 p-4 rounded-lg border border-theme-border bg-theme-raised/50 text-xs font-bold outline-none focus:border-theme-primary resize-none" 
+                  value={jobForm.company}
+                  onChange={e => setJobForm({ ...jobForm, company: e.target.value })}
                 />
               </div>
-
-              <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 flex gap-3">
-                <Zap size={16} className="text-amber-500 shrink-0" />
-                <p className="text-[10px] font-bold text-amber-600 leading-normal italic">
-                  Neural Scanning: Once posted, our Gemma-4 engine will automatically begin scanning incoming resumes against these keywords and title variants using the defined match weights.
-                </p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Job title / variants (comma-separated)</Label>
+                <Input
+                  required
+                  placeholder="Software Engineer, Backend Developer…"
+                  value={jobForm.job_title_variants}
+                  onChange={e => setJobForm({ ...jobForm, job_title_variants: e.target.value })}
+                />
               </div>
+            </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-theme-border">
-                <button type="button" onClick={() => setPostJobOpen(false)} className="px-6 py-2 rounded-lg text-xs font-black text-theme-muted hover:bg-theme-raised transition-all">Cancel</button>
-                <button 
-                  type="submit" 
-                  disabled={savingJob}
-                  className="px-8 py-2 rounded-lg bg-theme-primary text-white text-xs font-black shadow-lg shadow-theme-primary/20 hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {savingJob ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  Publish Cluster
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Gemma keywords (comma-separated)</Label>
+              <Textarea
+                required
+                placeholder="Python, React, AWS, Distributed Systems…"
+                value={jobForm.gemma_keywords}
+                onChange={e => setJobForm({ ...jobForm, gemma_keywords: e.target.value })}
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+
+            <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 flex gap-3">
+              <Zap size={16} className="text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Once posted, the Gemma-4 engine automatically scans incoming resumes against these keywords and title variants using the defined match weights.
+              </p>
+            </div>
+          </form>
+
+          <DialogFooter className="!mx-0 !mb-0 !rounded-none flex-row items-center sm:justify-end gap-2 border-t border-border bg-background px-6 py-4">
+            <Button type="button" variant="outline" size="sm" onClick={() => setPostJobOpen(false)}>Cancel</Button>
+            <Button type="submit" form="post-job-form" size="sm" disabled={savingJob}>
+              {savingJob ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              Publish Cluster
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardShell>
   );
 }

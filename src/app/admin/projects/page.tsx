@@ -2,11 +2,26 @@
 
 import { useEffect, useState, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { MultiSelect as ShadcnMultiSelect } from "@/components/ui/multi-select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { formatDate, cn, formatCurrency } from "@/lib/utils";
-import { useToast } from "@/components/ui/Toast";
+import { toast } from "sonner";
 import {
   Folder, Plus, Search, X, Building2, Zap, Target, ArrowRightLeft,
   CheckCircle2, Clock, CalendarDays, TrendingUp, MoreVertical, Edit2,
@@ -15,7 +30,14 @@ import {
   BookOpen, Table2, Presentation, StickyNote, ExternalLink, FolderOpen,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { DatePicker } from "@/components/ui/DatePicker";
+import { DatePicker } from "@/components/ui/date-picker";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -114,6 +136,8 @@ interface Employee {
   role: string;
   department: string;
   team_id?: string;
+  is_dept_lead?: boolean;
+  is_team_lead?: boolean;
 }
 
 const PHASE_CONFIG: Record<ProjectPhase, { label: string; bg: string; text: string; border: string; icon: any; variant: any }> = {
@@ -141,140 +165,6 @@ const PRIORITY_CONFIG = {
   Critical: "text-rose-500",
 };
 
-// ── Custom Simple Dropdown ───────────────────────────────
-function CustomSelect({ value, options, onChange, placeholder, icon, label }: {
-  value: string;
-  options: { label: string; value: string }[];
-  onChange: (val: string) => void;
-  placeholder: string;
-  icon?: React.ReactNode;
-  label?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const selected = options.find(o => o.value === value);
-
-  return (
-    <div className="space-y-2" ref={ref}>
-      {label && <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-theme-muted">{icon}{label}</label>}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="flex h-[46px] w-full items-center justify-between rounded-2xl border border-theme-border bg-theme-page px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-strong transition-all overflow-hidden"
-        >
-          <span className="flex items-center gap-2 truncate pr-2">
-            {!label && icon}
-            {selected ? selected.label : <span className="text-theme-muted font-normal">{placeholder}</span>}
-          </span>
-          <ArrowRightLeft size={14} className={cn("flex-shrink-0 text-theme-muted transition-transform rotate-90", open && "rotate-[270deg]")} />
-        </button>
-
-        {open && (
-            <div className="absolute top-full z-[8000] mt-1.5 w-full max-h-48 overflow-y-auto rounded-2xl border border-theme-border bg-theme-surface shadow-[0_10px_40px_rgba(0,0,0,0.3)] p-1.5 animate-in slide-in-from-top-1 duration-200">
-            {options.length > 0 ? options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => { onChange(opt.value); setOpen(false); }}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-all",
-                  value === opt.value ? "bg-theme-primary text-theme-surface" : "text-theme-fg hover:bg-theme-raised"
-                )}
-              >
-                <span className="truncate uppercase tracking-tight">{opt.label}</span>
-                {value === opt.value && <Badge variant="success" className="h-4 w-4 p-0 flex items-center justify-center rounded-full"><CheckCircle2 size={10} /></Badge>}
-              </button>
-            )) : (
-              <div className="px-3 py-4 text-center text-[10px] uppercase font-black tracking-widest text-theme-muted opacity-50">No Data Options</div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Multi-Select Dropdown ───────────────────────────────
-function MultiSelect({ value, options, onChange, placeholder, icon, label }: {
-    value: string[];
-    options: { label: string; value: string }[];
-    onChange: (val: string[]) => void;
-    placeholder: string;
-    icon?: React.ReactNode;
-    label?: string;
-  }) {
-    const [open, setOpen] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
-  
-    useEffect(() => {
-      const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-      document.addEventListener("mousedown", handler);
-      return () => document.removeEventListener("mousedown", handler);
-    }, []);
-  
-    const toggle = (val: string) => {
-      if (value.includes(val)) onChange(value.filter(v => v !== val));
-      else onChange([...value, val]);
-    };
-  
-    return (
-      <div className="space-y-2" ref={ref}>
-        {label && <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-theme-muted">{icon}{label}</label>}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setOpen(!open)}
-            className="flex min-h-[46px] w-full items-center justify-between rounded-2xl border border-theme-border bg-theme-page px-4 py-2 text-sm font-bold text-theme-fg outline-none focus:border-theme-strong transition-all overflow-hidden"
-          >
-            <div className="flex flex-wrap gap-1.5 items-center pr-2">
-                {!label && icon}
-                {value.length > 0 ? (
-                    value.map(v => {
-                        const opt = options.find(o => o.value === v);
-                        return (
-                            <span key={v} className="bg-theme-primary/10 text-theme-primary px-2 py-0.5 rounded-lg text-[10px] font-black uppercase border border-theme-primary/20">
-                                {opt?.label}
-                            </span>
-                        );
-                    })
-                ) : <span className="text-theme-muted font-normal">{placeholder}</span>}
-            </div>
-            <ArrowRightLeft size={14} className={cn("flex-shrink-0 text-theme-muted transition-transform rotate-90", open && "rotate-[270deg]")} />
-          </button>
-  
-          {open && (
-              <div className="absolute top-full z-[8000] mt-1.5 w-full max-h-48 overflow-y-auto rounded-2xl border border-theme-border bg-theme-surface shadow-[0_10px_40px_rgba(0,0,0,0.3)] p-1.5 animate-in slide-in-from-top-1 duration-200">
-              {options.length > 0 ? options.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => toggle(opt.value)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-all",
-                    value.includes(opt.value) ? "bg-theme-primary/10 text-theme-primary" : "text-theme-fg hover:bg-theme-raised"
-                  )}
-                >
-                  <span className="truncate uppercase tracking-tight">{opt.label}</span>
-                  {value.includes(opt.value) && <CheckCircle2 size={12} className="flex-shrink-0" />}
-                </button>
-              )) : (
-                <div className="px-3 py-4 text-center text-[10px] uppercase font-black tracking-widest text-theme-muted opacity-50">No Data Options</div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
 // ── Card Context Menu ────────────────────────────────────
 function CardMenu({ project, onRefresh, onEdit, setDeleteConfirm, onOversight, canEdit, canDelete }: {
   project: Project;
@@ -288,7 +178,6 @@ function CardMenu({ project, onRefresh, onEdit, setDeleteConfirm, onOversight, c
   const [open, setOpen] = useState(false);
   const [acting, setActing] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const { showToast } = useToast();
 
   useEffect(() => {
     const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -300,9 +189,9 @@ function CardMenu({ project, onRefresh, onEdit, setDeleteConfirm, onOversight, c
     setActing(true); setOpen(false);
     try {
       await axios.patch(`/api/projects/${project.id}`, { is_active: !project.is_active });
-      showToast(`Project is now ${!project.is_active ? "Active" : "Archived"}`, "success");
+      toast.success(`Project is now ${!project.is_active ? "Active" : "Archived"}`);
       onRefresh();
-    } catch { showToast("Status change failed.", "error"); } finally { setActing(false); }
+    } catch { toast.error("Status change failed."); } finally { setActing(false); }
   }
 
   return (
@@ -354,7 +243,6 @@ function RowMenu({ project, onRefresh, onEdit, isLast, setDeleteConfirm, onOvers
   const [open, setOpen] = useState(false);
   const [acting, setActing] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const { showToast } = useToast();
 
   useEffect(() => {
     const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -367,10 +255,10 @@ function RowMenu({ project, onRefresh, onEdit, isLast, setDeleteConfirm, onOvers
      setOpen(false);
      try {
        await axios.patch(`/api/projects/${project.id}`, { is_active: !project.is_active });
-       showToast(`Project is now ${!project.is_active ? "Active" : "Archived"}`, "success");
+       toast.success(`Project is now ${!project.is_active ? "Active" : "Archived"}`);
        onRefresh();
      } catch (e: any) {
-       showToast("Status transition failed.", "error");
+       toast.error("Status transition failed.");
      } finally {
        setActing(false);
      }
@@ -411,7 +299,6 @@ function RowMenu({ project, onRefresh, onEdit, isLast, setDeleteConfirm, onOvers
 
 // ── Main Projects Page ──────────────────────────────────
 export default function AdminProjectsPage() {
-  const { showToast } = useToast();
   const { request } = useApi();
   const { canCreate, canEdit, canDelete } = usePermission("projects");
   const [projects, setProjects] = useState<Project[]>([]);
@@ -535,15 +422,15 @@ export default function AdminProjectsPage() {
     try {
       if (editingId) {
         await axios.patch(`/api/projects/${editingId}`, form);
-        showToast("Project matrix updated successfully.", "success");
+        toast.success("Project matrix updated successfully.");
       } else {
         await axios.post("/api/projects", form);
-        showToast(`Project "${form.name}" initialized in records.`, "success");
+        toast.success(`Project "${form.name}" initialized in records.`);
       }
       setShowForm(false);
       loadData(search || undefined);
     } catch (err: any) {
-      showToast(err.response?.data?.error || err.message, "error");
+      toast.error(err.response?.data?.error || err.message);
     } finally {
       setSubmitting(false);
     }
@@ -554,11 +441,11 @@ export default function AdminProjectsPage() {
     setSubmitting(true);
     try {
       await axios.delete(`/api/projects/${deleteConfirm.id}`);
-      showToast(`Project unit "${deleteConfirm.name}" has been decommissioned.`, "success");
+      toast.success(`Project unit "${deleteConfirm.name}" has been decommissioned.`);
       setDeleteConfirm(null);
       loadData(search || undefined);
     } catch (err: any) {
-      showToast(err.response?.data?.error || err.message, "error");
+      toast.error(err.response?.data?.error || err.message);
     } finally {
       setSubmitting(false);
     }
@@ -576,7 +463,7 @@ export default function AdminProjectsPage() {
   
   // Filter managers based on department
   const filteredManagers = employees.filter(emp => {
-    const isManagerRole = emp.role === 'dept_lead' || emp.role === 'admin';
+    const isManagerRole = emp.role === 'admin' || emp.is_dept_lead || emp.is_team_lead;
     if (!isManagerRole) return false;
     
     if (!form.department_id) return true;
@@ -605,13 +492,9 @@ export default function AdminProjectsPage() {
       subtitle="Track and deliver client work across your teams."
       actions={
         canCreate ? (
-          <button
-            onClick={handleAdd}
-            className="inline-flex items-center gap-2 rounded-xl bg-theme-primary px-4 py-2 text-sm font-semibold text-theme-surface shadow-sm hover:opacity-90 transition-all"
-          >
-            <Plus size={15} />
-            New Project
-          </button>
+          <Button onClick={handleAdd} size="sm">
+            <Plus /> New Project
+          </Button>
         ) : null
       }
     >
@@ -637,32 +520,41 @@ export default function AdminProjectsPage() {
       </div>
 
       {/* ── TOOLBAR ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex rounded-lg border border-theme-border bg-theme-raised p-0.5 gap-0.5">
-          {([
-            { id: "all",      label: "All",      count: projects.length },
-            { id: "active",   label: "Active",   count: activeCount },
-            { id: "archived", label: "Archived", count: archivedCount },
-          ] as { id: "all" | "active" | "archived"; label: string; count: number }[]).map((t) => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-xs font-semibold transition-all",
-                activeTab === t.id ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
-              )}>
-              {t.label}
-              <span className="ml-1 text-[10px] font-bold text-theme-muted">{t.count}</span>
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "all" | "active" | "archived")}>
+          <TabsList>
+            <TabsTrigger value="all" className="gap-2 data-[state=active]:font-semibold">
+              All
+              <span className={cn(
+                "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
+                activeTab === "all" ? "bg-primary text-primary-foreground" : "bg-muted-foreground/15 text-muted-foreground"
+              )}>{projects.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="active" className="gap-2 data-[state=active]:font-semibold">
+              Active
+              <span className={cn(
+                "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
+                activeTab === "active" ? "bg-emerald-500 text-white" : "bg-muted-foreground/15 text-muted-foreground"
+              )}>{activeCount}</span>
+            </TabsTrigger>
+            <TabsTrigger value="archived" className="gap-2 data-[state=active]:font-semibold">
+              Archived
+              <span className={cn(
+                "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
+                activeTab === "archived" ? "bg-amber-500 text-white" : "bg-muted-foreground/15 text-muted-foreground"
+              )}>{archivedCount}</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-theme-muted" size={14} />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
+          <Input
             type="text"
             placeholder="Search projects by name, client, phase…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); loadData(e.target.value); }}
-            className="h-9 w-80 rounded-lg border border-theme-border bg-theme-raised pl-9 pr-4 text-sm text-theme-fg outline-none focus:border-theme-primary focus:ring-2 focus:ring-theme-primary/10 transition-all placeholder:text-theme-muted"
+            className="w-full sm:w-80 pl-9"
           />
         </div>
       </div>
@@ -671,22 +563,37 @@ export default function AdminProjectsPage() {
       {loading ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[1,2,3,4,5,6].map(i => (
-            <div key={i} className="page-card animate-pulse h-52 rounded-xl bg-theme-raised" />
+            <div key={i} className="rounded-xl border border-border bg-card p-5 space-y-3">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3.5 w-32" />
+                  <Skeleton className="h-2.5 w-20" />
+                </div>
+              </div>
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-3/4" />
+              <div className="flex items-center justify-between pt-2 border-t border-border">
+                <Skeleton className="h-5 w-16 rounded-md" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+            </div>
           ))}
         </div>
       ) : filteredProjects.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-theme-border py-20 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-theme-raised mb-4">
-            <Folder size={24} className="text-theme-muted" />
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-16 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted mb-4">
+            <Folder size={20} className="text-muted-foreground" />
           </div>
-          <p className="text-sm font-semibold text-theme-fg">No projects found</p>
-          <p className="text-xs text-theme-muted mt-1">Create your first project to get started</p>
-          <button
-            onClick={handleAdd}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-theme-primary px-4 py-2 text-xs font-semibold text-theme-surface hover:opacity-90 transition-all"
-          >
-            <Plus size={13} /> New Project
-          </button>
+          <p className="text-sm font-semibold text-foreground">No projects found</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {search ? "Try a different search term" : "Create your first project to get started"}
+          </p>
+          {canCreate && !search && (
+            <Button onClick={handleAdd} size="sm" className="mt-4">
+              <Plus /> New Project
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -802,7 +709,7 @@ export default function AdminProjectsPage() {
                   >
                     Open Board
                   </button>
-                  {(user?.role === 'dept_lead' || user?.role === 'admin') && (
+                  {(user?.role === 'admin' || user?.is_dept_lead) && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setDelegationProject(p); }}
                       className="flex-1 rounded-lg border border-theme-border px-3 py-1.5 text-xs font-semibold text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-all text-center"
@@ -818,169 +725,157 @@ export default function AdminProjectsPage() {
       )}
       </div>{/* end flex flex-col gap-5 */}
 
-      {/* ── NEW / EDIT PROJECT MODAL ─────────────────────────────── */}
-      {showForm && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl rounded-xl bg-theme-surface shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* modal header */}
-            <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-theme-primary/10 text-theme-primary">
-                  {editingId ? <Edit2 size={16} /> : <Plus size={16} />}
+      {/* ── NEW / EDIT PROJECT DIALOG ─────────────────────────────── */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="sm:max-w-[860px] !grid-rows-[auto_1fr_auto] !grid p-0 overflow-hidden gap-0 max-h-[calc(100vh-6rem)] sm:max-h-[80vh]">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0 border-b border-border px-6 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
+              {editingId ? <Edit2 size={16} /> : <Plus size={16} />}
+            </div>
+            <div className="flex-1 text-left">
+              <DialogTitle className="text-sm font-semibold">{editingId ? "Edit project" : "New project"}</DialogTitle>
+              <DialogDescription className="text-xs">
+                {editingId ? "Update project details" : "Add a project to your workspace"}
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} id="new-project-form" className="min-h-0 overflow-y-auto px-6 py-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label className="text-xs">Project name</Label>
+                  <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="e.g. Website Redesign Q3" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-theme-fg">{editingId ? "Edit project" : "New project"}</h3>
-                  <p className="text-xs text-theme-muted">{editingId ? "Update project details" : "Add a project to your workspace"}</p>
+
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label className="text-xs">Description</Label>
+                  <Textarea rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    placeholder="What is this project about?"
+                    className="resize-y min-h-[100px]" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Budget (₹)</Label>
+                  <Input type="number" required value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })}
+                    placeholder="0" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Phase</Label>
+                  <Select value={form.phase || undefined} onValueChange={(v) => setForm({ ...form, phase: v as ProjectPhase })}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Select phase…" /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(PHASE_CONFIG).map(([v, l]) => (
+                        <SelectItem key={v} value={v}>{l.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Start date</Label>
+                  <DatePicker value={form.issued_date} onChange={(d) => setForm({ ...form, issued_date: d })} label="" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Due date</Label>
+                  <DatePicker value={form.due_date} onChange={(d) => setForm({ ...form, due_date: d })} label="" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Client</Label>
+                  <Select value={form.client_id || undefined} onValueChange={(v) => setForm({ ...form, client_id: v })}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Select client…" /></SelectTrigger>
+                    <SelectContent>
+                      {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Department</Label>
+                  <Select value={form.department_id || undefined} onValueChange={(v) => setForm({ ...form, department_id: v, manager_id: "" })}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Select department…" /></SelectTrigger>
+                    <SelectContent>
+                      {teams.filter(t => t.type === 'department').map(d => (
+                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Project manager</Label>
+                  <Select value={form.manager_id || undefined} onValueChange={(v) => setForm({ ...form, manager_id: v })}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Assign a manager…" /></SelectTrigger>
+                    <SelectContent>
+                      {filteredManagers.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label className="text-xs">Teams</Label>
+                  <ShadcnMultiSelect
+                    placeholder="Assign teams…"
+                    value={form.team_ids}
+                    onChange={(v) => setForm({ ...form, team_ids: v })}
+                    options={teams.filter(t => t.type === 'team' && (!form.department_id || t.parent_id === form.department_id)).map(t => ({ label: t.name, value: t.id }))}
+                  />
+                </div>
+
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label className="flex items-center gap-1.5 text-xs">
+                    <IndianRupee size={12} className="text-emerald-500" /> Link to budget (optional)
+                  </Label>
+                  <Select
+                    value={form.budget_id || "none"}
+                    onValueChange={(v) => setForm({ ...form, budget_id: v === "none" ? "" : v })}
+                  >
+                    <SelectTrigger className="w-full"><SelectValue placeholder="— No budget linked —" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— No budget linked —</SelectItem>
+                      {budgets.map(b => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.name} ({b.budget_number}) · ₹{(b.total_amount / 1000).toFixed(0)}K
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {form.budget_id && (() => {
+                    const b = budgets.find(x => x.id === form.budget_id);
+                    if (!b) return null;
+                    const pct = b.total_amount > 0 ? Math.min((b.actual_spent / b.total_amount) * 100, 100) : 0;
+                    const isOver = b.actual_spent > b.total_amount;
+                    return (
+                      <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-1.5 mt-2">
+                        <div className="flex items-center justify-between text-[10px] font-semibold">
+                          <span className="text-muted-foreground">Current utilisation</span>
+                          <span className={isOver ? "text-red-500" : "text-emerald-600"}>{isOver ? "OVER BUDGET" : `${pct.toFixed(0)}%`}</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-background overflow-hidden">
+                          <div className={cn("h-full rounded-full", isOver ? "bg-red-500" : pct >= 85 ? "bg-amber-500" : "bg-emerald-500")} style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>Spent: ₹{(b.actual_spent / 1000).toFixed(1)}K</span>
+                          <span>Total: ₹{(b.total_amount / 1000).toFixed(1)}K</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
-              <button onClick={() => setShowForm(false)} className="rounded-lg p-1.5 text-theme-muted hover:bg-theme-raised transition-all">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <form onSubmit={handleSubmit} className="space-y-5 max-h-[72vh] overflow-y-auto pr-1 custom-scrollbar">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <label className="text-xs font-semibold text-theme-muted">Project name</label>
-                    <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="e.g. Website Redesign Q3"
-                      className="h-9 w-full rounded-xl border border-theme-border bg-theme-raised px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all" />
-                  </div>
-
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <label className="text-xs font-semibold text-theme-muted">Description</label>
-                    <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                      placeholder="What is this project about?"
-                      className="w-full rounded-xl border border-theme-border bg-theme-raised px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all resize-none" />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-theme-muted">Budget (₹)</label>
-                    <input type="number" required value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })}
-                      placeholder="0"
-                      className="h-9 w-full rounded-xl border border-theme-border bg-theme-raised px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all" />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-theme-muted">Phase</label>
-                    <CustomSelect
-                      icon={<Zap size={14} className="text-theme-primary" />}
-                      placeholder="Select phase…"
-                      value={form.phase}
-                      onChange={(v) => setForm({ ...form, phase: v as ProjectPhase })}
-                      options={Object.entries(PHASE_CONFIG).map(([v, l]) => ({ label: l.label, value: v }))}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-theme-muted">Start date</label>
-                    <DatePicker value={form.issued_date} onChange={(d) => setForm({ ...form, issued_date: d })} label="" />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-theme-muted">Due date</label>
-                    <DatePicker value={form.due_date} onChange={(d) => setForm({ ...form, due_date: d })} label="" />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-theme-muted">Client</label>
-                    <CustomSelect
-                      icon={<Building size={14} className="text-theme-primary" />}
-                      placeholder="Select client…"
-                      value={form.client_id}
-                      onChange={(v) => setForm({ ...form, client_id: v })}
-                      options={clients.map(c => ({ label: c.name, value: c.id }))}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-theme-muted">Department</label>
-                    <CustomSelect
-                      icon={<Building2 size={14} className="text-amber-500" />}
-                      placeholder="Select department…"
-                      value={form.department_id}
-                      onChange={(v) => setForm({ ...form, department_id: v, manager_id: "" })}
-                      options={teams.filter(t => t.type === 'department').map(d => ({ label: d.name, value: d.id }))}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-theme-muted">Project manager</label>
-                    <CustomSelect
-                      icon={<User size={14} className="text-sky-500" />}
-                      placeholder="Assign a manager…"
-                      value={form.manager_id}
-                      onChange={(v) => setForm({ ...form, manager_id: v })}
-                      options={filteredManagers.map(m => ({ label: m.name, value: m.id }))}
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <label className="text-xs font-semibold text-theme-primary">Teams</label>
-                    <MultiSelect
-                      icon={<LayoutGrid size={14} className="text-theme-primary" />}
-                      placeholder="Assign teams…"
-                      value={form.team_ids}
-                      onChange={(v) => setForm({ ...form, team_ids: v })}
-                      options={teams.filter(t => t.type === 'team' && (!form.department_id || t.parent_id === form.department_id)).map(t => ({ label: t.name, value: t.id }))}
-                      label="Assigned teams"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <label className="flex items-center gap-1.5 text-xs font-semibold text-theme-muted">
-                      <IndianRupee size={12} className="text-emerald-500" /> Link to budget (optional)
-                    </label>
-                    <CustomSelect
-                      icon={<IndianRupee size={14} className="text-emerald-500" />}
-                      placeholder="— No budget linked —"
-                      value={form.budget_id}
-                      onChange={(v) => setForm({ ...form, budget_id: v })}
-                      options={[
-                        { label: "— No budget linked —", value: "" },
-                        ...budgets.map(b => ({
-                          label: `${b.name} (${b.budget_number}) · ₹${(b.total_amount / 1000).toFixed(0)}K`,
-                          value: b.id,
-                        })),
-                      ]}
-                    />
-                    {form.budget_id && (() => {
-                      const b = budgets.find(x => x.id === form.budget_id);
-                      if (!b) return null;
-                      const pct = b.total_amount > 0 ? Math.min((b.actual_spent / b.total_amount) * 100, 100) : 0;
-                      const isOver = b.actual_spent > b.total_amount;
-                      return (
-                        <div className="rounded-xl border border-theme-border bg-theme-raised p-3 space-y-1.5">
-                          <div className="flex items-center justify-between text-[10px] font-semibold">
-                            <span className="text-theme-muted">Current utilisation</span>
-                            <span className={isOver ? "text-red-500" : "text-emerald-600"}>{isOver ? "OVER BUDGET" : `${pct.toFixed(0)}%`}</span>
-                          </div>
-                          <div className="h-1.5 w-full rounded-full bg-theme-page overflow-hidden">
-                            <div className={cn("h-full rounded-full", isOver ? "bg-red-500" : pct >= 85 ? "bg-amber-500" : "bg-emerald-500")} style={{ width: `${pct}%` }} />
-                          </div>
-                          <div className="flex justify-between text-[10px] text-theme-muted">
-                            <span>Spent: ₹{(b.actual_spent / 1000).toFixed(1)}K</span>
-                            <span>Total: ₹{(b.total_amount / 1000).toFixed(1)}K</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 border-t border-theme-border pt-4">
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
-                  <Button type="submit" size="sm" loading={submitting}>
-                    {editingId ? "Save changes" : "Create project"}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+          </form>
+          <DialogFooter className="!mx-0 !mb-0 !rounded-none flex-row items-center sm:justify-end gap-3 border-t border-border bg-background px-6 py-5">
+            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button type="submit" form="new-project-form" disabled={submitting}>
+              {submitting && <Loader2 className="animate-spin" />}
+              {editingId ? "Save changes" : "Create project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── DELETE CONFIRM ──────────────────────────────────────── */}
       {deleteConfirm && (
@@ -994,8 +889,9 @@ export default function AdminProjectsPage() {
               <p className="text-xs text-theme-muted mt-0.5">This action cannot be undone.</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button onClick={() => setDeleteConfirm(null)} disabled={submitting} variant="secondary" size="sm">Cancel</Button>
-              <Button onClick={handleDelete} disabled={submitting} variant="primary" size="sm" className="bg-rose-600 hover:bg-rose-700 border-rose-600">
+              <Button onClick={() => setDeleteConfirm(null)} disabled={submitting} variant="outline" size="sm">Cancel</Button>
+              <Button onClick={handleDelete} disabled={submitting} variant="destructive" size="sm">
+                {submitting && <Loader2 className="animate-spin" />}
                 {submitting ? "Deleting…" : "Delete"}
               </Button>
             </div>
@@ -1086,12 +982,12 @@ function AssigneeMultiSelect({ value, employees, onChange }: {
           <div className="p-2 border-b border-theme-border">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-theme-muted" size={12} />
-              <input
+              <Input
                 autoFocus
                 placeholder="Search employees…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-md border border-theme-border bg-theme-raised pl-7 pr-3 py-1.5 text-xs text-theme-fg outline-none focus:border-theme-primary placeholder:text-theme-muted"
+                className="h-8 pl-7 text-xs"
               />
             </div>
           </div>
@@ -1162,7 +1058,6 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
   employees: Employee[];
 }) {
   const { user } = useAuth();
-  const { showToast } = useToast();
   const [view, setView] = useState<'board' | 'table' | 'list' | 'workspace'>('board');
 
   // ── workspace items ───────────────────────────────────────────────────────────
@@ -1225,12 +1120,12 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
           presentation: `/admin/workspace/presentations/${created.id}`,
           note: `/admin/workspace/notes`,
         };
-        showToast(`${titles[type]} created`, 'success');
+        toast.success(`${titles[type]} created`);
         await fetchWsItems();
         if (type !== 'note') window.open(urlMap[type], '_blank');
       }
     } catch {
-      showToast('Failed to create item', 'error');
+      toast.error('Failed to create item');
     } finally {
       setWsCreating(null);
     }
@@ -1287,7 +1182,7 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
       // Keep selected task in sync
       setSelectedTask(prev => prev ? (fetched.find(t => t.id === prev.id) || null) : null);
     } catch {
-      showToast("Failed to load board.", "error");
+      toast.error("Failed to load board.");
     } finally {
       setLoading(false);
     }
@@ -1352,7 +1247,7 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
       setAddingToColumn(null);
       fetchTasks();
     } catch {
-      showToast("Failed to create task.", "error");
+      toast.error("Failed to create task.");
     }
   };
 
@@ -1362,7 +1257,7 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
       await axios.patch(`/api/projects/${project.id}/tasks/${taskId}`, updates);
       fetchTasks();
     } catch {
-      showToast("Sync failed.", "error");
+      toast.error("Sync failed.");
     }
   };
 
@@ -1373,7 +1268,7 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
       await axios.delete(`/api/projects/${project.id}/tasks/${taskId}`);
       fetchTasks();
     } catch {
-      showToast("Delete failed.", "error");
+      toast.error("Delete failed.");
     }
   };
 
@@ -1396,7 +1291,7 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
       });
       fetchComments(selectedTask.id);
     } catch {
-      showToast("Failed to post comment.", "error");
+      toast.error("Failed to post comment.");
     }
   };
 
@@ -2010,19 +1905,23 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
                   {
                     label: 'Status',
                     content: (
-                      <select value={newTask.status || 'TODO'} onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
-                        className="bg-theme-raised border border-theme-border rounded-lg text-xs font-medium text-theme-fg outline-none w-full px-2 py-1.5 focus:border-theme-primary transition-all">
-                        {allColumns.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                      </select>
+                      <Select value={newTask.status || 'TODO'} onValueChange={(v) => setNewTask({ ...newTask, status: v })}>
+                        <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {allColumns.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     )
                   },
                   {
                     label: 'Priority',
                     content: (
-                      <select value={newTask.priority || 'Medium'} onChange={(e) => setNewTask({ ...newTask, priority: e.target.value as any })}
-                        className="bg-theme-raised border border-theme-border rounded-lg text-xs font-medium text-theme-fg outline-none w-full px-2 py-1.5 focus:border-theme-primary transition-all">
-                        {['Low', 'Medium', 'High', 'Critical'].map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
+                      <Select value={newTask.priority || 'Medium'} onValueChange={(v) => setNewTask({ ...newTask, priority: v as any })}>
+                        <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {['Low', 'Medium', 'High', 'Critical'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     )
                   },
                   {
@@ -2038,8 +1937,8 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
                   {
                     label: 'Due Date',
                     content: (
-                      <input type="date" value={newTask.due_date || ''} onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value || null })}
-                        className="bg-theme-raised border border-theme-border rounded-lg text-xs font-medium text-theme-fg outline-none w-full px-2 py-1.5 focus:border-theme-primary transition-all" />
+                      <Input type="date" value={newTask.due_date || ''} onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value || null })}
+                        className="h-8 text-xs" />
                     )
                   },
                 ].map(({ label, content }) => (
@@ -2053,26 +1952,24 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
               {/* Description */}
               <div className="px-5 py-4">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-theme-muted mb-2">Description</p>
-                <textarea
+                <Textarea
                   rows={4}
                   placeholder="Add a description…"
                   value={newTask.description || ''}
                   onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                  className="w-full text-xs text-theme-fg outline-none resize-none bg-theme-raised border border-theme-border rounded-lg px-3 py-2 placeholder:text-theme-muted focus:border-theme-primary transition-all leading-relaxed"
+                  className="resize-none text-xs"
                 />
               </div>
             </div>
 
             {/* Footer */}
             <div className="flex items-center justify-end gap-2 border-t border-theme-border px-5 py-3 flex-shrink-0">
-              <button onClick={() => { setAddingToColumn(null); setNewTask(blankTask()); }}
-                className="px-4 py-1.5 rounded-lg border border-theme-border text-xs font-semibold text-theme-muted hover:bg-theme-raised transition-all">
+              <Button variant="outline" size="sm" onClick={() => { setAddingToColumn(null); setNewTask(blankTask()); }}>
                 Cancel
-              </button>
-              <button onClick={handleCreateTask}
-                className="px-4 py-1.5 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-all flex items-center gap-1.5">
-                <Check size={12} /> Create Task
-              </button>
+              </Button>
+              <Button size="sm" onClick={handleCreateTask}>
+                <Check /> Create Task
+              </Button>
             </div>
           </div>
         )}
@@ -2109,25 +2006,29 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
                   {
                     label: 'Status',
                     content: (
-                      <select
+                      <Select
                         value={detailDraft.status || 'TODO'}
-                        onChange={(e) => { setDetailDraft(d => ({ ...d, status: e.target.value })); saveDetail('status', e.target.value); }}
-                        className="bg-theme-raised border border-theme-border rounded-lg text-xs font-medium text-theme-fg outline-none w-full px-2 py-1.5 focus:border-theme-primary transition-all"
+                        onValueChange={(v) => { setDetailDraft(d => ({ ...d, status: v })); saveDetail('status', v); }}
                       >
-                        {allColumns.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                      </select>
+                        <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {allColumns.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     )
                   },
                   {
                     label: 'Priority',
                     content: (
-                      <select
+                      <Select
                         value={detailDraft.priority || 'Medium'}
-                        onChange={(e) => { setDetailDraft(d => ({ ...d, priority: e.target.value as any })); saveDetail('priority', e.target.value); }}
-                        className="bg-theme-raised border border-theme-border rounded-lg text-xs font-medium text-theme-fg outline-none w-full px-2 py-1.5 focus:border-theme-primary transition-all"
+                        onValueChange={(v) => { setDetailDraft(d => ({ ...d, priority: v as any })); saveDetail('priority', v); }}
                       >
-                        {['Low', 'Medium', 'High', 'Critical'].map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
+                        <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {['Low', 'Medium', 'High', 'Critical'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     )
                   },
                   {
@@ -2146,11 +2047,11 @@ function ProjectTasksDrawer({ project, onClose, employees }: {
                   {
                     label: 'Due Date',
                     content: (
-                      <input
+                      <Input
                         type="date"
                         value={detailDraft.due_date || ''}
                         onChange={(e) => { setDetailDraft(d => ({ ...d, due_date: e.target.value || null })); saveDetail('due_date', e.target.value || null); }}
-                        className="bg-theme-raised border border-theme-border rounded-lg text-xs font-medium text-theme-fg outline-none w-full px-2 py-1.5 focus:border-theme-primary transition-all"
+                        className="h-8 text-xs"
                       />
                     )
                   },
@@ -2316,9 +2217,7 @@ function OversightModal({ project, onClose, teams }: { project: Project; onClose
 
         {/* Footer */}
         <div className="flex-shrink-0 flex justify-end border-t border-theme-border px-5 py-3">
-          <button onClick={onClose} className="rounded-xl border border-theme-border px-4 py-2 text-xs font-semibold text-theme-fg hover:bg-theme-raised transition-all">
-            Close
-          </button>
+          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
         </div>
       </div>
     </div>

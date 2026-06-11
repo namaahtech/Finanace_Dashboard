@@ -9,7 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { useChannels, useMessaging, usePresence, type Channel, type Message } from "@/hooks/useMessaging";
-import { useAuth } from "@/components/layout/AuthProvider";
+import { useAuth, getDashboardForRole, type Role } from "@/components/layout/AuthProvider";
 import { usePermission } from "@/hooks/usePermission";
 import { useRouter } from "next/navigation";
 import { useNotifications } from "@/components/layout/NotificationProvider";
@@ -60,7 +60,7 @@ function MessageItem({
         {isFirst ? (
           <Avatar name={msg.sender_name} size="sm" />
         ) : (
-          <span className="text-[9px] text-theme-subtle font-mono opacity-0 group-hover:opacity-100 transition-opacity block text-center pt-1">
+          <span className="text-[9px] text-theme-subtle tabular-nums opacity-0 group-hover:opacity-100 transition-opacity block text-center pt-1">
             {format(new Date(msg.created_at), "HH:mm")}
           </span>
         )}
@@ -126,12 +126,7 @@ export default function AdminMessagingPage() {
 
   useEffect(() => {
     if (user && user.role !== "admin" && canView === false) {
-      router.replace(
-        user.role === "team_lead" ? "/team-lead/dashboard"
-        : user.role === "dept_lead" ? "/department-lead/dashboard"
-        : user.role === "employee" || user.role === "intern" ? "/dashboard"
-        : "/admin"
-      );
+      router.replace(getDashboardForRole(user.role as Role));
     }
   }, [canView, user, router]);
   const { channels, loading: chLoading, refetch: refetchChannels } = useChannels(true);
