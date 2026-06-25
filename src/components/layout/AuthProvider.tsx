@@ -38,6 +38,8 @@ interface AuthUser {
   } | null;
   zoho_email?: string | null;
   personal_email?: string | null;
+  must_change_password?: boolean;
+  zoho_activated_at?: string | null;
 }
 
 export function getDashboardForRole(role: Role): string {
@@ -315,83 +317,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Unable to retrieve employee profile.");
     }
 
-    // 4. Fetch onboarding status to route correctly
-    const { data: onboarding } = await supabase
-      .from("user_onboarding")
-      .select("status")
-      .eq("user_id", emp.id)
-      .maybeSingle();
-
-    const onboardingCompleted = onboarding?.status === "completed";
-
     setUser(emp as AuthUser);
 
     // Load permissions immediately after login (merged with per-employee overrides)
     const perms = await fetchPermissions(emp.role, emp.id);
     setPermissions(perms);
 
-    // 5. Determine target route based on onboarding status
-    const targetRoute = !onboardingCompleted
-      ? "/onboarding"
-      : getDashboardForRole(emp.role as Role);
-
-    // 6. FIRST company-mail login → silently activate the user's Zoho session ONCE.
-    //    Goal: flip the user's "Last Sign In" in the Zoho Admin Console from
-    //    "Never signed in" → a real timestamp, WITHOUT the user ever leaving the
-    //    workspace. We do this by POSTing a signed SAML assertion to Zoho's ACS
-    //    from a hidden, off-screen iframe while the parent window routes the user
-    //    straight to their dashboard.
-    //
-    //    "Once only" is gated on employees.zoho_activated_at: the SAML route stamps
-    //    it the first time it fires, so subsequent logins skip the trigger entirely.
-    //
-    //    NOTE: For Zoho to accept the assertion (and update Last Sign In), the IdP
-    //    certificate must be registered in the Zoho Admin Console under
-    //    Security → Custom Authentication / SAML. Until then the assertion is sent
-    //    but silently rejected by Zoho — no user-facing error either way.
-    const alreadyActivated = Boolean((emp as any).zoho_activated_at);
-    if (isProfessionalLogin && (zoho_email || emp.zoho_email) && !alreadyActivated) {
-      // Persist the iron-session server-side so /api/auth/saml/sso can read userId
-      // from the np_session cookie when the iframe requests it.
-      try {
-        const { data: sbSession } = await supabase.auth.getSession();
-        if (sbSession?.session?.access_token) {
-          await fetch("/api/auth/save-session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              access_token:  sbSession.session.access_token,
-              refresh_token: sbSession.session.refresh_token,
-              employee_id:   emp.id,
-              role:          emp.role,
-              email:         emp.email,
-            }),
-          });
-        }
-      } catch (e) {
-        console.warn("[SAML] save-session failed, silent Zoho activation may not work:", e);
+    // Persist the iron-session (np_session) server-side on EVERY successful login.
+    // This cookie is the ONLY identity the server-side SAML route can read, so it
+    // MUST always reflect the user who just logged in. Previously it was saved only
+    // inside the activation branch below — meaning personal-email logins, already-
+    // activated users, and admins never refreshed it, so a stale userId from a prior
+    // session lingered (7-day cookie) and made /api/auth/saml/sso resolve the wrong
+    // user or none at all → the "User profile not found" blank page.
+    try {
+      const { data: sbSession } = await supabase.auth.getSession();
+      if (sbSession?.session?.access_token) {
+        await fetch("/api/auth/save-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            access_token:  sbSession.session.access_token,
+            refresh_token: sbSession.session.refresh_token,
+            employee_id:   emp.id,
+            role:          emp.role,
+            email:         emp.email,
+          }),
+        });
       }
-
-      // Fire the SAML assertion to Zoho in a hidden iframe — the user stays here.
-      try {
-        const frame = document.createElement("iframe");
-        frame.setAttribute("aria-hidden", "true");
-        frame.style.cssText =
-          "position:absolute;width:1px;height:1px;border:0;opacity:0;pointer-events:none;left:-9999px;top:-9999px";
-        frame.src = `/api/auth/saml/sso?mode=silent&RelayState=${encodeURIComponent(targetRoute)}`;
-        document.body.appendChild(frame);
-        // Clean up after the assertion has been delivered to Zoho.
-        setTimeout(() => { frame.remove(); }, 15000);
-      } catch (e) {
-        console.warn("[SAML] silent Zoho activation iframe failed:", e);
-      }
+    } catch (e) {
+      console.warn("[auth] save-session failed:", e);
     }
 
-    // Route the user straight into the workspace — no full-page redirect to Zoho.
+    // 4. Always route to dashboard — ChangePasswordModal blocks the UI if must_change_password is true
+    const targetRoute = getDashboardForRole(emp.role as Role);
+
+    // 6. FIRST company-mail login → ONE-TIME full-page Zoho SSO hand-off.
+    //    Flips the user's Zoho "Last Sign In" from "Never signed in" → a real
+    //    timestamp. A top-level navigation (not a hidden iframe) is required so
+    //    Zoho can set its own session cookie + record the authentication. Zoho
+    //    accepts our signed assertion (correct ACS = accounts.zoho.in/signin/
+    //    samlsp/<id>, audience = zoho.in) and then redirects back to our
+    //    dashboard. The server SAML route stamps zoho_activated_at + sends the
+    //    confirmation email, so this fires EXACTLY ONCE and never again.
+    //    np_session was just refreshed above, so the route resolves THIS user.
+    const alreadyActivated = Boolean((emp as any).zoho_activated_at);
+    const needsZohoActivation =
+      isProfessionalLogin &&
+      (zoho_email || emp.zoho_email) &&
+      !alreadyActivated &&
+      !emp.must_change_password; // never hand off before the password is set
+
+    if (needsZohoActivation) {
+      // RelayState points at our activation landing page (NOT the dashboard): Zoho
+      // returns there after accepting the sign-in, and that page confirms activation
+      // (stamp + email), shows a themed screen, then redirects to the role dashboard.
+      window.location.href = `/api/auth/saml/sso?RelayState=${encodeURIComponent("/auth/zoho-activated")}`;
+      return; // full-page navigation — nothing after this runs
+    }
+
+    // Normal login (personal email, or an already-activated company user) → straight in.
     router.push(targetRoute);
   }, [router]);
 
   const logout = useCallback(async () => {
+    // Destroy the server-side iron-session (np_session) FIRST so a stale userId can
+    // never linger and be picked up by the SAML route on the next person's login.
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    try { sessionStorage.removeItem("zoho_sso_seeded"); sessionStorage.removeItem("zoho_inbox_synced"); } catch {}
     await supabase.auth.signOut();
     setUser(null);
     setPermissions(null);

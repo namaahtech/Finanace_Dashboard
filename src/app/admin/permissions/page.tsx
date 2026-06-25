@@ -103,6 +103,8 @@ const SECTIONS = [
       { key: "recruitment",   label: "Recruitment Hub",                desc: "Hiring pipeline Kanban, applicant tracking" },
       { key: "ats_scanner",   label: "Resume Scanner (ATS)",           desc: "Gemma AI scores resumes against job requirements" },
       { key: "interviews",    label: "Interview Management",           desc: "Schedule interviews, video rooms, AI recap" },
+      { key: "onboarding",    label: "Onboarding",                     desc: "Offer letter builder, approval workflow, e-sign dispatch" },
+      { key: "onboarding_builder", label: "Onboarding — Form Builder",  desc: "Full-depth edit: add/edit questions, options, types & structure" },
     ],
   },
   {

@@ -20,17 +20,36 @@ export async function POST(req: Request) {
     }
 
     // Build professional email address: firstname.lastname@domain
-    const parts        = name.trim().toLowerCase().split(/\s+/);
-    const localPart    = parts.length >= 2
+    const parts       = name.trim().toLowerCase().split(/\s+/);
+    const baseLocal   = parts.length >= 2
       ? `${parts[0]}.${parts[parts.length - 1]}`
       : parts[0];
-    
+
     // Prefer env var, then default to mail.namaah.io, then dynamically query configuration
     let mailDomain = process.env.ZOHO_MAIL_DOMAIN || "mail.namaah.io";
     const { data: orgCfg } = await supabase.from("zoho_config").select("org_domain").maybeSingle();
     if (orgCfg?.org_domain) {
       mailDomain = orgCfg.org_domain;
     }
+
+    // Deduplicate: if firstname.lastname already exists, append random 4-digit suffix
+    let localPart = baseLocal;
+    let attempt = 0;
+    while (true) {
+      const candidate = `${localPart}@${mailDomain}`;
+      const { data: existing } = await supabase
+        .from("employees")
+        .select("id")
+        .or(`email.ilike.${candidate},zoho_email.ilike.${candidate}`)
+        .maybeSingle();
+      if (!existing) break; // candidate is free
+      // Append a fresh 4-digit random number and retry
+      const suffix = Math.floor(1000 + Math.random() * 9000);
+      localPart = `${baseLocal}${suffix}`;
+      attempt++;
+      if (attempt > 10) break; // safety — extremely unlikely to need more than 10 tries
+    }
+
     const professionalEmail = `${localPart}@${mailDomain}`;
 
     // 1. Generate an automated temporary password (avoid sequential characters)
@@ -71,7 +90,8 @@ export async function POST(req: Request) {
       joining_date: joining_date || new Date().toISOString(),
       employment_type: employment_type || 'full_time',
       salary_structure: salary_structure || 'fixed_monthly',
-      base_salary: base_salary ? Number(base_salary) : 0
+      base_salary: base_salary ? Number(base_salary) : 0,
+      must_change_password: true,
     };
 
     // Add salary fields only if they're provided (migration may not be applied yet)

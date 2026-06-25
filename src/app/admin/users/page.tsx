@@ -393,6 +393,9 @@ export default function AdminUsersPage() {
   const [zohoEmailPreview, setZohoEmailPreview] = useState("");
   const [assignableRoles, setAssignableRoles] = useState<string[]>([]);
   const [salarySlabs, setSalarySlabs] = useState<SalarySlab[]>([]);
+  // "Add from onboarding" — pick a signed/completed candidate to auto-fill
+  const [fromOnboarding, setFromOnboarding] = useState(false);
+  const [obCandidates, setObCandidates] = useState<{ id: string; name: string; email: string; phone: string; address: string; role: string }[]>([]);
 
   async function load(q?: string) {
     setLoading(true);
@@ -486,17 +489,59 @@ export default function AdminUsersPage() {
     };
   }, [user]);
 
-  // Update Zoho email preview when name changes
+  // Personal email live validation (DNS MX check)
+  const [emailCheckState, setEmailCheckState] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
+  const [emailCheckMsg, setEmailCheckMsg] = useState("");
+  const [emailSuggestion, setEmailSuggestion] = useState("");
   useEffect(() => {
-    if (form.name && zohoConnected) {
-      const parts = form.name.trim().toLowerCase().split(" ");
-      const preview = parts.length >= 2
-        ? `${parts[0]}.${parts[parts.length - 1]}@${zohoDomain}`
-        : `${parts[0]}@${zohoDomain}`;
-      setZohoEmailPreview(preview);
-    } else {
-      setZohoEmailPreview("");
+    if (editingId) return; // don't re-validate when editing
+    const val = form.email?.trim();
+    if (!val || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+      setEmailCheckState("idle"); setEmailCheckMsg(""); setEmailSuggestion(""); return;
     }
+    setEmailCheckState("checking"); setEmailSuggestion("");
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/auth/verify-email?email=${encodeURIComponent(val)}`);
+        const data = await res.json();
+        if (data.valid) {
+          setEmailCheckState("valid"); setEmailCheckMsg("Email domain verified");
+        } else {
+          setEmailCheckState("invalid");
+          setEmailCheckMsg(data.reason || "Could not verify this email.");
+          setEmailSuggestion(data.suggestion || "");
+        }
+      } catch {
+        setEmailCheckState("idle");
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [form.email, editingId]);
+
+  // Update Zoho email preview when name changes — checks DB for duplicates
+  const [emailPreviewLoading, setEmailPreviewLoading] = useState(false);
+  const [emailIsDuplicate, setEmailIsDuplicate] = useState(false);
+  useEffect(() => {
+    if (!form.name || !zohoConnected) { setZohoEmailPreview(""); return; }
+    setEmailPreviewLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/preview-email?name=${encodeURIComponent(form.name)}`);
+        const data = await res.json();
+        setZohoEmailPreview(data.email || "");
+        setEmailIsDuplicate(!!data.isDuplicate);
+      } catch {
+        // fallback: compute locally
+        const parts = form.name.trim().toLowerCase().split(" ");
+        setZohoEmailPreview(parts.length >= 2
+          ? `${parts[0]}.${parts[parts.length - 1]}@${zohoDomain}`
+          : `${parts[0]}@${zohoDomain}`);
+        setEmailIsDuplicate(false);
+      } finally {
+        setEmailPreviewLoading(false);
+      }
+    }, 450);
+    return () => clearTimeout(t);
   }, [form.name, zohoConnected, zohoDomain]);
 
   // Re-fetch assignable roles if admin updates permissions while this user is active
@@ -533,8 +578,17 @@ export default function AdminUsersPage() {
     }
   }, [showForm, editingId]);
 
+  async function loadOnboardingCandidates() {
+    try {
+      const res = await fetch("/api/onboarding/signed");
+      if (res.ok) { const j = await res.json(); setObCandidates(j.candidates ?? []); }
+    } catch { /* ignore */ }
+  }
+
   function handleAdd() {
     setEditingId(null);
+    setFromOnboarding(false);
+    loadOnboardingCandidates();
     setForm({
       name: "", email: "", role: "employee", employeeId: "",
       department: "", designation: "", matrix_role: "", shift_id: "", team_id: "",
@@ -1042,12 +1096,86 @@ export default function AdminUsersPage() {
           <form onSubmit={handleSubmit} id="employee-form" className="min-h-0 overflow-y-auto px-6 py-5">
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Full Legal Name</label>
-                    <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">
+                      Full Legal Name
+                      {fromOnboarding && <span className="text-theme-primary font-medium">(through onboarding)</span>}
+                      {!editingId && (
+                        <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium text-theme-muted cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="h-3 w-3 accent-current"
+                            checked={fromOnboarding}
+                            onChange={(e) => { setFromOnboarding(e.target.checked); if (e.target.checked) loadOnboardingCandidates(); }}
+                          />
+                          From onboarding
+                        </span>
+                      )}
+                    </label>
+                    {fromOnboarding && !editingId ? (
+                      <Select
+                        value={obCandidates.find((c) => c.email === form.email && c.name === form.name)?.id || ""}
+                        onValueChange={(id) => {
+                          const c = obCandidates.find((x) => x.id === id);
+                          if (c) setForm((f) => ({ ...f, name: c.name, email: c.email, designation: c.role || f.designation }));
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={obCandidates.length ? "Select a signed candidate…" : "No signed onboardings yet"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {obCandidates.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name} — {c.email}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Personal Email</label>
-                    <Input required type="email" value={form.email} disabled={!!editingId} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">
+                      Personal Email
+                      {fromOnboarding && !editingId && obCandidates.some((c) => c.email === form.email && c.name === form.name) && (
+                        <span className="text-theme-primary font-medium">(from onboarding)</span>
+                      )}
+                      {emailCheckState === "checking" && (
+                        <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-theme-muted">
+                          <span className="h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent" />
+                          Verifying…
+                        </span>
+                      )}
+                      {emailCheckState === "valid" && (
+                        <span className="ml-auto text-[10px] font-black text-emerald-600">✓ Verified</span>
+                      )}
+                    </label>
+                    <Input
+                      required
+                      type="email"
+                      value={form.email}
+                      disabled={!!editingId}
+                      readOnly={fromOnboarding && !editingId && obCandidates.some((c) => c.email === form.email && c.name === form.name)}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      className={
+                        emailCheckState === "invalid" ? "border-red-400 focus:border-red-500" :
+                        emailCheckState === "valid"   ? "border-emerald-400 focus:border-emerald-500" : ""
+                      }
+                    />
+                    {emailCheckState === "invalid" && (
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-semibold text-red-500 flex items-center gap-1">
+                          ⚠ {emailCheckMsg}
+                        </p>
+                        {emailSuggestion && (
+                          <button
+                            type="button"
+                            onClick={() => { setForm({ ...form, email: emailSuggestion }); setEmailSuggestion(""); }}
+                            className="text-[11px] font-black text-theme-primary underline underline-offset-2"
+                          >
+                            Use {emailSuggestion} instead
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {editingId && (
@@ -1134,7 +1262,7 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600">Leave Entitlement</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600">Leave Entitlement <span className="text-[10px] font-semibold text-emerald-500/70">(Sick Leave · Paid)</span></label>
                     <CustomSelect 
                       icon={<Coffee size={14} className="text-emerald-500" />}
                       placeholder="Select Quota"
@@ -1376,8 +1504,24 @@ export default function AdminUsersPage() {
                                 </span>
                               )}
                             </div>
-                            {zohoConnected && form.create_zoho_mail && zohoEmailPreview && (
-                              <p className="text-[11px] text-blue-500 tabular-nums mt-0.5">{zohoEmailPreview}</p>
+                            {zohoConnected && form.create_zoho_mail && (
+                              <div className="mt-0.5">
+                                {emailPreviewLoading ? (
+                                  <p className="text-[11px] text-theme-muted flex items-center gap-1">
+                                    <span className="h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent inline-block" />
+                                    Checking availability…
+                                  </p>
+                                ) : zohoEmailPreview ? (
+                                  <div className="space-y-0.5">
+                                    <p className="text-[11px] text-blue-500 tabular-nums font-semibold">{zohoEmailPreview}</p>
+                                    {emailIsDuplicate && (
+                                      <p className="text-[10px] text-amber-500 font-semibold">
+                                        ⚠ Name already exists — suffix added to avoid conflict
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </div>
                             )}
                             {!zohoConnected && (
                               <p className="text-[10px] text-theme-muted mt-0.5">
@@ -1394,10 +1538,31 @@ export default function AdminUsersPage() {
           </form>
           <DialogFooter className="!mx-0 !mb-0 !rounded-none flex-row items-center sm:justify-end gap-3 border-t border-border bg-background px-6 py-5">
             <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button type="submit" form="employee-form" disabled={submitting}>
-              {submitting && <Loader2 className="animate-spin" />}
-              {editingId ? "Save Changes" : "Create Profile"}
-            </Button>
+            {(() => {
+              const canCreate = !editingId
+                ? (
+                    form.name?.trim().length > 0 &&
+                    emailCheckState === "valid" &&
+                    (!!form.department || !!form.team_id)
+                  )
+                : true;
+              const hint = !editingId && !canCreate
+                ? !form.name?.trim() ? "Enter full legal name"
+                  : emailCheckState !== "valid" ? "Verify personal email first"
+                  : "Select at least a Department or Team"
+                : undefined;
+              return (
+                <Button
+                  type="submit"
+                  form="employee-form"
+                  disabled={submitting || !canCreate}
+                  title={hint}
+                >
+                  {submitting && <Loader2 className="animate-spin" />}
+                  {editingId ? "Save Changes" : "Create Profile"}
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>

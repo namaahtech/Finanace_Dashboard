@@ -133,7 +133,8 @@ Rules:
 - Bold important names, dates, application numbers with <strong style="font-weight:700;color:#111827;">
 - Put key details (dates, times, locations) in the blue callout block
 - Start with Dear [name], and end with Best regards,
-- Keep the exact same meaning as the original — only improve the tone and formatting`;
+- Keep the exact same meaning as the original — only improve the tone and formatting
+- Any text matching **@filename** (double asterisks with @ inside) is a file attachment mention — render it as <strong style="color:#6366f1;font-weight:700;">@filename</strong> in the HTML — never omit or alter it`;
 
       const raw = await callGemma(prompt, { systemPrompt: IMPROVE_SYSTEM, maxTokens: 4096, temperature: 0.4 });
 
@@ -172,36 +173,39 @@ Rules:
     }
 
     if (type === "shorten") {
-      const SHORTEN_SYSTEM = `You are a professional email editor. You condense emails to be brief and punchy while keeping all key information. You produce HTML with inline CSS. You follow the exact delimited output format given.`;
+      const SHORTEN_SYSTEM = `You are a senior professional email editor at a corporate HR platform. You rewrite emails to be concise, tight, and highly professional — cutting filler words, redundant phrases, and unnecessary padding, but always preserving every piece of important information and keeping the email complete (greeting, full content, sign-off). You produce clean HTML with inline CSS. You follow the exact delimited output format given.`;
 
-      const prompt = `You are shortening a business email. Study the example output below, then produce the same format for the ACTUAL EMAIL at the bottom.
+      const prompt = `You are rewriting a business email to be shorter and more professional. Study the example output below, then produce the same format for the ACTUAL EMAIL at the bottom.
 
-EXAMPLE OUTPUT (study this format carefully):
+EXAMPLE — original was verbose with repeated phrases. Shortened version below:
 ===SUBJECT===
 Interview Confirmed — 12 June, 10 AM
 ===BODY===
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.75;color:#1a202c;max-width:600px;">
-<p style="margin:0 0 12px 0;">Dear Rahul,</p>
-<p style="margin:0 0 12px 0;">Your interview for the <strong style="font-weight:700;color:#111827;">Data Science</strong> role is confirmed for <strong style="font-weight:700;color:#111827;">12 June 2026 at 10:00 AM</strong> at Jayanagar, Bengaluru.</p>
-<p style="margin:0 0 12px 0;">Please reply to confirm attendance.</p>
-<p style="margin:12px 0 4px 0;">Best regards,</p>
+<p style="margin:0 0 14px 0;">Dear Rahul,</p>
+<p style="margin:0 0 14px 0;">Your interview for the <strong style="font-weight:700;color:#111827;">Data Science</strong> role is confirmed for <strong style="font-weight:700;color:#111827;">12 June 2026 at 10:00 AM</strong> at our Jayanagar office, Bengaluru.</p>
+<p style="margin:0 0 14px 0;">Please bring a copy of your resume and any relevant documents. Kindly reply to confirm your attendance.</p>
+<p style="margin:14px 0 4px 0;">Best regards,</p>
 <p style="margin:0;font-weight:600;color:#111827;">HR Team, Namaah</p>
 </div>
 ===END===
 
-NOW PRODUCE THE SAME FORMAT FOR THIS ACTUAL EMAIL (keep to 2–3 sentences max):
+NOW PRODUCE THE SAME FORMAT FOR THIS ACTUAL EMAIL:
 Subject: ${subject || "(no subject)"}
 Body: ${emailBody || "(empty)"}
 
 Rules:
 - Use the exact same delimiter lines: ===SUBJECT=== and ===BODY=== and ===END===
-- Write a real concise subject line after ===SUBJECT===
+- Write a sharp, concise subject line after ===SUBJECT===
 - Write real HTML after ===BODY=== using the same inline CSS style as the example
-- Keep to 2–3 sentences maximum (plus greeting and sign-off)
-- Bold key facts like names, dates, numbers
-- Preserve the exact meaning — only shorten and format`;
+- Keep the FULL email structure: greeting (Dear …), all important content, clear call-to-action, sign-off (Best regards, …)
+- Remove ONLY filler words, redundant phrases, and unnecessary repetition — never drop key facts, dates, names, or action items
+- Reduce length by 30–50% through tighter language, not by omitting content
+- Bold important names, dates, numbers, and key terms with <strong style="font-weight:700;color:#111827;">
+- If the original has multiple points, keep them all — just say each one more concisely
+- Any text matching **@filename** (double asterisks with @ inside) is a file attachment mention — render it as <strong style="color:#6366f1;font-weight:700;">@filename</strong> in the HTML — never omit or alter it`;
 
-      const raw = await callGemma(prompt, { systemPrompt: SHORTEN_SYSTEM, maxTokens: 1024, temperature: 0.4 });
+      const raw = await callGemma(prompt, { systemPrompt: SHORTEN_SYSTEM, maxTokens: 2048, temperature: 0.4 });
 
       if (!raw) {
         return NextResponse.json({ error: "All AI models are currently busy. Please try again in 30 seconds." }, { status: 503 });

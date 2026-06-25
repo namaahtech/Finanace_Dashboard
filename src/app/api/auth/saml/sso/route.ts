@@ -22,8 +22,11 @@ async function handleSAMLRequest(req: NextRequest) {
   // user straight to their dashboard.
   const silentMode = nextUrl.searchParams.get("mode") === "silent";
 
-  // 1. If not authenticated, redirect to login page with a return pointer
+  // 1. If not authenticated: in silent (iframe) mode just return an empty 200 — a
+  //    login redirect inside a hidden iframe is pointless and noisy. In full-page
+  //    mode, redirect to login with a return pointer.
   if (!session?.userId) {
+    if (silentMode) return new NextResponse("", { status: 200, headers: { "Content-Type": "text/html" } });
     const ssoPath = `${nextUrl.pathname}${nextUrl.search}`;
     const loginUrl = new URL(`/login`, currentOrigin);
     loginUrl.searchParams.set("next", ssoPath);
@@ -35,15 +38,19 @@ async function handleSAMLRequest(req: NextRequest) {
   // 2. Fetch the user's active employee profile
   const { data: user, error: userErr } = await supabase
     .from("employees")
-    .select("id, zoho_email, is_active, status, role")
+    .select("id, name, zoho_email, personal_email, is_active, status, role, zoho_activated_at")
     .eq("id", session.userId)
     .maybeSingle();
 
   if (userErr || !user) {
-    return new NextResponse("User profile not found.", { status: 404 });
+    // Never strand the user on a blank error page. The np_session may be stale or
+    // point at an account with no employee row — bounce gracefully instead of 404.
+    if (silentMode) return new NextResponse("", { status: 200, headers: { "Content-Type": "text/html" } });
+    return NextResponse.redirect(new URL("/dashboard", currentOrigin));
   }
 
   if (user.status === "disabled" || user.is_active === false) {
+    if (silentMode) return new NextResponse("", { status: 200, headers: { "Content-Type": "text/html" } });
     return new NextResponse("Account deactivated.", { status: 403 });
   }
 
@@ -74,6 +81,26 @@ async function handleSAMLRequest(req: NextRequest) {
 
   // Build the absolute fallback URL (where we redirect if SAML is not configured)
   const fallbackUrl = new URL(relayState.startsWith("/") ? relayState : `/${relayState}`, currentOrigin).toString();
+
+  // Zoho requires an ABSOLUTE RelayState. A relative path (e.g. "/dashboard")
+  // gets corrupted on Zoho's side (serviceurl=…/<garbage>) and strands the user
+  // on a Zoho error page instead of returning to our app. Always send the full URL.
+  const relayStateAbsolute = relayState.startsWith("http") ? relayState : fallbackUrl;
+
+  // Skip-if-already-activated: once a user has activated Zoho, our IdP-initiated
+  // hand-off must NEVER fire again. If the user presses Back and lands on this
+  // route URL, just bounce them to their role dashboard instead of POSTing a new
+  // assertion to Zoho (which would loop them back through the Zoho pages). This
+  // only applies to our own hand-off (GET, no SAMLRequest) — a genuine SP-initiated
+  // request from Zoho (has SAMLRequest, or POST) must still be answered.
+  const spInitiated = !!nextUrl.searchParams.get("SAMLRequest") || req.method === "POST";
+  if ((user as any).zoho_activated_at && !spInitiated && !silentMode) {
+    const roleDash =
+      user.role === "admin" ? "/admin" :
+      user.role === "hr" ? "/hr" :
+      user.role === "accounts" ? "/accounts" : "/dashboard";
+    return NextResponse.redirect(new URL(roleDash, currentOrigin));
+  }
 
   // Log audit event for this professional login (non-blocking)
   supabase.from("audit_logs").insert({
@@ -136,33 +163,12 @@ async function handleSAMLRequest(req: NextRequest) {
 
   console.log(`[SAML SSO] Submitting SAML assertion for ${user.zoho_email} → ${acsUrl}${silentMode ? " (silent/iframe)" : ""}`);
 
-  // 7b. Stamp the one-time activation. Set only when currently NULL so the silent
-  //     trigger fires exactly once (first company-mail login) and never again.
-  supabase
-    .from("employees")
-    .update({ zoho_activated_at: new Date().toISOString() })
-    .eq("id", user.id)
-    .is("zoho_activated_at", null)
-    .then(({ error }) => {
-      if (error) {
-        // Column may not exist yet (pre-migration) — non-fatal, log and continue.
-        console.warn("[SAML SSO] Could not stamp zoho_activated_at:", error.message);
-      } else {
-        supabase.from("audit_logs").insert({
-          actor_id:    user.id,
-          user_id:     user.id,
-          action:      "zoho_sso_first_activation",
-          table_name:  "employees",
-          record_id:   user.id,
-          target_type: "login",
-          new_values:  {
-            email:  user.zoho_email,
-            mode:   silentMode ? "silent_iframe" : "full_redirect",
-            note:   "First company-mail login — silent Zoho SAML SSO fired to activate Last Sign In",
-          },
-        }).then(undefined, () => {});
-      }
-    });
+  // NOTE: We intentionally do NOT stamp zoho_activated_at or send the confirmation
+  // email here. Generating an assertion only means we ASKED Zoho to sign the user
+  // in — it is not proof Zoho accepted it. The genuine "activated" signal is the
+  // browser RETURNING to our activation landing page (RelayState = /auth/zoho-
+  // activated) after Zoho completes the sign-in. That page calls
+  // /api/auth/zoho-activate, which stamps the flag and sends the email exactly once.
 
   // 8. Silent mode → bare invisible auto-submit form (stay inside the workspace).
   if (silentMode) {
@@ -171,7 +177,7 @@ async function handleSAMLRequest(req: NextRequest) {
 <body style="margin:0;background:transparent">
   <form id="samlForm" method="POST" action="${acsUrl}">
     <input type="hidden" name="SAMLResponse" value="${samlResponse}" />
-    <input type="hidden" name="RelayState" value="${relayState}" />
+    <input type="hidden" name="RelayState" value="${relayStateAbsolute}" />
   </form>
   <script>document.getElementById('samlForm').submit();</script>
 </body></html>`;
@@ -194,13 +200,13 @@ async function handleSAMLRequest(req: NextRequest) {
   <title>Connecting to Zoho | Namaah Nexus</title>
   <style>
     :root {
-      --bg: #0b0f19;
-      --card: #111827;
-      --primary: #3b82f6;
-      --primary-glow: rgba(59, 130, 246, 0.15);
-      --text: #f3f4f6;
-      --muted: #6b7280;
-      --border: rgba(59, 130, 246, 0.2);
+      --bg: #eef1f5;
+      --card: #ffffff;
+      --primary: #4f46e5;
+      --primary-glow: rgba(79, 70, 229, 0.10);
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e3e8ef;
       --success: #10b981;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -222,7 +228,7 @@ async function handleSAMLRequest(req: NextRequest) {
       border-radius: 28px;
       padding: 48px 40px;
       width: 360px;
-      box-shadow: 0 32px 64px -12px rgba(0,0,0,0.6), 0 0 80px var(--primary-glow);
+      box-shadow: 0 12px 40px -16px rgba(15,23,42,0.25);
       position: relative;
       overflow: hidden;
     }
@@ -235,17 +241,19 @@ async function handleSAMLRequest(req: NextRequest) {
       opacity: 0.8;
     }
     .logo {
-      width: 56px;
-      height: 56px;
-      border-radius: 16px;
-      background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: #0b0f17;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 22px;
       display: flex;
       align-items: center;
       justify-content: center;
       margin: 0 auto 24px;
-      box-shadow: 0 8px 24px rgba(59,130,246,0.4);
+      box-shadow: 0 8px 20px rgba(15,23,42,0.18);
     }
-    .logo svg { width: 28px; height: 28px; fill: white; }
     .spinner {
       position: relative;
       width: 64px;
@@ -308,17 +316,17 @@ async function handleSAMLRequest(req: NextRequest) {
       font-size: 11px;
       color: var(--muted);
       padding: 8px 12px;
-      background: rgba(255,255,255,0.03);
+      background: #f8fafc;
       border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
       transition: all 0.3s;
     }
-    .step.active { color: var(--text); border-color: var(--border); background: rgba(59,130,246,0.05); }
+    .step.active { color: var(--text); border-color: rgba(79,70,229,0.3); background: rgba(79,70,229,0.06); }
     .step.done { color: var(--success); }
     .step-icon {
       width: 20px; height: 20px;
       border-radius: 50%;
-      background: rgba(255,255,255,0.05);
+      background: #eef2f7;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
       font-size: 9px;
@@ -336,9 +344,7 @@ async function handleSAMLRequest(req: NextRequest) {
 </head>
 <body>
   <div class="card">
-    <div class="logo">
-      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-    </div>
+    <div class="logo">N</div>
     <div class="spinner">
       <div class="ring"></div>
       <div class="ring"></div>
@@ -369,7 +375,7 @@ async function handleSAMLRequest(req: NextRequest) {
 
   <form id="samlForm" method="POST" action="${acsUrl}">
     <input type="hidden" name="SAMLResponse" value="${samlResponse}" />
-    <input type="hidden" name="RelayState" value="${relayState}" />
+    <input type="hidden" name="RelayState" value="${relayStateAbsolute}" />
   </form>
 
   <script>

@@ -4,7 +4,9 @@ import { useAuth, getDashboardForRole, type Role } from "./AuthProvider";
 import { Sidebar } from "./Sidebar";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import { GlobalAttendanceWidget } from "./GlobalAttendanceWidget";
+import { ChangePasswordModal } from "./ChangePasswordModal";
 import {
   SidebarInset,
   SidebarProvider,
@@ -23,14 +25,59 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
   const { user, permissions, loading } = useAuth();
   const router = useRouter();
 
-  // 1. One-time background SAML SSO Zoho session seeding via top-level redirect (bypasses third-party cookie restrictions)
+  // 1. One-time Zoho SAML activation for already-logged-in users whose Zoho
+  //    "Last Sign In" hasn't been seeded yet (covers returning sessions where the
+  //    login() hand-off didn't just run). ONE-TIME full-page hand-off to the SAML
+  //    route: a top-level navigation lets Zoho set its session cookie and record
+  //    the sign-in, so "Last Sign In" flips in the Admin Console (a hidden iframe
+  //    could not). Zoho accepts the assertion and redirects back here. Gated on
+  //    the server's zoho_activated_at (stamped by the route) so it fires exactly
+  //    once and never for users who haven't set their password yet.
   useEffect(() => {
-    if (user?.zoho_email && sessionStorage.getItem("zoho_sso_seeded") !== user.zoho_email) {
-      sessionStorage.setItem("zoho_sso_seeded", user.zoho_email);
-      const returnUrl = window.location.origin + window.location.pathname + window.location.search;
-      window.location.href = `/api/auth/saml/sso?RelayState=${encodeURIComponent(returnUrl)}`;
-    }
+    if (!user || user.must_change_password) return;
+    if (!user.zoho_email) return;
+    if (user.zoho_activated_at) return; // already activated (server source of truth)
+    if (sessionStorage.getItem("zoho_sso_seeded") === user.zoho_email) return;
+    sessionStorage.setItem("zoho_sso_seeded", user.zoho_email);
+
+    (async () => {
+      try {
+        // Make sure the server-side np_session reflects THIS user before we hit the
+        // SAML route (covers returning sessions where login() didn't just run).
+        const { data: sb } = await supabase.auth.getSession();
+        if (sb?.session?.access_token) {
+          await fetch("/api/auth/save-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              access_token: sb.session.access_token,
+              refresh_token: sb.session.refresh_token,
+              employee_id: user.id,
+              role: user.role,
+              email: user.email,
+            }),
+          }).catch(() => {});
+        }
+        window.location.href = `/api/auth/saml/sso?RelayState=${encodeURIComponent("/auth/zoho-activated")}`;
+      } catch { /* non-fatal — activation will retry on next session */ }
+    })();
   }, [user]);
+
+  // 1b. One-time Back-trap after Zoho activation. The activation landing page sets
+  //     this flag right before redirecting here. While the user sits on this freshly
+  //     activated dashboard, intercept Back so it can't navigate to the Zoho sign-in
+  //     pages still sitting in browser history. It self-clears: the flag is removed
+  //     immediately, and the listener is torn down when the user navigates onward.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (sessionStorage.getItem("nexus_post_activation") !== "1") return;
+    sessionStorage.removeItem("nexus_post_activation");
+
+    window.history.pushState(null, "", window.location.href);
+    const onPop = () => window.history.pushState(null, "", window.location.href);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   // 2. Automate inbox sync fetch on successful return from session seeding
   useEffect(() => {
@@ -67,6 +114,8 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
   }
 
   return (
+    <>
+    <ChangePasswordModal />
     <SidebarProvider>
       <Sidebar />
       <SidebarInset className="bg-background overflow-x-hidden min-w-0">
@@ -94,5 +143,6 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
         </div>
       </SidebarInset>
     </SidebarProvider>
+    </>
   );
 }

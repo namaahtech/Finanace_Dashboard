@@ -35,12 +35,12 @@ export const ZOHO_SCOPES = [
   // Calendar
   "ZohoCalendar.calendar.ALL",
   "ZohoCalendar.event.ALL",
-  // Office Suite (Workspace Hub)
-  "ZohoWriter.documents.ALL",
-  "ZohoSheet.dataAPI.ALL",
-  "ZohoShow.presentation.ALL",
-  "WorkDrive.files.ALL",
-  "WorkDrive.workspace.ALL",
+  // Office Suite (Workspace Hub) — scopes added when each panel is built & verified
+  // "ZohoWriter.files.ALL",
+  // "ZohoSheet.dataAPI.ALL",
+  // "ZohoShow.presentation.ALL",
+  // "WorkDrive.files.ALL",
+  // "WorkDrive.workspace.ALL",
   // Cliq — enable when the messaging module is wired:
   // "ZohoCliq.Channels.ALL", "ZohoCliq.Messages.ALL", "ZohoCliq.Webhooks.ALL",
   // Meeting — enable when the meeting module is wired:

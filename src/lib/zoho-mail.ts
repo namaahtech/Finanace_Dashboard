@@ -5,6 +5,7 @@ import {
   getZohoToken,
   refreshAccessToken,
 } from "@/lib/zoho-auth";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 const ZOHO_MAIL_API_URL = ZOHO_API.mail;
 
@@ -122,11 +123,59 @@ STRICT RULES — follow these without exception:
 
 export async function callGemma(
   prompt: string,
-  opts?: { systemPrompt?: string; maxTokens?: number; temperature?: number; models?: string[] }
+  opts?: { systemPrompt?: string; maxTokens?: number; temperature?: number; models?: string[]; preferLocal?: boolean }
 ): Promise<string> {
+  const endpoint     = process.env.LOCAL_AI_ENDPOINT;
+  const model        = process.env.LOCAL_AI_MODEL || "gemma4:e4b";
+  const key          = process.env.AI_BRIDGE_KEY;
   const openrouterKey = process.env.OPENROUTER_API_KEY || process.env.MY_OPENROUTER_API_KEY;
+
+  // ── Local-first fast path ────────────────────────────────────
+  // When preferLocal is set and the local endpoint is configured, try it first
+  // before touching the OpenRouter waterfall. Saves 5-60s of model-hopping.
+  if (opts?.preferLocal && endpoint) {
+    console.info(`[Gemma] preferLocal — hitting ${endpoint} directly`);
+    try {
+      const sysPrompt = opts?.systemPrompt ?? AI_SYSTEM_PROMPT;
+      const localAbort = new AbortController();
+      const localTimer = setTimeout(() => localAbort.abort(), 25_000);
+      const localRes = await fetch(endpoint, {
+        method: "POST",
+        signal: localAbort.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...(key ? { Authorization: `Bearer ${key}` } : {}),
+        },
+        body: JSON.stringify({
+          model,
+          system: sysPrompt,
+          prompt,
+          stream: false,
+          options: {
+            temperature: opts?.temperature ?? 0.4,
+            num_predict: opts?.maxTokens   ?? 4096,
+          },
+        }),
+      });
+      clearTimeout(localTimer);
+      if (localRes.ok) {
+        const localData = await localRes.json();
+        const localOut  = localData?.response || localData?.output || localData?.choices?.[0]?.message?.content || "";
+        if (localOut) {
+          console.info(`[Gemma] ✓ local fast-path (${localOut.length} chars)`);
+          return localOut;
+        }
+      } else {
+        console.warn(`[Gemma] local fast-path ${localRes.status} — falling back to OpenRouter`);
+      }
+    } catch (e: any) {
+      console.warn(`[Gemma] local fast-path error: ${e.message} — falling back to OpenRouter`);
+    }
+  }
+
   if (openrouterKey) {
-    // 18-model waterfall — skips rate-limited models instantly, no long waits
+    // 18-model waterfall — each model has a 10s hard timeout so a queue-hung model
+    // can never block the chain for more than 10s before we move on.
     const DEFAULT_CHAIN = [
       // Tier 1 — strongest, best for structured/writing tasks
       "moonshotai/kimi-k2.6:free",
@@ -156,8 +205,12 @@ export async function callGemma(
 
     for (const model of modelChain) {
       try {
+        const abort = new AbortController();
+        const timer = setTimeout(() => abort.abort(), 10_000); // 10s hard cap per model
+
         const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
+          signal: abort.signal,
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${openrouterKey}`,
@@ -176,6 +229,7 @@ export async function callGemma(
             ],
           }),
         });
+        clearTimeout(timer);
 
         // 429 = rate-limited → skip instantly to next model, no wait
         if (res.status === 429) {
@@ -198,25 +252,21 @@ export async function callGemma(
         console.warn(`[OpenRouter] ${model} → empty response, trying next...`);
 
       } catch (e: any) {
-        console.warn(`[OpenRouter] ${model} → exception: ${e.message}`);
+        const label = e.name === "AbortError" ? "10s timeout" : e.message;
+        console.warn(`[OpenRouter] ${model} → ${label}, trying next...`);
       }
     }
 
     console.warn("[OpenRouter] All 18 models exhausted.");
   }
 
-  // ── Local Gemma fallback (Ollama /api/generate) ─────────────
-  const endpoint = process.env.LOCAL_AI_ENDPOINT;
-  const model    = process.env.LOCAL_AI_MODEL || "gemma4:e4b";
-  const key      = process.env.AI_BRIDGE_KEY;
-
+  // ── Local Gemma fallback (Ollama/proxy /api/generate) ───────
   if (!endpoint) return "";
 
   console.info(`[Gemma] OpenRouter exhausted — using local model ${model}`);
 
   try {
     const sysPrompt = opts?.systemPrompt ?? AI_SYSTEM_PROMPT;
-    // Ollama /api/generate supports a top-level "system" field
     const res = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -230,7 +280,7 @@ export async function callGemma(
         stream: false,
         options: {
           temperature: opts?.temperature ?? 0.4,
-          num_predict: opts?.maxTokens   ?? 4096, // Gemma is unlimited — let it write full HTML
+          num_predict: opts?.maxTokens   ?? 4096,
         },
       }),
     });
@@ -304,6 +354,147 @@ OUTPUT: Respond with ONLY a valid JSON array of exactly 3 strings. No markdown. 
     "Noted. I will follow up on this within 24 hours.",
     "Appreciate you reaching out. Could you please provide any additional details so I can assist you better?",
   ];
+}
+
+// ── System mailer ────────────────────────────────────────────
+// Sends a transactional/system email from the admin Zoho mailbox to one or more
+// recipients. Uses the single shared admin token + admin account (same path the
+// compose/send route uses), so it works for both company (@namaah.io) and
+// external personal addresses. Returns {ok} — callers should treat failure as
+// non-fatal (log + continue), never throw into a login/activation flow.
+export async function sendZohoMail(opts: {
+  to: string[];
+  subject: string;
+  html: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const to = (opts.to || []).map((e) => e?.trim()).filter(Boolean) as string[];
+  if (!to.length) return { ok: false, error: "No recipients" };
+
+  const token = await getZohoToken();
+  if (!token) return { ok: false, error: "Zoho not connected" };
+
+  const supabase = getSupabaseAdmin();
+  const { data: config } = await supabase
+    .from("zoho_config")
+    .select("admin_account_id")
+    .maybeSingle();
+
+  // Resolve the admin account id + sender address from the live Zoho session.
+  let accountId: string | null = config?.admin_account_id || null;
+  let fromAddress: string | null = null;
+  try {
+    const accountsRes = await zohoGet(token, "/accounts");
+    if (accountsRes?.data?.length) {
+      const target =
+        accountsRes.data.find((a: any) => a.isDefaultAccount || a.isPrimary) ||
+        accountsRes.data[0];
+      if (!accountId) accountId = target.accountId;
+      fromAddress =
+        target.primaryEmailAddress ||
+        target.mailboxAddress ||
+        (Array.isArray(target.emailAddress) ? target.emailAddress[0]?.mailId : null);
+    }
+  } catch (e: any) {
+    return { ok: false, error: `Could not resolve admin account: ${e.message}` };
+  }
+
+  if (!accountId || !fromAddress) {
+    return { ok: false, error: "Could not resolve admin Zoho account/sender" };
+  }
+
+  try {
+    const res = await zohoPost(token, `/accounts/${accountId}/messages`, {
+      fromAddress,
+      toAddress: to.join(","),
+      subject: opts.subject,
+      content: opts.html,
+      mailFormat: "html",
+    });
+    if (res?.status?.code !== 200 && res?.status?.code !== 201) {
+      return { ok: false, error: JSON.stringify(res?.status || res) };
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// Branded HTML for the one-time "your Zoho mailbox is active" confirmation.
+// Clean, light, theme-matched (dark "N" brand header, emerald success accents) —
+// mirrors the in-app /auth/zoho-activated screen. All styling is inline (email clients).
+export function buildActivationEmailHtml(name: string, zohoEmail: string): string {
+  const firstName = (name || "there").split(" ")[0];
+  const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+  const row = (label: string) => `
+    <tr><td style="padding:6px 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f8fafc;border:1px solid #e8ecf1;border-radius:12px;">
+        <tr>
+          <td width="44" align="center" style="padding:12px 0;">
+            <span style="display:inline-block;width:22px;height:22px;line-height:22px;border-radius:999px;background:#10b98122;color:#059669;font-size:13px;font-weight:700;">&#10003;</span>
+          </td>
+          <td style="padding:12px 14px 12px 0;font-family:${font};font-size:13px;font-weight:500;color:#0f172a;">${label}</td>
+        </tr>
+      </table>
+    </td></tr>`;
+
+  return `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#eef1f5;font-family:${font};">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef1f5;padding:32px 12px;">
+    <tr><td align="center">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background:#ffffff;border:1px solid #e3e8ef;border-radius:18px;overflow:hidden;box-shadow:0 12px 32px -16px rgba(15,23,42,0.25);">
+
+        <!-- Brand header (dark, matches the black 'N' logo) -->
+        <tr><td style="background:#0b0f17;padding:26px 32px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td width="40" style="vertical-align:middle;">
+                <span style="display:inline-block;width:34px;height:34px;line-height:34px;text-align:center;background:#ffffff;color:#0b0f17;font-weight:800;font-size:16px;border-radius:9px;">N</span>
+              </td>
+              <td style="vertical-align:middle;padding-left:12px;">
+                <div style="color:#ffffff;font-size:15px;font-weight:700;letter-spacing:-0.01em;">Namaah Nexus</div>
+                <div style="color:#8b95a7;font-size:10px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;">Enterprise Operations Panel</div>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="padding:30px 32px 8px;">
+          <div style="display:inline-block;background:#10b98115;color:#059669;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:6px 12px;border-radius:999px;">Mailbox Activated</div>
+          <h1 style="margin:16px 0 8px;font-size:21px;font-weight:800;letter-spacing:-0.02em;color:#0f172a;">Your Zoho mailbox is now active</h1>
+          <p style="margin:0 0 18px;font-size:14px;line-height:1.65;color:#475569;">
+            Hi ${firstName}, your company mailbox has been activated and single sign-on (SAML) is configured for your account. You can now send and receive company email directly inside Namaah Nexus.
+          </p>
+
+          <!-- Mailbox chip -->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#0b0f17;border-radius:12px;margin:0 0 20px;">
+            <tr><td style="padding:16px 18px;">
+              <div style="color:#8b95a7;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Activated mailbox</div>
+              <div style="color:#ffffff;font-size:15px;font-weight:700;">${zohoEmail}</div>
+            </td></tr>
+          </table>
+
+          <!-- Checklist -->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            ${row("Company mailbox provisioned &amp; live")}
+            ${row("SAML single sign-on active")}
+            ${row("Sign-in recorded in your organization directory")}
+          </table>
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="padding:18px 32px 26px;">
+          <hr style="border:none;border-top:1px solid #eef1f5;margin:0 0 14px;" />
+          <p style="margin:0;font-size:12px;line-height:1.6;color:#94a3b8;">
+            This is an automated confirmation. If you did not expect this, please contact your administrator.
+          </p>
+        </td></tr>
+      </table>
+
+      <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;">© Namaah Nexus · Automated security notification</p>
+    </td></tr>
+  </table>
+</body></html>`;
 }
 
 export async function summarizeThread(messages: { subject: string; from: string; body: string }[]): Promise<string> {

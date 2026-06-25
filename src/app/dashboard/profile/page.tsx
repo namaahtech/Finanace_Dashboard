@@ -26,6 +26,8 @@ import {
   Target,
   Trophy,
   Zap,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 
 interface Employee {
@@ -39,6 +41,9 @@ interface Employee {
   commission_enabled?: boolean;
   monthly_sales_target?: number;
   salary_slab_id?: string;
+  zoho_email?: string | null;
+  zoho_account_id?: string | null;
+  zoho_activated_at?: string | null;
 }
 
 interface KpiScore {
@@ -439,6 +444,35 @@ export default function EmployeeProfile() {
   const [usingFallback, setUsingFallback] = useState(false);
   const [salesRecord, setSalesRecord] = useState<SalesRecord | null>(null);
   const [salarySlabs, setSalarySlabs] = useState<SalarySlab[]>([]);
+  const [activatingZoho, setActivatingZoho] = useState(false);
+
+  // Clicking the "Not Activated" badge launches the one-time Zoho SAML hand-off.
+  // Refresh np_session first (so the SAML route resolves THIS user), then full-page
+  // navigate. Zoho verifies → /auth/zoho-activated confirms + redirects to dashboard,
+  // and the badge flips to green on return.
+  const handleActivateZoho = useCallback(async () => {
+    if (activatingZoho || !user) return;
+    setActivatingZoho(true);
+    try {
+      const { data: sb } = await supabase.auth.getSession();
+      if (sb?.session?.access_token) {
+        await fetch("/api/auth/save-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            access_token: sb.session.access_token,
+            refresh_token: sb.session.refresh_token,
+            employee_id: user.id,
+            role: user.role,
+            email: user.email,
+          }),
+        }).catch(() => {});
+      }
+      window.location.href = `/api/auth/saml/sso?RelayState=${encodeURIComponent("/auth/zoho-activated")}`;
+    } catch {
+      setActivatingZoho(false);
+    }
+  }, [activatingZoho, user]);
 
   const loadProfile = useCallback(async () => {
     if (!user) return;
@@ -580,6 +614,37 @@ export default function EmployeeProfile() {
                       <span className="rounded-md bg-theme-raised px-2 py-0.5 text-[11px] font-semibold text-theme-muted capitalize">
                         {employee.employment_type.replace(/_/g, " ")}
                       </span>
+                    )}
+                    {/* Zoho mailbox activation status */}
+                    {employee.zoho_email && (
+                      employee.zoho_activated_at ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
+                          <CheckCircle2 size={11} /> Zoho Activated
+                        </span>
+                      ) : employee.zoho_account_id ? (
+                        <button
+                          type="button"
+                          onClick={handleActivateZoho}
+                          disabled={activatingZoho}
+                          title="Click to activate your Zoho mailbox"
+                          className="group inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 cursor-pointer transition-all hover:bg-amber-500 hover:text-white hover:shadow-sm hover:shadow-amber-500/30 active:scale-95 disabled:opacity-60 disabled:cursor-wait"
+                        >
+                          {activatingZoho ? (
+                            <><Loader2 size={11} className="animate-spin" /> Activating…</>
+                          ) : (
+                            <>
+                              <Clock size={11} className="group-hover:hidden" />
+                              <Zap size={11} className="hidden group-hover:inline" />
+                              <span className="group-hover:hidden">Zoho Not Activated</span>
+                              <span className="hidden group-hover:inline">Activate Now →</span>
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold text-red-500">
+                          <AlertTriangle size={11} /> Zoho Setup Failed
+                        </span>
+                      )
                     )}
                   </div>
                 </div>

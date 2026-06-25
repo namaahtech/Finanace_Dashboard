@@ -147,90 +147,134 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   return NextResponse.json({ user: data });
 }
 
-// ── DELETE /api/users/[id] — remove user ──────────────────
+// Run a promise but never let it block longer than `ms` (returns null on timeout).
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([p, new Promise<null>((res) => setTimeout(() => res(null), ms))]);
+}
+
+// Per-employee "owned data" tables — rows that belong to the employee and must be
+// removed before the employees row can be deleted. Cleared by employee_id / user_id.
+// (Authored/reference columns like created_by, approved_by, team_lead_id are handled
+// by ON DELETE SET NULL in migration 20260609180000 + the nullify step below.)
+const OWNED_TABLES: Array<{ table: string; cols: string[] }> = [
+  { table: "attendance_logs",      cols: ["employee_id"] },
+  { table: "leave_requests",       cols: ["employee_id"] },
+  { table: "leave_balances",       cols: ["employee_id"] },
+  { table: "project_members",      cols: ["employee_id"] },
+  { table: "user_onboarding",      cols: ["user_id"] },
+  { table: "employee_permissions", cols: ["employee_id"] },
+  { table: "payslips",             cols: ["employee_id"] },
+  { table: "reimbursements",       cols: ["employee_id"] },
+  { table: "kpi_metrics",          cols: ["employee_id"] },
+  { table: "salary_revisions",     cols: ["employee_id"] },
+  { table: "system_notifications", cols: ["user_id"] },
+  { table: "otp_codes",            cols: ["user_id"] },
+];
+
+// References on rows that should SURVIVE the deletion — just point them at NULL.
+const NULLIFY_REFS: Array<{ table: string; col: string }> = [
+  { table: "projects",        col: "team_lead_id" },
+  { table: "support_tickets", col: "assignee_id" },
+  { table: "support_tickets", col: "current_handler_id" },
+  { table: "employees",       col: "deactivated_by" },
+];
+
+// Fully remove an employee from Postgres: clear owned data, null surviving refs, then
+// delete the row. If an unforeseen FK still blocks, parse the offending table from the
+// error and clear it by employee_id/user_id, then retry (self-healing, schema-independent).
+async function purgeEmployee(supabase: ReturnType<typeof getSupabaseAdmin>, id: string) {
+  // 1. Null out references that must survive (ignore missing table/column errors)
+  await Promise.all(NULLIFY_REFS.map((r) => supabase.from(r.table).update({ [r.col]: null }).eq(r.col, id)));
+  // 2. Delete owned data
+  await Promise.all(
+    OWNED_TABLES.flatMap((t) => t.cols.map((c) => supabase.from(t.table).delete().eq(c, id)))
+  );
+  // 3. Delete the row, self-healing on any remaining FK blocker (owned-data columns only)
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { error } = await supabase.from("employees").delete().eq("id", id);
+    if (!error) return { ok: true as const };
+
+    const blocking = (error.message + " " + (error.details || "")).match(/table "([^"]+)"/)?.[1];
+    if (!blocking || blocking === "employees") return { ok: false as const, error: error.message };
+
+    // Clear the offending table by the columns that mean "belongs to this employee".
+    const ownedCols = ["employee_id", "user_id"];
+    const results = await Promise.all(ownedCols.map((c) => supabase.from(blocking).delete().eq(c, id)));
+    const clearedSomething = results.some((r) => !r.error);
+    if (!clearedSomething) {
+      // The blocker is an authored/reference column the migration should SET NULL.
+      return { ok: false as const, error: `Blocked by ${blocking} (needs ON DELETE SET NULL): ${error.message}` };
+    }
+  }
+  return { ok: false as const, error: "Exceeded cascade-cleanup retries." };
+}
+
+// Delete the Zoho mailbox — time-bounded so it can never stall the request.
+async function deleteZohoMailbox(supabase: ReturnType<typeof getSupabaseAdmin>, zohoEmail?: string | null, zohoAccountId?: string | null) {
+  if (!zohoEmail && !zohoAccountId) return;
+  try {
+    const token = await getActiveToken();
+    if (!token) return;
+    const { data: config } = await supabase.from("zoho_config").select("zoid").limit(1).maybeSingle();
+    const zoid = config?.zoid || process.env.ZOHO_ORG_ID;
+    if (!zoid) return;
+
+    const payload: Record<string, any> = zohoEmail ? { emailList: [zohoEmail] } : { accountList: [zohoAccountId] };
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 5000);
+    const res = await fetch(`${ZOHO_API.mail}/organization/${zoid}/accounts`, {
+      method: "DELETE",
+      headers: { Authorization: `Zoho-oauthtoken ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: ac.signal,
+    });
+    clearTimeout(t);
+    if (!res.ok) console.error(`[DELETE] Zoho API ${res.status}: ${await res.text()}`);
+    else console.log(`[DELETE] Zoho mailbox removed: ${zohoEmail || zohoAccountId}`);
+  } catch (e: any) {
+    console.error("[DELETE] Zoho mailbox deletion skipped:", e.message);
+  }
+}
+
+// ── DELETE /api/users/[id] — fully decommission a user everywhere ──────────────
 export async function DELETE(req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   const supabase = getSupabaseAdmin();
-
-  console.log(`[DELETE] Deleting employee: ${id}`);
+  console.log(`[DELETE] Decommissioning employee: ${id}`);
 
   try {
-    // 1. Fetch employee to get zoho_email / zoho_account_id before deleting from database
+    // 1. Grab Zoho identifiers before the row is gone.
     const { data: emp } = await supabase
       .from("employees")
       .select("zoho_account_id, zoho_email, email")
       .eq("id", id)
       .maybeSingle();
 
-    const zohoAccountId = emp?.zoho_account_id;
-    const zohoEmail = emp?.zoho_email || emp?.email;
-
-    // 2. If zohoEmail is present (or zohoAccountId), try to delete it from Zoho organization Mail Console
-    if (zohoEmail || zohoAccountId) {
-      try {
-        const token = await getActiveToken();
-        if (token) {
-          const { data: config } = await supabase
-            .from("zoho_config")
-            .select("zoid")
-            .limit(1)
-            .maybeSingle();
-
-          let zoid = config?.zoid;
-          if (!zoid && process.env.ZOHO_ORG_ID) {
-            zoid = process.env.ZOHO_ORG_ID;
-          }
-
-          if (zoid) {
-            const zohoUrl = `${ZOHO_API.mail}/organization/${zoid}/accounts`;
-            console.log(`[DELETE] Deleting Zoho account for email: ${zohoEmail}, accountId: ${zohoAccountId} under org: ${zoid}`);
-            
-            // Prefer deleting by emailList first as it is verified to work flawlessly
-            const payload: Record<string, any> = {};
-            if (zohoEmail) {
-              payload.emailList = [zohoEmail];
-            } else if (zohoAccountId) {
-              payload.accountList = [zohoAccountId];
-            }
-
-            const zohoRes = await fetch(zohoUrl, {
-              method: "DELETE",
-              headers: {
-                Authorization: `Zoho-oauthtoken ${token}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(payload),
-            });
-
-            if (!zohoRes.ok) {
-              const text = await zohoRes.text();
-              console.error(`[DELETE] Zoho API error: ${zohoRes.status} - ${text}`);
-            } else {
-              console.log(`[DELETE] Successfully deleted Zoho account for: ${zohoEmail || zohoAccountId}`);
-            }
-          }
-        }
-      } catch (zohoErr: any) {
-        console.error("[DELETE] Zoho user deletion exception:", zohoErr.message);
-      }
+    // 2. Remove the employee from Postgres (owned data → row → self-heal on FK blocks).
+    const purge = await purgeEmployee(supabase, id);
+    if (!purge.ok) {
+      console.error("[DELETE] Postgres purge failed:", purge.error);
+      return NextResponse.json({ error: purge.error }, { status: 500 });
     }
 
-    // 3. Delete employee record (triggers cascade deletion via RLS)
-    const { error: dbErr } = await supabase.from("employees").delete().eq("id", id);
-    if (dbErr) {
-      console.error("[DELETE] Database error:", dbErr);
-      return NextResponse.json({ error: dbErr.message }, { status: 500 });
-    }
-
-    // 4. Delete auth user
-    const { error: authErr } = await supabase.auth.admin.deleteUser(id);
+    // 3. ALWAYS remove the Supabase Auth identity (the auth UUID). This is the step
+    //    that prevents orphan auth users. Retry once if the first attempt fails.
+    let { error: authErr } = await supabase.auth.admin.deleteUser(id);
     if (authErr) {
-      console.error("[DELETE] Auth error:", authErr);
-      // Auth deletion is non-critical if employee is already deleted
+      ({ error: authErr } = await supabase.auth.admin.deleteUser(id));
     }
+    if (authErr) console.error("[DELETE] Auth UUID removal failed (no employee row remains):", authErr.message);
 
-    console.log(`[DELETE] Successfully deleted employee: ${id}`);
-    return NextResponse.json({ success: true, message: "Employee deleted successfully" });
+    // 4. Delete the Zoho mailbox — time-bounded (max 5s) and non-fatal so the user is
+    //    removed from our system fast regardless of Zoho latency.
+    await withTimeout(deleteZohoMailbox(supabase, emp?.zoho_email, emp?.zoho_account_id), 6000);
+
+    console.log(`[DELETE] Fully decommissioned: ${id} (auth removed: ${!authErr})`);
+    return NextResponse.json({
+      success: true,
+      message: "Employee deleted from the entire system.",
+      authRemoved: !authErr,
+    });
   } catch (err: any) {
     console.error("[DELETE] Unexpected error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });

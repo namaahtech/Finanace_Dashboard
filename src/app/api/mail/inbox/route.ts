@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
       if (attachmentsList.length > 0) {
         const attachmentsHtml = attachmentsList
           .map((att: any) => {
-            const downloadUrl = `/api/mail/attachments?accountId=${accountId}&folderId=${folderId}&messageId=${originalMessageId}&attachmentId=${att.attachmentId}&fileName=${encodeURIComponent(att.fileName)}`;
+            const downloadUrl = `/api/mail/attachments?accountId=${accountId}&folderId=${folderId}&messageId=${originalMessageId}&attachmentId=${att.attachmentId}&fileName=${encodeURIComponent(att.fileName)}&fileSize=${att.size || 0}`;
             const sizeStr = formatBytes(att.size || 0);
             return `
 <a href="${downloadUrl}" 

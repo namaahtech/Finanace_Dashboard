@@ -14,10 +14,10 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabaseAdmin();
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Look up the employee profile in database by email (personal, professional or zoho)
+    // 1. Look up the employee by any email (personal, professional, zoho)
     const { data: emp, error: dbErr } = await supabase
       .from("employees")
-      .select("id, name, email, zoho_email, zoho_user_id, personal_email, status, is_active, role, employee_id, department, designation")
+      .select("id, name, email, zoho_email, zoho_user_id, personal_email, status, is_active, role, employee_id, department, designation, must_change_password")
       .or(`email.ilike.${cleanEmail},personal_email.ilike.${cleanEmail},zoho_email.ilike.${cleanEmail}`)
       .maybeSingle();
 
@@ -33,30 +33,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Account has been deactivated. Please contact your administrator." }, { status: 403 });
     }
 
-    // 2. Fetch onboarding status
-    const { data: onboarding } = await supabase
-      .from("user_onboarding")
-      .select("status")
-      .eq("user_id", emp.id)
-      .maybeSingle();
-
-    const onboardingCompleted = onboarding?.status === "completed";
     const isPersonalEmail = cleanEmail === emp.personal_email?.toLowerCase();
+    const isProfessionalEmail =
+      cleanEmail === emp.email?.toLowerCase() ||
+      (emp.zoho_email && cleanEmail === emp.zoho_email?.toLowerCase());
+    const hasDistinctPersonalEmail =
+      emp.personal_email && emp.personal_email.toLowerCase() !== emp.email?.toLowerCase();
 
-    // 3. If they enter their personal email and onboarding is completed, block them!
-    if (isPersonalEmail && onboardingCompleted && emp.status !== "disabled") {
-      return NextResponse.json({ error: "Please login with your company mail ID." }, { status: 403 });
+    // 2. Personal email login AFTER password is already changed → block, must use professional
+    if (isPersonalEmail && emp.must_change_password === false && hasDistinctPersonalEmail) {
+      return NextResponse.json({
+        error: `Personal email access is disabled. Please login with your company email: ${emp.email}`,
+      }, { status: 403 });
     }
 
-    // 3b. If they enter their professional email but onboarding is not completed, block them!
-    const isProfessionalEmail = cleanEmail === emp.email?.toLowerCase() || (emp.zoho_email && cleanEmail === emp.zoho_email?.toLowerCase());
-    const hasDistinctPersonalEmail = emp.personal_email && emp.personal_email.toLowerCase() !== emp.email?.toLowerCase();
-    if (isProfessionalEmail && hasDistinctPersonalEmail && !onboardingCompleted) {
-      return NextResponse.json({ error: "1st time login with personal mail and complete onboarding, after login with professional mail." }, { status: 403 });
+    // 3. Professional email login BEFORE password is changed → block, must do first login with personal
+    if (isProfessionalEmail && hasDistinctPersonalEmail && emp.must_change_password === true) {
+      return NextResponse.json({
+        error: "Please login with your personal email first to set your password before switching to your company email.",
+      }, { status: 403 });
     }
 
-    // 4. Return success along with the email that is registered in Supabase Auth
-    // Also return zoho info so client can trigger SAML SSO for Zoho lastSignIn update
+    // 4. Return the auth email (Supabase Auth account is always on professional email)
     return NextResponse.json({
       success: true,
       emailToAuth: emp.email,

@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Wand2, RotateCcw, BookOpen, Search, Lightbulb, PenTool } from "lucide-react";
+import {
+  Sparkles, Wand2, RotateCcw, BookOpen, Search, Lightbulb,
+  PenTool, AlertCircle,
+} from "lucide-react";
 import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,8 +13,11 @@ import { Card, CardContent } from "@/components/ui/card";
 
 interface AISidebarProps {
   content: string;
-  onApplyChange: (newContent: string) => void;
-  onInsertContent: (content: string) => void;
+  /** Called when AI produces a result — parent handles the on-doc ghost/preview */
+  onAIDraft: (draft: string) => void;
+  /** Called whenever the loading state changes so parent can show on-doc loader */
+  onLoadingChange?: (loading: boolean) => void;
+  onRenameDocument?: (newTitle: string) => void;
 }
 
 const QUICK_ACTIONS = [
@@ -23,31 +29,75 @@ const QUICK_ACTIONS = [
   { id: "shorten",    icon: PenTool,   label: "Make shorter",     description: "Condensed version for quick reading" },
 ];
 
-export function AISidebar({ content, onApplyChange, onInsertContent }: AISidebarProps) {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState("");
+// Patterns that mean "rename this document to X"
+const RENAME_RE = [
+  /^(?:rename|call|title|name)\s+(?:this\s+)?(?:document|doc|it)\s+(?:as|to|"')?(.+?)["']?$/i,
+  /^change\s+(?:the\s+)?(?:document\s+)?(?:title|name)\s+(?:to|as)\s+(.+)$/i,
+  /^(?:set|update)\s+(?:the\s+)?(?:title|name)\s+(?:to|as)\s+(.+)$/i,
+  /^rename\s+to\s+(.+)$/i,
+];
+
+function detectRename(p: string): string | null {
+  const t = p.trim();
+  for (const re of RENAME_RE) {
+    const m = t.match(re);
+    if (m?.[1]) return m[1].trim().replace(/^["']|["']$/g, "");
+  }
+  return null;
+}
+
+export function AISidebar({ content, onAIDraft, onLoadingChange, onRenameDocument }: AISidebarProps) {
+  const [loading, setLoading]   = useState(false);
+
+  const setLoadingState = (val: boolean) => { setLoading(val); onLoadingChange?.(val); };
+  const [error, setError]       = useState<string | null>(null);
+  const [renamed, setRenamed]   = useState<string | null>(null);
+  const [prompt, setPrompt]     = useState("");
+  const [lastLabel, setLastLabel] = useState("");
 
   const runAIAction = async (action: string, customPrompt?: string) => {
-    setLoading(true);
-    setResult(null);
+    const effectivePrompt = customPrompt || prompt;
+
+    // Rename intent — client-side, no AI call
+    if (action === "custom" && onRenameDocument) {
+      const newTitle = detectRename(effectivePrompt);
+      if (newTitle) {
+        onRenameDocument(newTitle);
+        setRenamed(newTitle);
+        setPrompt("");
+        setTimeout(() => setRenamed(null), 3500);
+        return;
+      }
+    }
+
+    setLoadingState(true);
+    setError(null);
+    const label = QUICK_ACTIONS.find(a => a.id === action)?.label ?? "Generating";
+    setLastLabel(action === "custom" ? "Writing…" : `${label}…`);
+
     try {
-      const response = await axios.post('/api/workspace/ai', {
+      const response = await axios.post("/api/workspace/ai", {
         action,
-        content: content,
-        customPrompt: customPrompt || prompt
+        content,
+        customPrompt: effectivePrompt || undefined,
       });
-      setResult(response.data.result);
-    } catch (error) {
-      console.error("AI Action failed", error);
+      const draft = response.data.result;
+      if (draft) {
+        onAIDraft(draft);
+        if (action === "custom") setPrompt("");
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || "AI engine unavailable — try again.";
+      setError(msg);
     } finally {
-      setLoading(false);
+      setLoadingState(false);
     }
   };
 
   return (
     <div className="flex flex-col h-full bg-card w-full overflow-hidden">
-      <div className="px-5 py-4 border-b border-border">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-primary" />
           <h2 className="text-sm font-semibold text-foreground">AI Writing Assistant</h2>
@@ -56,17 +106,27 @@ export function AISidebar({ content, onApplyChange, onInsertContent }: AISidebar
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+        {/* Prompt input */}
         <div className="space-y-2">
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Ask AI to write anything..."
-            className="h-24 resize-none text-sm"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && prompt.trim() && !loading) {
+                e.preventDefault();
+                runAIAction("custom");
+              }
+            }}
+            placeholder={
+              'Write anything…\n• "write 100 lines about Mahabharata"\n• "rename this document as Project Brief"\n• Ctrl+Enter to send'
+            }
+            className="h-28 resize-none text-sm"
           />
           <Button
             type="button"
-            onClick={() => runAIAction('custom')}
-            disabled={loading || !prompt}
+            onClick={() => runAIAction("custom")}
+            disabled={loading || !prompt.trim()}
             className="w-full"
           >
             <Sparkles size={14} className="mr-1.5" />
@@ -76,6 +136,7 @@ export function AISidebar({ content, onApplyChange, onInsertContent }: AISidebar
 
         <Separator />
 
+        {/* Quick actions */}
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground">Quick actions</p>
           {QUICK_ACTIONS.map(({ id, icon: Icon, label, description }) => (
@@ -99,50 +160,38 @@ export function AISidebar({ content, onApplyChange, onInsertContent }: AISidebar
           ))}
         </div>
 
-        {result && (
-          <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-primary">AI result</span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => onInsertContent(result)}
-                  >
-                    Insert
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs text-muted-foreground"
-                    onClick={() => setResult(null)}
-                  >
-                    Discard
-                  </Button>
-                </div>
-              </div>
-              <div className="text-xs text-foreground leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">
-                {result}
-              </div>
+        {/* Rename success */}
+        {renamed && (
+          <Card className="border-emerald-500/30 bg-emerald-500/5">
+            <CardContent className="px-4 py-3">
+              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                Document renamed to <span className="font-bold">"{renamed}"</span>
+              </p>
             </CardContent>
           </Card>
         )}
 
-        {loading && (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center gap-3 py-8">
-              <div className="relative">
-                <div className="h-10 w-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-                <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-primary animate-pulse" size={14} />
-              </div>
-              <p className="text-xs font-medium text-muted-foreground animate-pulse">Gemma is thinking…</p>
+        {/* Error */}
+        {error && (
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardContent className="flex items-start gap-2.5 px-4 py-3">
+              <AlertCircle size={14} className="text-destructive flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-destructive leading-snug">{error}</p>
             </CardContent>
           </Card>
         )}
+
+        {/* Loading state — minimal chip; full animation shows on the document */}
+        {loading && (
+          <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-primary/20 bg-primary/5">
+            <div className="h-3.5 w-3.5 rounded-full border-2 border-primary/30 border-t-primary animate-spin flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-primary truncate">{lastLabel}</p>
+              <p className="text-[10px] text-muted-foreground">Writing on document…</p>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

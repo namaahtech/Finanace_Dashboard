@@ -11,7 +11,7 @@ import {
   Shield, RefreshCw, Mail, Ticket,
   Network, Briefcase, BarChart3, ClipboardList, Folder, User,
   BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award, GraduationCap,
-  Inbox, PenLine, Send, Paperclip, Layers, KeyRound,
+  Inbox, PenLine, Send, Paperclip, Layers, KeyRound, FileSignature,
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
@@ -82,6 +82,7 @@ const MASTER_NAV: NavSection[] = [
       { href: "/admin/recruitment",     label: "Recruitment Hub", icon: Briefcase,     moduleKey: "recruitment" },
       { href: "/admin/ats",             label: "ATS Scanner",     icon: RefreshCw,     moduleKey: "ats_scanner" },
       { href: "/admin/interviews",      label: "Interviews",      icon: MessageSquare, moduleKey: "interviews" },
+      { href: "/admin/onboarding",      label: "Onboarding",      icon: FileSignature, moduleKey: "onboarding" },
     ],
   },
   {

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Video, Mic, Settings, Users, Activity, Zap, Clock, X, AlertCircle, Copy, Check,
   Sliders, Plus, Calendar, CheckCircle2, ChevronRight, FileText, User, Radar, BrainCircuit, Loader2,
+  FileSignature,
 } from "lucide-react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { toast } from "sonner";
@@ -492,16 +494,37 @@ function VideoPreview({ meetingLink, candidateName, interviewId }: { meetingLink
 
 /* ─── Session Card ────────────────────────────────────────────────────────── */
 function SessionCard({ session, onSelect, onScheduleClick }: { session: any; onSelect: () => void; onScheduleClick: () => void }) {
+  const router = useRouter();
   const analysis = session.talent_analysis?.[0] || session.talent_analysis;
   const score = analysis?.scoring?.match_score || 0;
   const interview = session.interviews?.[0];
   const [copied, setCopied] = useState(false);
+  const [pushing, setPushing] = useState(false);
 
   const handleCopy = () => {
     if (interview?.meeting_link) {
       navigator.clipboard.writeText(interview.meeting_link);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handlePushOnboarding = async () => {
+    setPushing(true);
+    try {
+      const res = await fetch("/api/onboarding/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ application_id: session.application_id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed");
+      toast.success(json.reused ? "Opening existing onboarding…" : "Pushed to onboarding");
+      router.push(`/admin/onboarding/${json.id}`);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to push to onboarding");
+    } finally {
+      setPushing(false);
     }
   };
 
@@ -583,6 +606,17 @@ function SessionCard({ session, onSelect, onScheduleClick }: { session: any; onS
           </div>
           <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onSelect}>
             Audit Report <ChevronRight size={11} />
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 text-xs"
+            disabled={pushing}
+            onClick={(e) => { e.stopPropagation(); handlePushOnboarding(); }}
+            title="Create an onboarding offer for this candidate"
+          >
+            {pushing ? <Loader2 size={11} className="animate-spin" /> : <FileSignature size={11} />}
+            Push to Onboarding
           </Button>
         </div>
       </div>

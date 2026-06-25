@@ -129,55 +129,44 @@ async function createZohoAccount(
   displayName: string,
   password: string,
 ): Promise<{ zohoUserId: string | null; zohoAccountId: string | null; finalEmail: string }> {
-  const payload = {
-    primaryEmailAddress,
-    displayName,
-    password,
-    role: "member",
+  const base = { displayName, password, role: "member" as const };
+
+  const attempt = async (email: string) => {
+    const res = await fetch(`${ZOHO_MAIL_API}/organization/${orgId}/accounts`, {
+      method:  "POST",
+      headers: { Authorization: `Zoho-oauthtoken ${token}`, "Content-Type": "application/json" },
+      body:    JSON.stringify({ ...base, primaryEmailAddress: email }),
+    });
+    const json = await res.json();
+    console.log(`[Zoho Create Account] ${email} → ${res.status}:`, JSON.stringify(json?.status || json?.data || json));
+    return { res, json };
   };
 
-  console.log(`[Zoho Create Account] Requesting: ${ZOHO_MAIL_API}/organization/${orgId}/accounts with email: ${primaryEmailAddress}`);
-  const res  = await fetch(`${ZOHO_MAIL_API}/organization/${orgId}/accounts`, {
-    method:  "POST",
-    headers: {
-      Authorization:  `Zoho-oauthtoken ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  const json = await res.json();
-  console.log(`[Zoho Create Account] Response Status: ${res.status}, Response:`, JSON.stringify(json));
-
-  // Handle mailbox collision — append 3-digit suffix and retry
-  if (
+  // A collision is anything that means "this address can't be used" — an existing
+  // mailbox in THIS org OR an address Zoho still has reserved from a prior deleted
+  // user ("EMAILADDRESS_ALREADY_EXISTS"). In every collision case we retry with a
+  // numeric suffix so provisioning ALWAYS succeeds instead of silently failing.
+  const isCollision = (res: Response, json: any) =>
     json?.data?.errorCode === "MAILBOX_ALREADY_EXISTS" ||
+    json?.data?.errorCode === "EMAILADDRESS_ALREADY_EXISTS" ||
     json?.status?.code === 409 ||
-    res.status === 409
-  ) {
-    const suffix   = Math.floor(Math.random() * 900) + 100;
-    const [loc, dm] = primaryEmailAddress.split("@");
-    const newEmail  = `${loc}${suffix}@${dm}`;
+    res.status === 409;
 
-    const retry = await fetch(`${ZOHO_MAIL_API}/organization/${orgId}/accounts`, {
-      method:  "POST",
-      headers: {
-        Authorization:  `Zoho-oauthtoken ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ...payload, primaryEmailAddress: newEmail }),
-    });
-    const retryJson = await retry.json();
-    return {
-      zohoUserId:    retryJson?.data?.mailboxId   || retryJson?.data?.accountId || null,
-      zohoAccountId: retryJson?.data?.accountId   || null,
-      finalEmail:    newEmail,
-    };
+  const [loc, dm] = primaryEmailAddress.split("@");
+  let email = primaryEmailAddress;
+  let { res, json } = await attempt(email);
+
+  // Retry up to 5 times with a fresh suffix until Zoho accepts the address.
+  for (let i = 0; i < 5 && isCollision(res, json); i++) {
+    const suffix = Math.floor(Math.random() * 900) + 100;
+    email = `${loc}${suffix}@${dm}`;
+    ({ res, json } = await attempt(email));
   }
 
   return {
-    zohoUserId:    json?.data?.mailboxId   || json?.data?.accountId || null,
-    zohoAccountId: json?.data?.accountId   || null,
-    finalEmail:    primaryEmailAddress,
+    zohoUserId:    json?.data?.mailboxId || json?.data?.accountId || null,
+    zohoAccountId: json?.data?.accountId || null,
+    finalEmail:    email,
   };
 }
 

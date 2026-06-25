@@ -16,7 +16,11 @@ export function generateSAMLResponse(
   acsUrl: string,
   issuer: string,
   privateKey: string,
-  certificate: string
+  certificate: string,
+  // Zoho's SP entity id / Audience. For an India (.in) data-center org this is
+  // "zoho.in" (confirmed from Zoho's own AuthnRequest Issuer). Sending the wrong
+  // audience is one cause of a silently-rejected assertion.
+  audience: string = "zoho.in"
 ): string {
   const { SignedXml } = require("xml-crypto");
 
@@ -39,7 +43,7 @@ export function generateSAMLResponse(
       `</saml:Subject>` +
       `<saml:Conditions NotBefore="${notBefore}" NotOnOrAfter="${notOnOrAfter}">` +
         `<saml:AudienceRestriction>` +
-          `<saml:Audience>zoho.com</saml:Audience>` +
+          `<saml:Audience>${audience}</saml:Audience>` +
         `</saml:AudienceRestriction>` +
       `</saml:Conditions>` +
       `<saml:AuthnStatement AuthnInstant="${now}" SessionIndex="${sessionIndex}">` +

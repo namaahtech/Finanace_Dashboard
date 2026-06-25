@@ -10,7 +10,8 @@ import {
   Palette, Sparkles, ChevronDown, Image as LucideImage, PlusSquare,
   DownloadCloud,
   Undo, Redo, Heading1, Heading2, Type, Bold, Italic, Underline as UnderlineIcon,
-  AlignLeft, AlignCenter, AlignRight, List, CheckSquare, Quote, Layout, PlusCircle
+  AlignLeft, AlignCenter, AlignRight, List, CheckSquare, Quote, Layout, PlusCircle,
+  Check, X, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import axios from "axios";
@@ -54,6 +55,14 @@ export default function DocumentEditorPage() {
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [editors, setEditors] = useState<any[]>([]);
   const [pageSettings, setPageSettings] = useState({ type: 'A4', width: 800, height: 1131 });
+
+  // ── AI Draft blueprint state ─────────────────────────────────
+  const [aiDraft, setAiDraft]         = useState<string | null>(null);
+  const [aiOriginal, setAiOriginal]   = useState<string | null>(null);
+  const [preSaveContent, setPreSaveContent] = useState<string>("");
+  const [canReplace, setCanReplace]   = useState(false);
+  const [aiLoading, setAiLoading]     = useState(false);
+
   const [imageUrl, setImageUrl] = useState('');
   const [generatingImage, setGeneratingImage] = useState(false);
   const [imagePrompt, setImagePrompt] = useState('');
@@ -241,6 +250,11 @@ export default function DocumentEditorPage() {
         last_edited_by: user.id
       });
       setSavedAt(new Date());
+      // Clear draft history on explicit save
+      localStorage.removeItem(`namaah_doc_ai_${id}`);
+      setAiDraft(null);
+      setAiOriginal(null);
+      setCanReplace(false);
     } catch { } finally { setSaving(false); }
   };
 
@@ -269,6 +283,70 @@ export default function DocumentEditorPage() {
       return next;
     });
   }, []);
+
+  // ── AI Draft: restore from localStorage on mount, clear on leave ──
+  useEffect(() => {
+    if (!id) return;
+    const lsKey = `namaah_doc_ai_${id}`;
+    const saved = localStorage.getItem(lsKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.draft) setAiDraft(parsed.draft);
+        if (parsed.original) setAiOriginal(parsed.original);
+        if (parsed.preSave) setPreSaveContent(parsed.preSave);
+        if (parsed.canReplace) setCanReplace(parsed.canReplace);
+      } catch {}
+    }
+    return () => { localStorage.removeItem(lsKey); };
+  }, [id]);
+
+  // ── Called by AISidebar when AI returns a result ──
+  const handleAIDraft = useCallback((draft: string) => {
+    const currentContent = editors[activePageIndex]?.getHTML?.() ?? pages[activePageIndex] ?? "";
+    setPreSaveContent(currentContent);
+    setAiDraft(draft);
+    setCanReplace(false);
+    localStorage.setItem(`namaah_doc_ai_${id}`, JSON.stringify({
+      draft, original: null, preSave: currentContent, canReplace: false,
+    }));
+  }, [editors, activePageIndex, pages, id]);
+
+  const handleAIInsert = useCallback(() => {
+    if (!aiDraft) return;
+    const editor = editors[activePageIndex];
+    if (editor) editor.chain().focus().insertContent(aiDraft).run();
+    setAiOriginal(aiDraft);
+    setAiDraft(null);
+    setCanReplace(true);
+    localStorage.setItem(`namaah_doc_ai_${id}`, JSON.stringify({
+      draft: null, original: aiDraft, preSave: preSaveContent, canReplace: true,
+    }));
+  }, [aiDraft, editors, activePageIndex, preSaveContent, id]);
+
+  const handleAIDiscard = useCallback(() => {
+    setAiDraft(null);
+    localStorage.removeItem(`namaah_doc_ai_${id}`);
+  }, [id]);
+
+  const handleAIReplace = useCallback(() => {
+    if (!aiOriginal) return;
+    const editor = editors[activePageIndex];
+    if (editor) {
+      editor.commands.setContent(aiOriginal);
+      handlePageUpdate(aiOriginal, activePageIndex);
+    }
+    setCanReplace(false);
+    localStorage.setItem(`namaah_doc_ai_${id}`, JSON.stringify({
+      draft: null, original: aiOriginal, preSave: preSaveContent, canReplace: false,
+    }));
+  }, [aiOriginal, editors, activePageIndex, preSaveContent, handlePageUpdate, id]);
+
+  const handleAIDismiss = useCallback(() => {
+    setAiOriginal(null);
+    setCanReplace(false);
+    localStorage.removeItem(`namaah_doc_ai_${id}`);
+  }, [id]);
 
   const saveTitle = async (val: string) => {
     setTitle(val);
@@ -635,7 +713,8 @@ export default function DocumentEditorPage() {
             {pages.map((pageContent, idx) => (
               <div key={idx} className="flex flex-col items-center gap-6 w-full">
                 <div
-                  className="bg-card rounded-md shadow-lg ring-1 ring-border relative overflow-hidden"
+                  data-page-wrapper="true"
+                  className="bg-card rounded-md shadow-lg ring-1 ring-border relative"
                   style={{ width: `${pageSettings.width}px`, maxWidth: '100%', minHeight: `${pageSettings.height}px` }}
                   onFocus={() => setActivePageIndex(idx)}
                 >
@@ -648,6 +727,82 @@ export default function DocumentEditorPage() {
                       className="editor-paged w-full h-full"
                     />
                   </div>
+
+                  {/* ── AI Loading Blueprint Overlay ── */}
+                  {aiLoading && idx === activePageIndex && (
+                    <div
+                      className="absolute inset-0 rounded-md pointer-events-none z-10 overflow-hidden"
+                      style={{ background: "rgba(235,245,255,0.92)" }}
+                    >
+                      {/* Animated scan line */}
+                      <div className="absolute inset-x-0 h-0.5 bg-blue-400/50 z-20"
+                        style={{ animation: "ai-blueprint-scan 2s linear infinite", top: 0 }}
+                      />
+                      <div className="absolute inset-0 p-12 md:p-16 lg:p-[80px]">
+                        {/* Header row */}
+                        <div className="flex items-center gap-2.5 mb-8">
+                          <div className="h-5 w-5 rounded-full border-2 border-blue-400/30 border-t-blue-500 animate-spin flex-shrink-0" />
+                          <span style={{ color: "#1a56c4", fontSize: "0.8rem", fontWeight: 600, opacity: 0.75 }}>
+                            AI is writing your document…
+                          </span>
+                        </div>
+                        {/* Shimmer skeleton — title */}
+                        <div className="rounded-md bg-blue-400/25 mb-5 animate-pulse" style={{ height: "20px", width: "60%" }} />
+                        {/* Shimmer skeleton — paragraph 1 */}
+                        {[100, 92, 97, 78, 88, 95, 65].map((w, i) => (
+                          <div key={i} className="rounded-full bg-blue-400/18 mb-2.5 animate-pulse"
+                            style={{ height: "11px", width: `${w}%`, animationDelay: `${i * 0.09}s`, opacity: 0.7 }}
+                          />
+                        ))}
+                        {/* Gap */}
+                        <div className="mt-6" />
+                        {/* Shimmer skeleton — paragraph 2 */}
+                        <div className="rounded-md bg-blue-400/20 mb-4 animate-pulse" style={{ height: "15px", width: "45%", animationDelay: "0.7s" }} />
+                        {[88, 95, 70, 82, 90, 60].map((w, i) => (
+                          <div key={`b${i}`} className="rounded-full bg-blue-400/15 mb-2.5 animate-pulse"
+                            style={{ height: "11px", width: `${w}%`, animationDelay: `${(i + 8) * 0.09}s`, opacity: 0.6 }}
+                          />
+                        ))}
+                        {/* Gap */}
+                        <div className="mt-6" />
+                        {/* Shimmer skeleton — paragraph 3 */}
+                        <div className="rounded-md bg-blue-400/18 mb-4 animate-pulse" style={{ height: "15px", width: "50%", animationDelay: "1.4s" }} />
+                        {[75, 90, 83, 68].map((w, i) => (
+                          <div key={`c${i}`} className="rounded-full bg-blue-400/12 mb-2.5 animate-pulse"
+                            style={{ height: "11px", width: `${w}%`, animationDelay: `${(i + 15) * 0.09}s`, opacity: 0.5 }}
+                          />
+                        ))}
+                        {/* Bottom fade */}
+                        <div className="absolute bottom-0 inset-x-0 h-32 pointer-events-none"
+                          style={{ background: "linear-gradient(to bottom, transparent, rgba(235,245,255,0.97))" }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── AI Draft Blueprint Ghost Overlay ── */}
+                  {aiDraft && idx === activePageIndex && (
+                    <div
+                      className="absolute inset-0 rounded-md pointer-events-none z-10 overflow-hidden"
+                      style={{ background: "rgba(235,245,255,0.90)" }}
+                    >
+                      {/* Animated scan line */}
+                      <div className="absolute inset-x-0 h-0.5 bg-blue-400/40 z-20"
+                        style={{ animation: "ai-blueprint-scan 2.5s linear infinite", top: 0 }}
+                      />
+                      <div className="absolute inset-0 p-12 md:p-16 lg:p-[80px] overflow-hidden">
+                        <div
+                          className="prose prose-sm max-w-none"
+                          style={{ color: "#1a56c4", opacity: 0.82, lineHeight: 1.75 }}
+                          dangerouslySetInnerHTML={{ __html: aiDraft }}
+                        />
+                        {/* Fade-out at bottom so users know there's more on Insert */}
+                        <div className="absolute bottom-0 inset-x-0 h-28 pointer-events-none"
+                          style={{ background: "linear-gradient(to bottom, transparent, rgba(235,245,255,0.97))" }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 w-full max-w-md">
                   <Button
@@ -675,12 +830,112 @@ export default function DocumentEditorPage() {
               </div>
             ))}
           </div>
+          {/* ── Floating AI Action Bar ── */}
+          {(aiDraft || (canReplace && aiOriginal)) && (
+            <div
+              className="sticky bottom-6 left-0 right-0 flex justify-center z-30 pointer-events-none"
+            >
+              <div
+                className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-full shadow-2xl"
+                style={{
+                  background: "rgba(255,255,255,0.88)",
+                  backdropFilter: "blur(18px)",
+                  WebkitBackdropFilter: "blur(18px)",
+                  border: "1px solid rgba(99,102,241,0.18)",
+                  boxShadow: "0 8px 32px rgba(21,101,192,0.16), 0 2px 8px rgba(0,0,0,0.08)",
+                }}
+              >
+                {/* Status indicator */}
+                <div className="flex items-center gap-1.5 pr-3 border-r border-slate-200 mr-1">
+                  <div className={`h-2 w-2 rounded-full ${aiDraft ? "bg-blue-500 animate-pulse" : "bg-emerald-500"}`} />
+                  <span className="text-xs font-semibold text-slate-600">
+                    {aiDraft ? "AI Draft Preview" : "AI Draft Inserted"}
+                  </span>
+                </div>
+
+                {aiDraft ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 gap-1.5 rounded-full text-xs px-4"
+                      onClick={handleAIInsert}
+                    >
+                      <Check size={13} /> Insert
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 rounded-full text-xs px-3"
+                      onClick={handleAIDiscard}
+                    >
+                      <X size={13} /> Discard
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 rounded-full text-xs px-3 opacity-40 cursor-not-allowed"
+                      disabled
+                      title="Insert first, then Replace becomes available"
+                    >
+                      <RefreshCw size={13} /> Replace
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 gap-1.5 rounded-full text-xs px-3"
+                      onClick={() => editors[activePageIndex]?.chain().focus().undo().run()}
+                      title="Undo"
+                    >
+                      <Undo size={13} />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 gap-1.5 rounded-full text-xs px-3"
+                      onClick={() => editors[activePageIndex]?.chain().focus().redo().run()}
+                      title="Redo"
+                    >
+                      <Redo size={13} />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 gap-1.5 rounded-full text-xs px-4"
+                      onClick={handleAIReplace}
+                      title="Replace current document content with original AI draft"
+                    >
+                      <RefreshCw size={13} /> Replace
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 rounded-full text-muted-foreground"
+                      onClick={handleAIDismiss}
+                      title="Dismiss"
+                    >
+                      <X size={13} />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </main>
         <aside className="hidden lg:block w-80 flex-shrink-0 border-l border-border bg-card">
           <AISidebar
             content={pages.join('\n')}
-            onApplyChange={(newContent) => handlePageUpdate(newContent, activePageIndex)}
-            onInsertContent={() => {}}
+            onAIDraft={handleAIDraft}
+            onLoadingChange={setAiLoading}
+            onRenameDocument={(newTitle) => saveTitle(newTitle)}
           />
         </aside>
       </div>
@@ -688,6 +943,11 @@ export default function DocumentEditorPage() {
       <style jsx global>{`
         .editor-paged .ProseMirror { min-height: 100% !important; padding-bottom: 0 !important; }
         .editor-paged .prose p { font-size: 1rem; line-height: 1.6; }
+        @keyframes ai-blueprint-scan {
+          0%   { top: 0%;   opacity: 0.6; }
+          50%  { opacity: 0.3; }
+          100% { top: 100%; opacity: 0; }
+        }
       `}</style>
 
       <footer className="h-9 bg-card border-t border-border flex items-center justify-between px-6 z-50 text-[10px] text-muted-foreground">

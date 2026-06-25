@@ -1,13 +1,20 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Clock, Play, Pause, Square } from "lucide-react";
+import { Clock, Play, Pause, Square, AlertTriangle, FileCheck2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./AuthProvider";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 
@@ -78,11 +85,38 @@ export function GlobalAttendanceWidget() {
   const [elapsed, setElapsed] = useState(0);
   const [pauseState, setPauseState] = useState<PauseState>(emptyPause);
 
+  // Late detection — protocol check-in threshold (HH:mm:ss)
+  const [checkInThreshold, setCheckInThreshold] = useState("09:30:00");
+
+  // Check-in gating — overdue sick-leave certificate
+  const [blockingLeaves, setBlockingLeaves] = useState<any[]>([]);
+  const [showBlockDialog, setShowBlockDialog] = useState(false);
+  const [certUrl, setCertUrl] = useState("");
+  const [certTarget, setCertTarget] = useState<any>(null);
+  const [savingCert, setSavingCert] = useState(false);
+
   // Live wall-clock
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(dayjs()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Fetch active attendance protocol to determine late threshold
+  useEffect(() => {
+    if (!user) return;
+    const fetchProto = async () => {
+      try {
+        const { data: emp } = await supabase.from("employees").select("department").eq("id", user.id).maybeSingle();
+        const { data: protos } = await supabase.from("attendance_protocols")
+          .select("check_in_time, target_type, type")
+          .eq("status", "active")
+          .order("created_at", { ascending: false });
+        const proto = protos?.find((p: any) => p.target_type === "All" || p.type === `Department:${emp?.department}`);
+        if (proto?.check_in_time) setCheckInThreshold(proto.check_in_time);
+      } catch {}
+    };
+    fetchProto();
+  }, [user]);
 
   // Fetch today's session
   const fetchSession = useCallback(async () => {
@@ -160,25 +194,69 @@ export function GlobalAttendanceWidget() {
   const handleCheckIn = async () => {
     if (!user) return;
     setActionLoading(true);
-    const today = dayjs().format("YYYY-MM-DD");
-    const nowTime = dayjs().format("HH:mm:ss");
     try {
+      // ── gate: check for blocking sick-leave certificates ────────────────
+      const blockRes = await fetch("/api/attendance/blocks-checkin");
+      if (blockRes.ok) {
+        const { blocked, leaves } = await blockRes.json();
+        if (blocked && leaves?.length) {
+          setBlockingLeaves(leaves);
+          setCertTarget(leaves[0]);
+          setCertUrl(leaves[0]?.certificate_url || "");
+          setShowBlockDialog(true);
+          setActionLoading(false);
+          return;
+        }
+      }
+
+      const today   = dayjs().format("YYYY-MM-DD");
+      const nowTime = dayjs().format("HH:mm:ss");
+      const [ph, pm] = checkInThreshold.split(":").map(Number);
+      const threshold = dayjs().hour(ph).minute(pm).second(0);
+      const checkInStatus = dayjs().isAfter(threshold) ? "late" : "present";
       const { error } = await supabase.from("attendance_logs").upsert({
         employee_id: user.id,
         date: today,
         clock_in: nowTime,
-        status: "present",
+        status: checkInStatus,
       }, { onConflict: "employee_id,date" });
       if (error) throw error;
-      // Reset pause state for a fresh day
       clearPauseState(user.id);
       setPauseState(emptyPause);
-      toast.success("Checked in successfully");
+      if (checkInStatus === "late") {
+        toast.warning("Checked in — marked as Late");
+      } else {
+        toast.success("Checked in successfully");
+      }
       await fetchSession();
     } catch {
       toast.error("Failed to check in");
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleCertSubmit = async () => {
+    if (!certTarget || !certUrl.trim()) { toast.error("Paste the certificate URL"); return; }
+    setSavingCert(true);
+    try {
+      const res = await fetch("/api/attendance/sick-leave", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: certTarget.id, action: "submit_cert", certificate_url: certUrl }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      if (json.needsApproval) {
+        toast.info("Certificate submitted — awaiting admin approval");
+      } else {
+        toast.success("Certificate accepted — you can now check in");
+        setShowBlockDialog(false);
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Failed to submit");
+    } finally {
+      setSavingCert(false);
     }
   };
 
@@ -231,6 +309,50 @@ export function GlobalAttendanceWidget() {
   if (loading || authLoading) return null;
 
   return (
+    <>
+    {/* ── blocking cert dialog ──────────────────────────────────────────────── */}
+    <Dialog open={showBlockDialog} onOpenChange={setShowBlockDialog}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600">
+            <AlertTriangle size={18} />
+            Check-in Blocked
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <p className="text-sm text-theme-muted">
+            You have an overdue sick-leave certificate. Submit it to unlock check-in.
+          </p>
+          {certTarget && (
+            <div className="rounded-xl border border-theme-border bg-theme-raised px-4 py-3 space-y-1">
+              <p className="text-xs text-theme-muted">Sick leave</p>
+              <p className="text-sm font-bold text-theme-fg">{certTarget.from_date} – {certTarget.to_date}</p>
+              <p className="text-[11px] text-red-600 font-semibold">Deadline was {certTarget.certificate_deadline}</p>
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-semibold text-theme-muted block mb-1.5">
+              Certificate Link <span className="text-red-500">*</span>
+              <span className="ml-1 font-normal text-theme-subtle">(Google Drive, Dropbox…)</span>
+            </label>
+            <input type="url" value={certUrl} onChange={e => setCertUrl(e.target.value)}
+              placeholder="https://drive.google.com/file/..."
+              className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all" />
+          </div>
+        </div>
+        <DialogFooter>
+          <button onClick={() => setShowBlockDialog(false)} className="px-4 py-2 text-sm font-semibold text-theme-muted hover:text-theme-fg">
+            Cancel
+          </button>
+          <Button onClick={handleCertSubmit} disabled={savingCert || !certUrl.trim()}
+            className="min-w-[160px] bg-emerald-500 hover:bg-emerald-600 text-white">
+            <FileCheck2 size={14} className="mr-1.5" />
+            {savingCert ? "Submitting…" : "Submit Certificate"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <div className="flex items-center gap-3">
       {/* Live clock */}
       <div className="hidden sm:flex items-center gap-2 text-sm">
@@ -293,5 +415,6 @@ export function GlobalAttendanceWidget() {
         )}
       </div>
     </div>
+    </>
   );
 }

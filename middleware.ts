@@ -28,6 +28,8 @@ const PUBLIC_PREFIXES = [
   "/robots.txt",
   "/sitemap.xml",
   "/meet",              // public LiveKit meet rooms (token-gated server-side)
+  "/sign",              // candidate e-signature pages (token-gated server-side)
+  "/api/sign",          // candidate e-signature API (token-gated server-side)
 ];
 
 function isPublic(pathname: string): boolean {
@@ -38,6 +40,11 @@ function isPublic(pathname: string): boolean {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // /onboarding is permanently retired — redirect to root which routes by role
+  if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
 
   // Always allow Next.js internals + explicit public routes
   if (isPublic(pathname)) return NextResponse.next();

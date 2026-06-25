@@ -77,19 +77,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Update onboarding database status to in_progress if it is currently not_started
-    const { data: onboarding, error: fetchErr } = await supabase
-      .from("user_onboarding")
-      .select("status")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (!fetchErr && (!onboarding || onboarding.status === "not_started")) {
-      await supabase
-        .from("user_onboarding")
-        .update({ status: "in_progress" })
-        .eq("user_id", userId);
-    }
+    // 5. Mark first-login complete — personal email is blocked from now on
+    await supabase
+      .from("employees")
+      .update({ must_change_password: false })
+      .eq("id", userId);
 
     // 6. Audit Log entry
     await supabase.from("audit_logs").insert({
