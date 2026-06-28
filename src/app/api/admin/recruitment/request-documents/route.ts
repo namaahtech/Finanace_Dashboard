@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getMailContext, sendRecruitmentMail, requestDocsHtml } from "@/lib/recruitment-mail";
+import { baseUrlFrom } from "@/lib/base-url";
 
 const DOCS = ["face_photo", "aadhaar", "pan"];
-const baseUrl = () => (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
 
 // Send a candidate (already in the system as an accepted application) a secure
 // link to upload their KYC documents.
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     if (error) throw error;
 
     const ctx = await getMailContext();
-    const link = `${baseUrl()}/documents/${token}`;
+    const link = `${baseUrlFrom(req)}/documents/${token}`;
     await sendRecruitmentMail(ctx, {
       to: app.applicant_email,
       subject: `Document Submission — ${ctx.companyName}`,

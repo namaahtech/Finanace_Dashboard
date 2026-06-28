@@ -7,7 +7,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // POST /api/onboarding/[id]/send — (re)dispatch the onboarding email. Admin only.
 // Used to retry delivery after an approval that failed to send.
-export async function POST(_req: NextRequest, { params }: Ctx) {
+export async function POST(req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   const actor = await getActor();
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -25,7 +25,7 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
   }
 
   try {
-    const result = await dispatchOnboarding(id);
+    const result = await dispatchOnboarding(id, { req });
     return NextResponse.json({ ...result });
   } catch (e: any) {
     return NextResponse.json({ error: e.message || "Failed to send" }, { status: 502 });

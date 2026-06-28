@@ -9,7 +9,7 @@ type Ctx = { params: Promise<{ id: string }> };
 // Send the offer for e-signature WITHOUT a separate approval step.
 // Allowed when the actor is an admin, OR when require_approval is off (any role
 // with onboarding access). Used instead of "Submit for Approval".
-export async function POST(_req: NextRequest, { params }: Ctx) {
+export async function POST(req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   const actor = await getActor();
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -46,7 +46,7 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
     .eq("id", id);
 
   try {
-    const result = await dispatchOnboarding(id);
+    const result = await dispatchOnboarding(id, { req });
     return NextResponse.json({ status: "sent", ...result });
   } catch (e: any) {
     return NextResponse.json(

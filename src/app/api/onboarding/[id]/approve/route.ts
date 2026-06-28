@@ -7,7 +7,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // POST /api/onboarding/[id]/approve — admin approves, then generates PDFs and
 // emails the candidate (from the form creator's Zoho mailbox) with a magic link.
-export async function POST(_req: NextRequest, { params }: Ctx) {
+export async function POST(req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   const actor = await getActor();
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,7 +34,7 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
     .eq("id", id);
 
   try {
-    const result = await dispatchOnboarding(id);
+    const result = await dispatchOnboarding(id, { req });
     return NextResponse.json({ status: "sent", ...result });
   } catch (e: any) {
     // Approved but delivery failed — admin can retry via the send endpoint.

@@ -4,8 +4,9 @@ import { ZOHO_API, getZohoToken } from "@/lib/zoho-auth";
 import { zohoGet, zohoPost } from "@/lib/zoho-mail";
 import { generateAndStorePdfs, downloadPdf } from "./pdf";
 import { buildTemplateData } from "./templateData";
-import { loadSettings, resolveSchema, appBaseUrl } from "./server";
+import { loadSettings, resolveSchema } from "./server";
 import { onboardingEmailHtml, onboardingFinalEmailHtml } from "./email";
+import { baseUrlFrom } from "@/lib/base-url";
 
 interface ZohoAttachment { storeName: string; attachmentName: string; attachmentPath: string; }
 
@@ -67,7 +68,7 @@ async function resolveSender(
  */
 export async function dispatchOnboarding(
   packetId: string,
-  opts: { final?: boolean } = {}
+  opts: { final?: boolean; req?: Request } = {}
 ): Promise<{ ok: true; messageId?: string; from: string }> {
   const final = !!opts.final;
   const supabase = getSupabaseAdmin();
@@ -142,7 +143,7 @@ export async function dispatchOnboarding(
   }
 
   // 4. Compose + send.
-  const signUrl = `${appBaseUrl()}/sign/${signToken}`;
+  const signUrl = `${baseUrlFrom(opts.req)}/sign/${signToken}`;
   let content = final
     ? onboardingFinalEmailHtml({
         candidateName: packet.candidate_name,

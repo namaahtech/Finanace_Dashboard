@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getMailContext, sendRecruitmentMail, greetingHtml, requestDocsHtml } from "@/lib/recruitment-mail";
+import { baseUrlFrom } from "@/lib/base-url";
 
 const DOCS = ["face_photo", "aadhaar", "pan"];
-const baseUrl = () => (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
 
 // Manual entry for candidates interviewed on a 3rd-party panel.
 // Sends the accept/reject greeting and, if requested, a second document-request email.
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       });
       if (error) throw error;
 
-      const link = `${baseUrl()}/documents/${token}`;
+      const link = `${baseUrlFrom(req)}/documents/${token}`;
       await sendRecruitmentMail(ctx, {
         to: email,
         subject: `Document Submission — ${ctx.companyName}`,

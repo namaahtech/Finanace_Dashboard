@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getMailContext, sendRecruitmentMail, reminderDocsHtml } from "@/lib/recruitment-mail";
-
-const baseUrl = () => (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+import { baseUrlFrom } from "@/lib/base-url";
 
 // Send a reminder email for a pending document request, with an optional custom note.
 export async function POST(req: Request) {
@@ -23,7 +22,7 @@ export async function POST(req: Request) {
     }
 
     const ctx = await getMailContext();
-    const link = `${baseUrl()}/documents/${r.token}`;
+    const link = `${baseUrlFrom(req)}/documents/${r.token}`;
     await sendRecruitmentMail(ctx, {
       to: r.candidate_email,
       subject: `Reminder: Document Submission — ${ctx.companyName}`,

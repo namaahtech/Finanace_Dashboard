@@ -9,7 +9,7 @@ type Ctx = { params: Promise<{ id: string }> };
 // After the candidate e-signs, the onboarder (form creator) — or an admin —
 // accepts, which emails the final counter-signed PDFs to the candidate and
 // marks the onboarding completed.
-export async function POST(_req: NextRequest, { params }: Ctx) {
+export async function POST(req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   const actor = await getActor();
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,7 +34,7 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
   }
 
   try {
-    const result = await dispatchOnboarding(id, { final: true });
+    const result = await dispatchOnboarding(id, { final: true, req });
     return NextResponse.json({ status: "completed", ...result });
   } catch (e: any) {
     return NextResponse.json({ error: e.message || "Failed to send signed documents" }, { status: 502 });
