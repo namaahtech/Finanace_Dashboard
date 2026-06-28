@@ -48,6 +48,7 @@
     "@tiptap/starter-kit": "^3.22.5",
     "@types/multer": "^2.0.0",
     "@types/nodemailer": "^8.0.0",
+    "@vladmandic/face-api": "^1.7.15",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",

@@ -53,6 +53,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   return NextResponse.json({
     companyName: signatory.companyName,
     candidateName: packet.candidate_name,
+    candidateEmail: packet.candidate_email,
     status: packet.status,
     alreadySigned,
     expired: isExpired(packet),

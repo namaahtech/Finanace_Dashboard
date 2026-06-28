@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Video, Mic, Settings, Users, Activity, Zap, Clock, X, AlertCircle, Copy, Check,
   Sliders, Plus, Calendar, CheckCircle2, ChevronRight, FileText, User, Radar, BrainCircuit, Loader2,
-  FileSignature,
+  FileSignature, UserPlus, FileUp, Mail, Bell, ExternalLink,
 } from "lucide-react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { toast } from "sonner";
@@ -37,6 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 /* ─── Realtime Logic ─────────────────────────────────────────────────────── */
 function useInterviewsRealtime(onUpdate: () => void) {
@@ -111,6 +112,117 @@ function ScheduleModal({
           <Button type="button" size="sm" disabled={!date || !time || loading} onClick={handleSubmit}>
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Video size={14} />}
             Generate Link & Schedule
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ─── Manual Entry Modal (3rd-party interviews) ───────────────────────────── */
+function ManualEntryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [decision, setDecision] = useState<"accepted" | "rejected">("accepted");
+  const [reqDocs, setReqDocs] = useState(true);
+  const [sending, setSending] = useState(false);
+
+  // Reject can't request documents; Accept defaults to requesting them.
+  useEffect(() => { setReqDocs(decision === "accepted"); }, [decision]);
+
+  const reset = () => { setName(""); setEmail(""); setPhone(""); setDecision("accepted"); setReqDocs(true); };
+
+  const send = async () => {
+    if (!name.trim() || !email.trim()) { toast.error("Name and email are required"); return; }
+    setSending(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const res = await fetch("/api/admin/recruitment/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, phone, decision, requestDocuments: reqDocs, created_by: user?.id || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed");
+      toast.success(
+        json.docRequestSent
+          ? "Acceptance + document request emails sent"
+          : decision === "accepted" ? "Acceptance email sent" : "Rejection email sent"
+      );
+      reset();
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to send");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="flex-row items-center gap-3 space-y-0">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
+            <UserPlus size={18} />
+          </div>
+          <div className="flex-1 text-left">
+            <DialogTitle className="text-sm font-semibold">Manual Candidate Entry</DialogTitle>
+            <DialogDescription className="text-xs">For interviews conducted on a 3rd-party panel</DialogDescription>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Full name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Candidate name" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Email</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="candidate@email.com" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Contact number</Label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Decision</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setDecision("accepted")}
+                className={cn("rounded-md border px-3 py-2 text-xs font-medium transition-colors",
+                  decision === "accepted" ? "border-emerald-500 bg-emerald-500/10 text-emerald-600" : "border-border text-muted-foreground hover:text-foreground")}
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                onClick={() => setDecision("rejected")}
+                className={cn("rounded-md border px-3 py-2 text-xs font-medium transition-colors",
+                  decision === "rejected" ? "border-rose-500 bg-rose-500/10 text-rose-600" : "border-border text-muted-foreground hover:text-foreground")}
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+
+          <label className={cn("flex items-start gap-2.5 rounded-md border border-border p-3",
+            decision === "rejected" ? "opacity-50 cursor-not-allowed" : "cursor-pointer")}>
+            <Checkbox checked={reqDocs} disabled={decision === "rejected"} onCheckedChange={(v) => setReqDocs(!!v)} className="mt-0.5" />
+            <span className="text-xs text-muted-foreground leading-relaxed">
+              Also send a secure link to upload documents (photo, Aadhaar, PAN).
+              {decision === "rejected" && " Unavailable for rejected candidates."}
+            </span>
+          </label>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button type="button" size="sm" disabled={sending || !name.trim() || !email.trim()} onClick={send}>
+            {sending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+            {decision === "accepted" ? (reqDocs ? "Send 2 Emails" : "Send Acceptance") : "Send Rejection"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -500,6 +612,26 @@ function SessionCard({ session, onSelect, onScheduleClick }: { session: any; onS
   const interview = session.interviews?.[0];
   const [copied, setCopied] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [reqDocs, setReqDocs] = useState(false);
+
+  const handleRequestDocs = async () => {
+    setReqDocs(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const res = await fetch("/api/admin/recruitment/request-documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ application_id: session.application_id, created_by: user?.id || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed");
+      toast.success(`Document request sent to ${session.applicant_name}`);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to send document request");
+    } finally {
+      setReqDocs(false);
+    }
+  };
 
   const handleCopy = () => {
     if (interview?.meeting_link) {
@@ -618,8 +750,236 @@ function SessionCard({ session, onSelect, onScheduleClick }: { session: any; onS
             {pushing ? <Loader2 size={11} className="animate-spin" /> : <FileSignature size={11} />}
             Push to Onboarding
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            disabled={reqDocs}
+            onClick={(e) => { e.stopPropagation(); handleRequestDocs(); }}
+            title="Email this candidate a secure link to upload their documents"
+          >
+            {reqDocs ? <Loader2 size={11} className="animate-spin" /> : <FileUp size={11} />}
+            Request Documents
+          </Button>
         </div>
       </div>
+    </Card>
+  );
+}
+
+/* ─── Document Collection Tracker Card ────────────────────────────────────── */
+function fmtStamp(at?: string | null) {
+  return at ? new Date(at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+}
+
+const DOC_TYPE_LABEL: Record<string, string> = {
+  face_photo: "Passport-size Photo",
+  aadhaar: "Aadhaar Card",
+  pan: "PAN Card",
+  other: "Supporting Document",
+};
+
+function DocTrackerCard({ req, onChanged }: { req: any; onChanged: () => void }) {
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [sending, setSending] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
+  const [docs, setDocs] = useState<any[] | null>(null);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const submitted = req.status === "submitted";
+
+  const convertToOnboard = async () => {
+    setConverting(true);
+    try {
+      const res = await fetch("/api/admin/recruitment/convert-to-onboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: req.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed");
+      toast.success(`${req.candidate_name} added to onboarding — pick them under New Onboarding → From Interview`);
+      onChanged();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to convert");
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  const toggleDocs = async () => {
+    const next = !docsOpen;
+    setDocsOpen(next);
+    if (next && docs === null) {
+      setLoadingDocs(true);
+      try {
+        const res = await fetch(`/api/admin/recruitment/documents?request_id=${req.id}`);
+        const json = await res.json();
+        setDocs(json.documents || []);
+      } catch {
+        setDocs([]);
+      } finally {
+        setLoadingDocs(false);
+      }
+    }
+  };
+
+  const steps = [
+    { key: "sent", label: "Request sent", at: req.created_at, done: true },
+    { key: "viewed", label: "Viewed by candidate", at: req.viewed_at, done: !!req.viewed_at || submitted },
+    { key: "uploaded", label: "Documents uploaded", at: req.submitted_at, done: submitted },
+  ];
+
+  const sendReminder = async () => {
+    setSending(true);
+    try {
+      const res = await fetch("/api/admin/recruitment/remind-documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: req.id, message: msg }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed");
+      toast.success(`Reminder sent to ${req.candidate_name}`);
+      setNotifyOpen(false);
+      setMsg("");
+      onChanged();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to send reminder");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-sm text-foreground truncate">{req.candidate_name}</p>
+            <Badge variant="outline" className="text-[10px]">{req.source === "manual" ? "Manual" : "Interview"}</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground truncate">{req.candidate_email}</p>
+        </div>
+        <Badge
+          variant="secondary"
+          className={cn("text-[10px] font-medium",
+            submitted ? "bg-emerald-500/10 text-emerald-600" : req.viewed_at ? "bg-amber-500/10 text-amber-600" : "bg-muted text-muted-foreground")}
+        >
+          {submitted ? "Uploaded" : req.viewed_at ? "Viewed" : "Awaiting"}
+        </Badge>
+      </div>
+
+      {/* 3-stage tracker */}
+      <div className="mt-4">
+        {steps.map((s, i) => (
+          <div key={s.key} className="flex gap-3">
+            <div className="flex flex-col items-center">
+              <span className={cn("h-5 w-5 rounded-full flex items-center justify-center flex-shrink-0",
+                s.done ? "bg-emerald-500 text-white" : "bg-muted border border-border")}>
+                {s.done ? <Check size={11} /> : <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />}
+              </span>
+              {i < steps.length - 1 && <span className={cn("w-px flex-1 my-0.5", s.done ? "bg-emerald-500/40" : "bg-border")} />}
+            </div>
+            <div className="flex-1 pb-3 -mt-0.5">
+              <p className={cn("text-xs font-medium", s.done ? "text-foreground" : "text-muted-foreground")}>{s.label}</p>
+              {fmtStamp(s.at) && <p className="text-[10px] text-muted-foreground tabular-nums">{fmtStamp(s.at)}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {!submitted && (
+        <div className="pt-3 border-t border-border">
+          {!notifyOpen ? (
+            <div className="flex items-center justify-between gap-2">
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setNotifyOpen(true)}>
+                <Bell size={12} /> {req.last_reminded_at ? "Notify again" : "Notify"}
+              </Button>
+              {req.last_reminded_at && (
+                <span className="text-[10px] text-muted-foreground">Reminded {fmtStamp(req.last_reminded_at)}</span>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <textarea
+                value={msg}
+                onChange={(e) => setMsg(e.target.value)}
+                rows={2}
+                placeholder="Optional message to include in the reminder…"
+                className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setNotifyOpen(false); setMsg(""); }}>Cancel</Button>
+                <Button size="sm" className="h-8 text-xs" disabled={sending} onClick={sendReminder}>
+                  {sending ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Send reminder
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {submitted && (
+        <div className="pt-3 border-t border-border">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={toggleDocs}>
+              <FileText size={12} /> {docsOpen ? "Hide documents" : "View documents"}
+              <ChevronRight size={12} className={cn("transition-transform", docsOpen && "rotate-90")} />
+            </Button>
+            {req.converted_to_onboard ? (
+              <Button variant="outline" size="sm" disabled className="h-8 text-xs border-emerald-500/40 text-emerald-600 bg-emerald-500/5 disabled:opacity-100">
+                <CheckCircle2 size={12} /> Converted to onboard
+              </Button>
+            ) : (
+              <Button size="sm" className="h-8 text-xs" disabled={converting} onClick={convertToOnboard}>
+                {converting ? <Loader2 size={12} className="animate-spin" /> : <FileSignature size={12} />} Convert to Onboard
+              </Button>
+            )}
+          </div>
+          {docsOpen && (
+            <div className="mt-3 space-y-2">
+              {loadingDocs ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 size={12} className="animate-spin" /> Loading documents…
+                </div>
+              ) : docs && docs.length ? (
+                docs.map((d) => (
+                  <a
+                    key={d.id}
+                    href={d.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-2.5 hover:bg-muted transition-colors"
+                  >
+                    {d.file_type?.startsWith("image/") ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={d.url}
+                        alt={DOC_TYPE_LABEL[d.document_type] || d.document_type}
+                        className="h-11 w-11 rounded-md object-cover border border-border bg-muted flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary/10 text-primary flex-shrink-0">
+                        <FileText size={16} />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-foreground truncate">{DOC_TYPE_LABEL[d.document_type] || d.document_type}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{d.filename}</p>
+                    </div>
+                    <ExternalLink size={13} className="text-muted-foreground flex-shrink-0" />
+                  </a>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground">No documents found.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
@@ -664,12 +1024,14 @@ function Scorecard({ metrics }: { metrics: { label: string; value: number; color
 
 /* ─── Main Page ───────────────────────────────────────────────────────────── */
 export default function InterviewsPage() {
-  const [activeTab, setActiveTab] = useState<"upcoming" | "completed" | "archived">("upcoming");
+  const [activeTab, setActiveTab] = useState<"upcoming" | "completed" | "archived" | "documents">("upcoming");
   const [sessions, setSessions] = useState<any[]>([]);
+  const [docRequests, setDocRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [resumePath, setResumePath] = useState<string | null>(null);
   const [isSchedulingId, setIsSchedulingId] = useState<string | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
 
   const fetchSessions = async () => {
     try {
@@ -688,7 +1050,24 @@ export default function InterviewsPage() {
     }
   };
 
+  const fetchDocRequests = async () => {
+    const { data } = await supabase
+      .from("candidate_document_requests")
+      .select("*")
+      .order("created_at", { ascending: false });
+    setDocRequests(data || []);
+  };
+
   useInterviewsRealtime(fetchSessions);
+
+  useEffect(() => {
+    fetchDocRequests();
+    const ch = supabase
+      .channel("doc-requests-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "candidate_document_requests" }, () => fetchDocRequests())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   const handleSchedule = (id: string) => {
     setIsSchedulingId(id);
@@ -746,8 +1125,8 @@ export default function InterviewsPage() {
       title="Recruitment Interviews"
       subtitle="Autonomous talent assessment & live audits"
       actions={
-        <Button size="sm" onClick={() => toast.info("Interview scheduling coming soon")}>
-          <Plus size={13} /> Manual Schedule
+        <Button size="sm" onClick={() => setManualOpen(true)}>
+          <UserPlus size={13} /> Manual Entry
         </Button>
       }
     >
@@ -774,30 +1153,49 @@ export default function InterviewsPage() {
               <TabsTrigger value="upcoming" className="text-xs capitalize">Upcoming</TabsTrigger>
               <TabsTrigger value="completed" className="text-xs capitalize">Completed</TabsTrigger>
               <TabsTrigger value="archived" className="text-xs capitalize">Archived</TabsTrigger>
+              <TabsTrigger value="documents" className="text-xs capitalize">
+                Documents{docRequests.length ? ` (${docRequests.length})` : ""}
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
-          {/* Session list */}
-          <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-25rem)]">
-            {loading ? (
-              [...Array(3)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)
-            ) : sessions.length === 0 ? (
-              <div className="py-20 text-center bg-card border border-dashed border-border rounded-xl">
-                <Users size={32} className="mx-auto text-muted-foreground opacity-30 mb-3" />
-                <p className="text-sm font-semibold text-foreground">No accepted candidates</p>
-                <p className="text-xs text-muted-foreground">Go to ATS Scanner to verify and accept talent.</p>
-              </div>
-            ) : (
-              sessions.map((session) => (
-                <SessionCard
-                  key={session.application_id}
-                  session={session}
-                  onSelect={() => setSelectedId(session.application_id)}
-                  onScheduleClick={() => setIsSchedulingId(session.application_id)}
-                />
-              ))
-            )}
-          </div>
+          {/* Session list / Document tracker */}
+          {activeTab === "documents" ? (
+            <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-25rem)]">
+              {docRequests.length === 0 ? (
+                <div className="py-20 text-center bg-card border border-dashed border-border rounded-xl">
+                  <FileUp size={32} className="mx-auto text-muted-foreground opacity-30 mb-3" />
+                  <p className="text-sm font-semibold text-foreground">No document requests yet</p>
+                  <p className="text-xs text-muted-foreground">Accept a candidate with “Request Documents” to start tracking uploads.</p>
+                </div>
+              ) : (
+                docRequests.map((req) => (
+                  <DocTrackerCard key={req.id} req={req} onChanged={fetchDocRequests} />
+                ))
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-25rem)]">
+              {loading ? (
+                [...Array(3)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)
+              ) : sessions.length === 0 ? (
+                <div className="py-20 text-center bg-card border border-dashed border-border rounded-xl">
+                  <Users size={32} className="mx-auto text-muted-foreground opacity-30 mb-3" />
+                  <p className="text-sm font-semibold text-foreground">No accepted candidates</p>
+                  <p className="text-xs text-muted-foreground">Go to ATS Scanner to verify and accept talent.</p>
+                </div>
+              ) : (
+                sessions.map((session) => (
+                  <SessionCard
+                    key={session.application_id}
+                    session={session}
+                    onSelect={() => setSelectedId(session.application_id)}
+                    onScheduleClick={() => setIsSchedulingId(session.application_id)}
+                  />
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: Room + Scorecard */}
@@ -852,6 +1250,9 @@ export default function InterviewsPage() {
         onClose={() => setIsSchedulingId(null)}
         onConfirm={submitSchedule}
       />
+
+      {/* Manual Entry Modal (3rd-party interviews) */}
+      <ManualEntryModal open={manualOpen} onClose={() => setManualOpen(false)} />
     </DashboardShell>
   );
 }

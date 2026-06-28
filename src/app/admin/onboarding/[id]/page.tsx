@@ -9,7 +9,7 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft, Save, Send, CheckCircle2, RotateCcw, Loader2, Download,
-  Clock, AlertCircle, FileText, ShieldCheck, PenTool, Mail, Pencil, RefreshCw,
+  Clock, AlertCircle, FileText, ShieldCheck, PenTool, Mail, Pencil, RefreshCw, ExternalLink, Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,13 @@ import { SchemaEditor } from "@/components/onboarding/SchemaEditor";
 import { DocumentPreview } from "@/components/onboarding/DocumentPreview";
 import { buildTemplateData } from "@/lib/onboarding/templateData";
 import { STATUS_META, type ConfigCategory, type OnboardingConfig, type OnboardingPacket, type OnboardingStatus } from "@/lib/onboarding/types";
+
+const CANDIDATE_DOC_LABELS: Record<string, string> = {
+  face_photo: "Passport-size Photo",
+  aadhaar: "Aadhaar Card",
+  pan: "PAN Card",
+  other: "Supporting Document",
+};
 
 interface FormState {
   candidate_name: string;
@@ -48,6 +55,7 @@ export default function OnboardingBuilderPage() {
   const [isOwner, setIsOwner] = useState(false);
   const [form, setForm] = useState<FormState | null>(null);
   const [previewForm, setPreviewForm] = useState<FormState | null>(null);
+  const [candidateDocs, setCandidateDocs] = useState<any[] | null>(null);
 
   const [requireApproval, setRequireApproval] = useState(true);
 
@@ -80,6 +88,12 @@ export default function OnboardingBuilderPage() {
       }
       const json = await res.json();
       setPacket(json.packet);
+      if (json.packet?.candidate_email) {
+        fetch(`/api/admin/recruitment/documents?email=${encodeURIComponent(json.packet.candidate_email)}`)
+          .then((r) => r.json())
+          .then((d) => setCandidateDocs(d.documents || []))
+          .catch(() => setCandidateDocs([]));
+      }
       setSchema(json.schema);
       setSchemaDraft(json.schema);
       setSignatory(json.settings);
@@ -391,14 +405,39 @@ export default function OnboardingBuilderPage() {
                       {saving ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Update Preview
                     </Button>
                   </div>
+                  {(() => {
+                    const facePhotoUrl = candidateDocs?.find((d: any) => d.document_type === "face_photo")?.url;
+                    return facePhotoUrl ? (
+                      <div className="flex items-center gap-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={facePhotoUrl} alt="" className="h-14 w-14 rounded-full object-cover border border-border flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{form.candidate_name || "Candidate"}</p>
+                          <p className="text-[10px] text-muted-foreground">Photo from uploaded documents</p>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
                   <div className="grid sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Full Name</Label>
                       <Input value={form.candidate_name} onChange={(e) => updateForm({ ...form, candidate_name: e.target.value })} className="text-sm" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Email</Label>
-                      <Input type="email" value={form.candidate_email} onChange={(e) => updateForm({ ...form, candidate_email: e.target.value })} className="text-sm" />
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        Email
+                        {(!!packet?.application_id || (candidateDocs?.length ?? 0) > 0) && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px]"><Lock size={10} /> locked</span>
+                        )}
+                      </Label>
+                      <Input
+                        type="email"
+                        value={form.candidate_email}
+                        onChange={(e) => updateForm({ ...form, candidate_email: e.target.value })}
+                        disabled={!!packet?.application_id || (candidateDocs?.length ?? 0) > 0}
+                        className="text-sm disabled:opacity-100 disabled:cursor-not-allowed"
+                        title={(!!packet?.application_id || (candidateDocs?.length ?? 0) > 0) ? "Locked — this email links the candidate's uploaded documents" : undefined}
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Phone</Label>
@@ -412,6 +451,41 @@ export default function OnboardingBuilderPage() {
                 </div>
 
                 <div className="h-px bg-border" />
+
+                {candidateDocs && candidateDocs.length > 0 && (
+                  <>
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-bold uppercase tracking-wide text-foreground flex items-center gap-2">
+                        <FileText size={13} className="text-primary" /> Candidate Documents
+                        <span className="text-[10px] font-normal normal-case text-muted-foreground">({candidateDocs.length})</span>
+                      </h3>
+                      <div className="space-y-2">
+                        {candidateDocs.map((d: any) => (
+                          <a
+                            key={d.id}
+                            href={d.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-2.5 hover:bg-muted transition-colors"
+                          >
+                            {d.file_type?.startsWith("image/") ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={d.url} alt="" className="h-10 w-10 rounded-md object-cover border border-border bg-muted flex-shrink-0" />
+                            ) : (
+                              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary flex-shrink-0"><FileText size={15} /></div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium text-foreground truncate">{CANDIDATE_DOC_LABELS[d.document_type] || d.document_type}</p>
+                              <p className="text-[10px] text-muted-foreground truncate">{d.filename}</p>
+                            </div>
+                            <ExternalLink size={13} className="text-muted-foreground flex-shrink-0" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="h-px bg-border" />
+                  </>
+                )}
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">

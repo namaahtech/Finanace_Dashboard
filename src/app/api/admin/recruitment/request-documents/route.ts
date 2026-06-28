@@ -1,0 +1,59 @@
+import { NextResponse } from "next/server";
+import crypto from "crypto";
+import { getSupabaseAdmin } from "@/lib/supabase";
+import { getMailContext, sendRecruitmentMail, requestDocsHtml } from "@/lib/recruitment-mail";
+
+const DOCS = ["face_photo", "aadhaar", "pan"];
+const baseUrl = () => (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+
+// Send a candidate (already in the system as an accepted application) a secure
+// link to upload their KYC documents.
+export async function POST(req: Request) {
+  try {
+    const { application_id, created_by } = await req.json();
+    if (!application_id) return NextResponse.json({ error: "application_id required" }, { status: 400 });
+
+    const supabase = getSupabaseAdmin();
+    const { data: app } = await supabase
+      .from("applications")
+      .select("application_id, applicant_name, applicant_email, applicant_phone")
+      .eq("application_id", application_id)
+      .maybeSingle();
+
+    if (!app) return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
+    if (!app.applicant_email) return NextResponse.json({ error: "Candidate has no email on file" }, { status: 400 });
+
+    const token = crypto.randomBytes(24).toString("hex");
+    const expires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 21).toISOString();
+
+    const { data: reqRow, error } = await supabase
+      .from("candidate_document_requests")
+      .insert({
+        application_id: app.application_id,
+        candidate_name: app.applicant_name,
+        candidate_email: app.applicant_email,
+        candidate_phone: app.applicant_phone ?? null,
+        source: "interview",
+        required_docs: DOCS,
+        token,
+        token_expires_at: expires,
+        created_by: created_by || null,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+
+    const ctx = await getMailContext();
+    const link = `${baseUrl()}/documents/${token}`;
+    await sendRecruitmentMail(ctx, {
+      to: app.applicant_email,
+      subject: `Document Submission — ${ctx.companyName}`,
+      html: requestDocsHtml(app.applicant_name, ctx.companyName, link, DOCS),
+    });
+
+    return NextResponse.json({ success: true, request_id: reqRow.id });
+  } catch (e: any) {
+    console.error("[request-documents]", e);
+    return NextResponse.json({ error: e.message || "Failed to send document request" }, { status: 500 });
+  }
+}

@@ -4,7 +4,7 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -75,10 +75,20 @@ function StatusHistory({ p }: { p: PacketRow }) {
 }
 
 interface EligibleCandidate {
-  application_id: string;
-  applicant_name: string;
-  applicant_email: string;
-  applied_cluster_id: string;
+  key: string;
+  source: "interview" | "converted";
+  application_id?: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  badge: string;
+}
+
+interface ClaimedRow {
+  application_id: string | null;
+  candidate_email: string;
+  status: string;
+  creator?: { name?: string; employee_id?: string } | null;
 }
 
 function initials(name: string) {
@@ -98,8 +108,11 @@ export default function OnboardingHubPage() {
   const router = useRouter();
   const canCreate = permissions?.onboarding?.can_create ?? false;
   const isAdmin = user?.role === "admin";
+  // Manual Entry is admin-only by default; admins can grant it to a role in /admin/permissions.
+  const canManual = isAdmin || (permissions?.onboarding_manual?.can_view ?? false);
 
   const [packets, setPackets] = useState<PacketRow[]>([]);
+  const [claimed, setClaimed] = useState<ClaimedRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -117,6 +130,19 @@ export default function OnboardingHubPage() {
   const [manual, setManual] = useState(emptyManual);
   const [creatingManual, setCreatingManual] = useState(false);
 
+  // Workspace-wide: candidates that already have an onboarding packet — keyed by
+  // application id + email, mapped to who claimed them. Drives picker disabling
+  // for EVERY role (not just the current user's own packets).
+  const claimedIndex = useMemo(() => {
+    const byApp = new Map<string, ClaimedRow["creator"]>();
+    const byEmail = new Map<string, ClaimedRow["creator"]>();
+    for (const c of claimed) {
+      if (c.application_id) byApp.set(c.application_id, c.creator);
+      if (c.candidate_email) byEmail.set(c.candidate_email.toLowerCase(), c.creator);
+    }
+    return { byApp, byEmail };
+  }, [claimed]);
+
   const fetchPackets = useCallback(async () => {
     try {
       const res = await fetch("/api/onboarding");
@@ -129,14 +155,25 @@ export default function OnboardingHubPage() {
     }
   }, []);
 
+  const fetchClaimed = useCallback(async () => {
+    try {
+      const res = await fetch("/api/onboarding/claimed");
+      if (res.ok) {
+        const json = await res.json();
+        setClaimed(json.claimed ?? []);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     fetchPackets();
+    fetchClaimed();
     const channel = supabase
       .channel("onboarding-hub")
-      .on("postgres_changes", { event: "*", schema: "public", table: "onboarding_packets" }, fetchPackets)
+      .on("postgres_changes", { event: "*", schema: "public", table: "onboarding_packets" }, () => { fetchPackets(); fetchClaimed(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchPackets]);
+  }, [fetchPackets, fetchClaimed]);
 
   async function openPicker() {
     setPickerOpen(true);
@@ -144,12 +181,39 @@ export default function OnboardingHubPage() {
     setManual(emptyManual);
     setPickerLoading(true);
     try {
-      const { data } = await supabase
-        .from("applications")
-        .select("application_id, applicant_name, applicant_email, applied_cluster_id")
-        .eq("decision", "accepted")
-        .order("created_at", { ascending: false });
-      setEligible((data as EligibleCandidate[]) ?? []);
+      const [appsRes, convRes] = await Promise.all([
+        supabase
+          .from("applications")
+          .select("application_id, applicant_name, applicant_email, applied_cluster_id")
+          .eq("decision", "accepted")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("candidate_document_requests")
+          .select("id, candidate_name, candidate_email, candidate_phone, converted_to_onboard")
+          .eq("converted_to_onboard", true)
+          .order("created_at", { ascending: false }),
+      ]);
+      const apps: EligibleCandidate[] = (appsRes.data ?? []).map((a: any) => ({
+        key: a.application_id,
+        source: "interview",
+        application_id: a.application_id,
+        name: a.applicant_name,
+        email: a.applicant_email,
+        phone: null,
+        badge: (a.applied_cluster_id || "").replace(/-/g, " ").toLowerCase() || "interview",
+      }));
+      const seen = new Set(apps.map((a) => (a.email || "").toLowerCase()));
+      const converted: EligibleCandidate[] = (convRes.data ?? [])
+        .filter((r: any) => !seen.has((r.candidate_email || "").toLowerCase()))
+        .map((r: any) => ({
+          key: "req:" + r.id,
+          source: "converted",
+          name: r.candidate_name,
+          email: r.candidate_email,
+          phone: r.candidate_phone ?? null,
+          badge: "documents ✓",
+        }));
+      setEligible([...converted, ...apps]);
     } catch {
       toast.error("Failed to load candidates");
     } finally {
@@ -178,14 +242,26 @@ export default function OnboardingHubPage() {
     }
   }
 
-  async function startOnboarding(application_id: string) {
-    setCreatingFor(application_id);
+  async function startOnboarding(c: EligibleCandidate) {
+    setCreatingFor(c.key);
     try {
-      const res = await fetch("/api/onboarding/push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ application_id }),
-      });
+      const res =
+        c.source === "interview" && c.application_id
+          ? await fetch("/api/onboarding/push", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ application_id: c.application_id }),
+            })
+          : await fetch("/api/onboarding/manual", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                candidate_name: c.name,
+                candidate_email: c.email,
+                candidate_phone: c.phone || "",
+                candidate_address: "",
+              }),
+            });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed");
       setPickerOpen(false);
@@ -383,33 +459,37 @@ export default function OnboardingHubPage() {
               <FileSignature size={18} className="text-primary" /> Start New Onboarding
             </DialogTitle>
             <DialogDescription>
-              Pick an accepted candidate from the interview pipeline, or enter a candidate manually.
+              {canManual
+                ? "Pick an accepted candidate from the interview pipeline, or enter a candidate manually."
+                : "Pick an accepted candidate from the interview pipeline."}
             </DialogDescription>
           </DialogHeader>
 
-          {/* Mode toggle */}
-          <div className="grid grid-cols-2 gap-1.5 rounded-lg bg-muted p-1">
-            <button
-              onClick={() => setPickerMode("interview")}
-              className={cn(
-                "flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold transition-colors",
-                pickerMode === "interview" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Briefcase size={14} /> From Interview
-            </button>
-            <button
-              onClick={() => setPickerMode("manual")}
-              className={cn(
-                "flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold transition-colors",
-                pickerMode === "manual" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <UserPlus size={14} /> Manual Entry
-            </button>
-          </div>
+          {/* Mode toggle — Manual Entry only when permitted */}
+          {canManual && (
+            <div className="grid grid-cols-2 gap-1.5 rounded-lg bg-muted p-1">
+              <button
+                onClick={() => setPickerMode("interview")}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold transition-colors",
+                  pickerMode === "interview" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Briefcase size={14} /> From Interview
+              </button>
+              <button
+                onClick={() => setPickerMode("manual")}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold transition-colors",
+                  pickerMode === "manual" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <UserPlus size={14} /> Manual Entry
+              </button>
+            </div>
+          )}
 
-          {pickerMode === "interview" ? (
+          {pickerMode === "interview" || !canManual ? (
             <div className="max-h-[400px] overflow-y-auto -mx-1 px-1 space-y-2">
               {pickerLoading ? (
                 [...Array(4)].map((_, i) => <Skeleton key={i} className="h-[60px] rounded-lg" />)
@@ -420,29 +500,50 @@ export default function OnboardingHubPage() {
                   <span className="text-xs">Use <strong>Manual Entry</strong> for candidates interviewed on other platforms.</span>
                 </div>
               ) : (
-                eligible.map((c) => (
-                  <button
-                    key={c.application_id}
-                    disabled={!!creatingFor}
-                    onClick={() => startOnboarding(c.application_id)}
-                    className="w-full flex items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 disabled:opacity-60"
-                  >
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-[10px] font-semibold">{initials(c.applicant_name)}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground truncate">{c.applicant_name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{c.applicant_email}</p>
-                    </div>
-                    {creatingFor === c.application_id ? (
-                      <Loader2 size={15} className="animate-spin text-primary" />
-                    ) : (
-                      <Badge variant="secondary" className="text-[10px] capitalize">
-                        {c.applied_cluster_id.replace(/-/g, " ").toLowerCase()}
-                      </Badge>
-                    )}
-                  </button>
-                ))
+                eligible.map((c) => {
+                  const already =
+                    (!!c.application_id && claimedIndex.byApp.has(c.application_id)) ||
+                    claimedIndex.byEmail.has(c.email.toLowerCase());
+                  const claimer =
+                    (c.application_id ? claimedIndex.byApp.get(c.application_id) : undefined) ||
+                    claimedIndex.byEmail.get(c.email.toLowerCase());
+                  return (
+                    <button
+                      key={c.key}
+                      disabled={!!creatingFor || already}
+                      onClick={() => startOnboarding(c)}
+                      title={already ? "Already in onboarding" : undefined}
+                      className={cn(
+                        "w-full flex items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors disabled:opacity-60",
+                        already ? "cursor-not-allowed" : "hover:border-primary/40"
+                      )}
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="text-[10px] font-semibold">{initials(c.name)}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{c.email}</p>
+                        {already && (
+                          <p className="text-[10px] text-emerald-600 truncate">
+                            Onboarded by {claimer?.name || "a team member"}{claimer?.employee_id ? ` · ${claimer.employee_id}` : ""}
+                          </p>
+                        )}
+                      </div>
+                      {creatingFor === c.key ? (
+                        <Loader2 size={15} className="animate-spin text-primary" />
+                      ) : already ? (
+                        <Badge variant="secondary" className="text-[10px] gap-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                          <CheckCircle2 size={10} /> Added
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[10px] capitalize">
+                          {c.badge}
+                        </Badge>
+                      )}
+                    </button>
+                  );
+                })
               )}
             </div>
           ) : (

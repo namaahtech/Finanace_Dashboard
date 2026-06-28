@@ -48,7 +48,13 @@
       "Skill(artifact-design)",
       "Skill(artifact-design:*)",
       "Bash(grep -rlE 'eyJ[A-Za-z0-9_-]{20,}' scratch/)",
-      "Bash(grep -vE ':0$')"
+      "Bash(grep -vE ':0$')",
+      "Bash(git commit *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(supabase migration *)",
+      "Bash(rm -f \"/d/Finanace_Dashboard/src/lib/photo-validate.ts\" \"/d/Finanace_Dashboard/src/app/api/documents/[token]/validate/route.ts\")",
+      "Bash(rmdir \"/d/Finanace_Dashboard/src/app/api/documents/[token]/validate\")",
+      "Bash(awk '{print $5, $9}')"
     ]
   }
 }

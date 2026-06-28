@@ -30,6 +30,8 @@ const PUBLIC_PREFIXES = [
   "/meet",              // public LiveKit meet rooms (token-gated server-side)
   "/sign",              // candidate e-signature pages (token-gated server-side)
   "/api/sign",          // candidate e-signature API (token-gated server-side)
+  "/documents",         // candidate KYC document upload (token-gated server-side)
+  "/api/documents",     // candidate KYC document API (token-gated server-side)
 ];
 
 function isPublic(pathname: string): boolean {

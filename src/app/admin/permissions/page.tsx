@@ -105,6 +105,7 @@ const SECTIONS = [
       { key: "interviews",    label: "Interview Management",           desc: "Schedule interviews, video rooms, AI recap" },
       { key: "onboarding",    label: "Onboarding",                     desc: "Offer letter builder, approval workflow, e-sign dispatch" },
       { key: "onboarding_builder", label: "Onboarding — Form Builder",  desc: "Full-depth edit: add/edit questions, options, types & structure" },
+      { key: "onboarding_manual",  label: "Onboarding — Manual Entry",   desc: "Add a candidate manually (bypasses the interview pipeline) in Start New Onboarding" },
     ],
   },
   {

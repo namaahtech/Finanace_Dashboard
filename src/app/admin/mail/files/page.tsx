@@ -41,6 +41,7 @@ type FileShare = {
   source?: "upload" | "email";
   subject?: string;
   from_address?: string;
+  external_from?: string;
   folder?: string;
   sharer?: { id: string; name: string; designation: string };
 };
@@ -792,6 +793,11 @@ export default function FilesPage() {
                     {f.subject}
                   </p>
                 )}
+                {(f.external_from || f.from_address) && (
+                  <p className="text-[9px] text-muted-foreground/80 truncate mb-0.5" title={f.external_from || f.from_address}>
+                    From: {f.external_from || f.from_address}
+                  </p>
+                )}
                 <p className="text-[10px] text-muted-foreground">{formatBytes(f.file_size)}</p>
 
                 <div className="flex items-center gap-1 text-[9px] text-muted-foreground mt-1.5">
@@ -1205,6 +1211,14 @@ export default function FilesPage() {
                     </p>
                   </div>
                 </div>
+
+                {/* Candidate-uploaded: who it's from */}
+                {preview.external_from && (
+                  <div className="bg-emerald-500/5 rounded-xl px-3 py-2.5 border border-emerald-500/10">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-600/70 mb-1">From (candidate)</p>
+                    <p className="text-xs font-semibold text-foreground truncate">{preview.external_from}</p>
+                  </div>
+                )}
 
                 {/* Email-specific: Subject + From */}
                 {preview.source === "email" && (preview.subject || preview.from_address) && (
