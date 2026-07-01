@@ -18,6 +18,7 @@ const TEMPLATE_BLOCKS: Record<DocKind, (d: TemplateData) => React.ReactNode[]> =
 };
 
 const CONTENT_MM = 210 - 2 * SIDE_MM;
+const SIG_STRIP_MM = 6; // per-page candidate signature strip (matches PaginatedDoc.tsx)
 
 /**
  * Render a document to a self-contained HTML string for Puppeteer. The blocks go
@@ -76,8 +77,8 @@ async function addFooterLinks(bytes: Uint8Array): Promise<Buffer> {
   return Buffer.from(await doc.save());
 }
 
-/** Render HTML → A4 PDF buffer with the NAMAAH letterhead + clickable footer links on every page. */
-export async function htmlToPdf(html: string): Promise<Buffer> {
+/** Render HTML → A4 PDF buffer with the NAMAAH letterhead + per-page candidate sig strip + clickable footer links on every page. */
+export async function htmlToPdf(html: string, sigData?: { image?: string | null; name: string }): Promise<Buffer> {
   const browser = await puppeteer.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -88,11 +89,12 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
     await page.setContent(html, { waitUntil: "networkidle0" });
 
     // Paginate exactly like the on-screen preview: measure each block and split
-    // into A4 pages, each wrapped with the letterhead header + footer.
+    // into A4 pages, each wrapped with the letterhead header + per-page candidate
+    // signature strip + letterhead footer.
     await page.evaluate(
-      (headerMM: number, footerMM: number) => {
+      (headerMM: number, footerMM: number, sigStripMM: number, sig: { image?: string | null; name: string } | null) => {
         const PX = 96 / 25.4;
-        const usable = (297 - headerMM - footerMM - 10) * PX; // content area height per page
+        const usable = (297 - headerMM - sigStripMM - footerMM - 10) * PX;
         const src = document.getElementById("od-src");
         const out = document.getElementById("od-pages");
         if (!src || !out) return;
@@ -114,25 +116,44 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
         }
         if (cur.length) groups.push(cur);
 
-        for (const idxs of groups) {
+        for (let gi = 0; gi < groups.length; gi++) {
+          const idxs = groups[gi];
           const pg = document.createElement("div");
           pg.className = "od-page";
+
           const head = document.createElement("div");
           head.className = "od-lh-head";
+
           const body = document.createElement("div");
           body.className = "od-page-body";
-          for (const i of idxs) body.appendChild(blocks[i]); // move the actual measured nodes
+          for (const i of idxs) body.appendChild(blocks[i]);
+
+          // Per-page candidate signature strip
+          const sigStrip = document.createElement("div");
+          sigStrip.className = "od-pagesig";
+          const imgTag = sig?.image ? `<img src="${sig.image}" alt="sig" />` : "";
+          const name = sig?.name || "";
+          sigStrip.innerHTML =
+            `<span class="od-pagesig-lbl">Candidate:</span>` +
+            `<span class="od-pagesig-sig">${imgTag}</span>` +
+            `<span class="od-pagesig-name">${name}</span>` +
+            `<span class="od-pagesig-pg">Page ${gi + 1} of ${groups.length}</span>`;
+
           const foot = document.createElement("div");
           foot.className = "od-lh-foot";
+
           pg.appendChild(head);
           pg.appendChild(body);
+          pg.appendChild(sigStrip);
           pg.appendChild(foot);
           out.appendChild(pg);
         }
         src.remove();
       },
       HEADER_MM,
-      FOOTER_MM
+      FOOTER_MM,
+      SIG_STRIP_MM,
+      sigData ?? null
     );
 
     const pdf = await page.pdf({
@@ -161,10 +182,11 @@ export async function generateAndStorePdfs(
   const supabase = getSupabaseAdmin();
   const stamp = data.signature?.signed_at ? "signed" : "offer";
   const paths: Partial<Record<DocKind, string>> = {};
+  const sigData = { image: data.signature?.image_base64 ?? null, name: data.candidate.name };
 
   for (const kind of which) {
     const html = renderDocHtml(kind, data);
-    const buffer = await htmlToPdf(html);
+    const buffer = await htmlToPdf(html, sigData);
     const path = `${packetId}/${kind}-${stamp}.pdf`;
     const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, {
       contentType: "application/pdf",

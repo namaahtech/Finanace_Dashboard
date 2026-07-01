@@ -9,7 +9,9 @@ export function OfferLetterTemplate({ data, withStyle = true, paged = false }: {
   return (
     <>
       {withStyle && <DocStyle />}
-      {paged ? <DocShell paged>{blocks}</DocShell> : <PaginatedDoc blocks={blocks} />}
+      {paged
+        ? <DocShell paged>{blocks}</DocShell>
+        : <PaginatedDoc blocks={blocks} signature={data.signature} candidateName={data.candidate.name} />}
     </>
   );
 }
