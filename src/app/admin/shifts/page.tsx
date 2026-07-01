@@ -9,11 +9,40 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
-import { DatePicker } from "@/components/ui/DatePicker";
+import { toast } from "sonner";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import dayjs from "dayjs";
 
 // ─── Types ───────────────────────────────────────────────
@@ -48,6 +77,9 @@ interface Employee {
 }
 
 // ─── Custom Dropdown ────────────────────────────────────
+// shadcn-backed wrapper preserving the legacy CustomSelect API
+// (shadcn Select forbids empty-string values, so we map "" <-> a sentinel internally)
+const EMPTY_SENTINEL = "__none__";
 function CustomSelect({ value, options, onChange, placeholder, icon, label }: {
   value: string;
   options: { label: string; value: string }[];
@@ -56,54 +88,35 @@ function CustomSelect({ value, options, onChange, placeholder, icon, label }: {
   icon?: React.ReactNode;
   label?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const selected = options.find(o => o.value === value);
-
   return (
-    <div className="space-y-2" ref={ref}>
-      {label && <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-theme-muted">{icon}{label}</label>}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="flex h-[46px] w-full items-center justify-between rounded-2xl border border-theme-border bg-theme-page px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-strong transition-all overflow-hidden"
-        >
-          <span className="flex items-center gap-2 truncate pr-2">
+    <div className="space-y-1.5">
+      {label && (
+        <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+          {icon}{label}
+        </label>
+      )}
+      <Select
+        value={value === "" ? EMPTY_SENTINEL : (value || undefined)}
+        onValueChange={(v) => onChange(v === EMPTY_SENTINEL ? "" : v)}
+      >
+        <SelectTrigger className="w-full">
+          <span className="flex items-center gap-2 min-w-0 flex-1 text-left">
             {!label && icon}
-            {selected ? selected.label : <span className="text-theme-muted font-normal">{placeholder}</span>}
+            <SelectValue placeholder={placeholder} />
           </span>
-          <ChevronDown size={14} className={cn("flex-shrink-0 text-theme-muted transition-transform", open && "rotate-180")} />
-        </button>
-
-        {open && (
-          <div className="absolute top-full z-[1000] mt-1.5 w-full max-h-48 overflow-y-auto rounded-2xl border border-theme-border bg-theme-surface shadow-[0_10px_40px_rgba(0,0,0,0.3)] p-1.5 animate-in slide-in-from-top-1 duration-200">
-            {options.length > 0 ? options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => { onChange(opt.value); setOpen(false); }}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-all",
-                  value === opt.value ? "bg-theme-primary text-theme-surface" : "text-theme-fg hover:bg-theme-raised"
-                )}
-              >
-                <span className="truncate uppercase">{opt.label}</span>
-                {value === opt.value && <Check size={12} className="flex-shrink-0" />}
-              </button>
-            )) : (
-              <div className="px-3 py-4 text-center text-[10px] uppercase font-black tracking-widest text-theme-muted opacity-50">No Options Available</div>
-            )}
-          </div>
-        )}
-      </div>
+        </SelectTrigger>
+        <SelectContent>
+          {options.length > 0 ? (
+            options.map(opt => (
+              <SelectItem key={opt.value || EMPTY_SENTINEL} value={opt.value || EMPTY_SENTINEL}>
+                {opt.label}
+              </SelectItem>
+            ))
+          ) : (
+            <div className="px-3 py-4 text-center text-xs text-muted-foreground">No options available</div>
+          )}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
@@ -146,7 +159,6 @@ function ShiftCardMenu({ onEdit, onDelete }: { onEdit: () => void, onDelete: () 
 
 // ─── Main Component ───────────────────────────────────────
 export default function ShiftManagementPage() {
-  const { showToast } = useToast();
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [orgNodes, setOrgNodes] = useState<TeamNode[]>([]);
@@ -186,7 +198,7 @@ export default function ShiftManagementPage() {
       setEmployees(empData || []);
       setOrgNodes(nodesData || []);
     } catch (e: any) {
-      showToast(e.message, "error");
+      toast.error(e.message);
     } finally {
       setLoading(false);
     }
@@ -206,7 +218,7 @@ export default function ShiftManagementPage() {
   }, []);
 
   async function handleSaveShift() {
-    if (!shiftForm.name) return showToast("Protocol name is mandatory", "warning");
+    if (!shiftForm.name) return toast.warning("Protocol name is mandatory");
     setSubmitting(true);
     try {
       const deptNode = orgNodes.find(n => n.id === shiftForm.department_id);
@@ -224,18 +236,18 @@ export default function ShiftManagementPage() {
       if (editingShiftId) {
         const { error } = await supabase.from("shifts").update(payload).eq("id", editingShiftId);
         if (error) throw error;
-        showToast("Shift protocol re-indexed successfully", "success");
+        toast.success("Shift protocol re-indexed successfully");
       } else {
         const { error } = await supabase.from("shifts").insert([payload]);
         if (error) throw error;
-        showToast("New shift protocol established successfully", "success");
+        toast.success("New shift protocol established successfully");
       }
 
       setShowDefineModal(false);
       setEditingShiftId(null);
       loadData();
     } catch (e: any) {
-      showToast(e.message, "error");
+      toast.error(e.message);
     } finally {
       setSubmitting(false);
     }
@@ -247,11 +259,11 @@ export default function ShiftManagementPage() {
     try {
       const { error } = await supabase.from("shifts").delete().eq("id", deleteConfirm.id);
       if (error) throw error;
-      showToast(`Protocol "${deleteConfirm.name}" decommissioned.`, "success");
+      toast.success(`Protocol "${deleteConfirm.name}" decommissioned.`);
       setDeleteConfirm(null);
       loadData();
     } catch (e: any) {
-      showToast(e.message, "error");
+      toast.error(e.message);
     } finally {
       setSubmitting(false);
     }
@@ -274,7 +286,7 @@ export default function ShiftManagementPage() {
       title="Shift Management"
       subtitle="Define precisely targeted operational temporal cycles."
       actions={
-        <Button variant="primary" size="sm" onClick={() => {
+        <Button size="sm" onClick={() => {
             setEditingShiftId(null);
             setShiftForm({
               name: "", start_time: "09:00", end_time: "18:00", color_code: "#10b981",
@@ -301,7 +313,7 @@ export default function ShiftManagementPage() {
                   <Clock size={18} style={{ color: shift.color_code }} strokeWidth={2.5} />
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="default" className="text-[9px] font-black px-2 py-0.5 tracking-widest">{shift.member_count} ACTIVE</Badge>
+                  <Badge variant="secondary" className="text-[9px] px-2 py-0.5 tracking-wider">{shift.member_count} ACTIVE</Badge>
                   <ShiftCardMenu 
                     onDelete={() => setDeleteConfirm(shift)}
                     onEdit={() => {
@@ -353,209 +365,253 @@ export default function ShiftManagementPage() {
           </div>
         </div>
 
-        {/* OPERATION MANNING TABLE */}
-        <div className="page-card p-0 overflow-hidden shadow-2xl">
-          <div className="flex flex-col gap-4 border-b border-theme-border px-8 py-6 sm:flex-row sm:items-center sm:justify-between bg-theme-raised/10">
-            <div className="flex items-center gap-4">
-              <div className="h-5 w-1.5 bg-theme-primary rounded-full shadow-lg shadow-theme-primary/20" />
+        {/* PERSONNEL ASSIGNMENT TABLE */}
+        <Card className="overflow-hidden p-0 gap-0">
+          <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Clock size={14} className="text-muted-foreground" />
               <div>
-                <h3 className="text-sm font-semibold text-theme-fg">Operational Manning Registry</h3>
-                <p className="text-xs text-theme-muted mt-0.5">Session: {dayjs().format("DD MMM YYYY")}</p>
+                <h3 className="text-sm font-semibold text-foreground">Personnel Assignments</h3>
+                <p className="text-[11px] text-muted-foreground">{dayjs().format("DD MMM YYYY")}</p>
               </div>
             </div>
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-theme-muted" size={14} />
-              <input type="text" placeholder="Search Personnel Deployment..." value={search} onChange={(e) => setSearch(e.target.value)}
-                className="h-11 w-72 rounded-2xl border border-theme-border bg-theme-page pl-11 pr-4 text-xs font-bold text-theme-fg outline-none focus:border-theme-strong transition-all shadow-sm" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
+              <Input type="text" placeholder="Search personnel..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full sm:w-72 pl-9" />
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
-                  <th className="px-5 py-3">Personnel</th>
-                  <th className="px-5 py-3">Architecture Entity</th>
-                  <th className="px-5 py-3 text-center">Assigned Protocol</th>
-                  <th className="px-5 py-3 text-center">Temporal Rules</th>
-                  <th className="px-5 py-3 text-right">Deployment Update</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-theme-border/50">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="pl-4">Personnel</TableHead>
+                  <TableHead>Department / Role</TableHead>
+                  <TableHead className="text-center">Assigned Shift</TableHead>
+                  <TableHead className="text-center">Schedule</TableHead>
+                  <TableHead className="pr-4 text-right">Assign</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {loading ? (
-                    <tr><td colSpan={5} className="px-8 py-20 text-center animate-pulse text-[10px] font-black text-theme-muted uppercase tracking-[0.2em]">Synchronizing Protocol Matrix...</td></tr>
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="pl-4">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-8 w-8 rounded-full" />
+                          <div className="space-y-1.5">
+                            <Skeleton className="h-3 w-28" />
+                            <Skeleton className="h-2.5 w-20" />
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell><Skeleton className="h-3 w-32" /></TableCell>
+                      <TableCell className="text-center"><Skeleton className="h-5 w-20 mx-auto rounded-full" /></TableCell>
+                      <TableCell className="text-center"><Skeleton className="h-3 w-28 mx-auto" /></TableCell>
+                      <TableCell className="pr-4 text-right"><Skeleton className="h-8 w-[160px] ml-auto rounded-md" /></TableCell>
+                    </TableRow>
+                  ))
                 ) : filteredEmployees.length === 0 ? (
-                    <tr><td colSpan={5} className="px-8 py-20 text-center text-xs font-bold text-theme-muted">Target sector has no active deployments.</td></tr>
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-32 text-center text-sm text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <Clock size={20} className="text-muted-foreground/60" />
+                        <span>No personnel in this sector</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : filteredEmployees.map(emp => {
                   const currentShift = shifts.find(s => s.id === emp.shift_id);
                   return (
-                    <tr key={emp.id} className="group hover:bg-theme-raised/30 transition-all duration-300">
-                      <td className="px-5 py-3">
+                    <TableRow key={emp.id}>
+                      <TableCell className="pl-4">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-bold shadow-sm">
-                             {emp.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-theme-fg">{emp.name}</p>
-                            <p className="text-xs text-theme-muted mt-0.5 whitespace-nowrap text-ellipsis overflow-hidden">{emp.employee_id}</p>
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="bg-primary text-primary-foreground text-[10px] font-semibold">
+                              {emp.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{emp.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{emp.employee_id}</p>
                           </div>
                         </div>
-                      </td>
-                      <td className="px-5 py-3 text-xs text-theme-fg">
-                         {emp.department} <span className="mx-1 text-theme-border">•</span> <span className="text-theme-muted">{emp.designation}</span>
-                      </td>
-                      <td className="px-5 py-3 text-center">
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-xs">
+                          <span className="font-medium text-foreground">{emp.department}</span>
+                          {emp.designation && (
+                            <>
+                              <span className="mx-1.5 text-border">·</span>
+                              <span className="text-muted-foreground">{emp.designation}</span>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
                         {currentShift ? (
-                          <span style={{ backgroundColor: `${currentShift.color_code}15`, color: currentShift.color_code, borderColor: `${currentShift.color_code}30` }} 
-                            className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm">
+                          <Badge
+                            style={{
+                              backgroundColor: `${currentShift.color_code}15`,
+                              color: currentShift.color_code,
+                              borderColor: `${currentShift.color_code}30`,
+                            }}
+                            className="border font-medium"
+                          >
                             {currentShift.name}
-                          </span>
+                          </Badge>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-theme-muted text-xs font-medium">
-                             <XCircle size={14} /> Unassigned
+                          <span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
+                            <XCircle size={12} /> Unassigned
                           </span>
                         )}
-                      </td>
-                      <td className="px-5 py-3 text-center tabular-nums text-sm text-theme-fg">
-                        {currentShift ? <span>{dayjs(`2000-01-01 ${currentShift.start_time}`).format("hh:mm A")} — {dayjs(`2000-01-01 ${currentShift.end_time}`).format("hh:mm A")}</span> : "—"}
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <select className="bg-theme-page border border-theme-border text-xs text-theme-fg outline-none cursor-pointer hover:bg-theme-raised px-3 py-2 rounded-lg transition-all"
-                          value={emp.shift_id || ""} onChange={(e) => {
-                             const sid = e.target.value || null;
-                             supabase.from("employees").update({ shift_id: sid }).eq("id", emp.id).then(() => {
-                               showToast("Protocol Deployment Updated", "success");
-                               loadData();
-                             });
-                          }}>
-                          <option value="">Change slot...</option>
-                          {shifts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                          <option value="">Remove assignment</option>
-                        </select>
-                      </td>
-                    </tr>
-                  )
+                      </TableCell>
+                      <TableCell className="text-center tabular-nums text-xs text-foreground">
+                        {currentShift
+                          ? <span>{dayjs(`2000-01-01 ${currentShift.start_time}`).format("hh:mm A")} — {dayjs(`2000-01-01 ${currentShift.end_time}`).format("hh:mm A")}</span>
+                          : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="pr-4 text-right">
+                        <Select
+                          value={emp.shift_id || "none"}
+                          onValueChange={(v) => {
+                            const sid = v === "none" ? null : v;
+                            supabase.from("employees").update({ shift_id: sid }).eq("id", emp.id).then(() => {
+                              toast.success("Shift assignment updated");
+                              loadData();
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs ml-auto w-[170px]"><SelectValue placeholder="Change shift..." /></SelectTrigger>
+                          <SelectContent>
+                            {shifts.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                            <SelectItem value="none">Remove assignment</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* DEFINE/EDIT SHIFT MODAL */}
-      {showDefineModal && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-           <div className="w-full max-w-lg bg-theme-surface rounded-2xl shadow-2xl border border-theme-border animate-in zoom-in-95 duration-400">
-              <div className="flex items-center justify-between border-b border-theme-border px-6 py-4">
-                 <div className="flex items-center gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary text-theme-surface shadow-sm">
-                      {editingShiftId ? <Edit2 size={18} /> : <Timer size={18} />}
-                    </div>
-                    <div>
-                       <h3 className="text-sm font-bold text-theme-fg">{editingShiftId ? 'Edit Shift Protocol' : 'Deploy New Protocol'}</h3>
-                       <p className="text-xs text-theme-muted mt-0.5">Configure operational timings</p>
-                    </div>
-                 </div>
-                 <button onClick={() => setShowDefineModal(false)} className="rounded-lg p-2 text-theme-muted hover:bg-theme-raised transition-all">
-                    <X size={18} />
-                 </button>
+      {/* DEFINE / EDIT SHIFT DIALOG */}
+      <Dialog open={showDefineModal} onOpenChange={setShowDefineModal}>
+        <DialogContent className="sm:max-w-lg !grid-rows-[auto_1fr_auto] !grid p-0 overflow-hidden gap-0 max-h-[calc(100vh-6rem)] sm:max-h-[80vh]">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0 border-b border-border px-6 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
+              {editingShiftId ? <Edit2 size={16} /> : <Timer size={16} />}
+            </div>
+            <div className="flex-1 text-left">
+              <DialogTitle className="text-sm font-semibold">{editingShiftId ? "Edit Shift" : "Create New Shift"}</DialogTitle>
+              <DialogDescription className="text-xs">Configure operational timings</DialogDescription>
+            </div>
+          </DialogHeader>
+
+          <div className="min-h-0 overflow-y-auto px-6 py-5 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Shift Name</Label>
+              <Input type="text" placeholder="e.g. Night Vanguard" value={shiftForm.name} onChange={(e) => setShiftForm({...shiftForm, name: e.target.value})} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Start Time</Label>
+                <Input type="time" value={shiftForm.start_time} onChange={(e) => setShiftForm({...shiftForm, start_time: e.target.value})} />
               </div>
-              
-              <div className="p-6">
-                 <div className="grid grid-cols-1 gap-5">
-                    <div className="space-y-2">
-                       <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Protocol Alias</label>
-                       <input type="text" placeholder="e.g. Night Vanguard" value={shiftForm.name} onChange={(e) => setShiftForm({...shiftForm, name: e.target.value})}
-                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Commencement</label>
-                          <input type="time" value={shiftForm.start_time} onChange={(e) => setShiftForm({...shiftForm, start_time: e.target.value})} className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none shadow-sm" />
-                       </div>
-                       <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Termination</label>
-                          <input type="time" value={shiftForm.end_time} onChange={(e) => setShiftForm({...shiftForm, end_time: e.target.value})} className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none shadow-sm" />
-                       </div>
-                    </div>
-
-                    <CustomSelect 
-                      label="Deployment Sector" icon={<Building size={13} />} placeholder="Select Department"
-                      value={shiftForm.department_id} onChange={(v) => setShiftForm({...shiftForm, department_id: v, team_id: ""})} 
-                      options={[{ label: "Global/Any Sector", value: "" }, ...departments.map(d => ({ label: d.name, value: d.id }))]}
-                    />
-
-                    <CustomSelect 
-                      label="Operational Squad" icon={<LayoutGrid size={13} />} placeholder="Select Unit"
-                      value={shiftForm.team_id} onChange={(v) => {
-                         const team = teams.find(t => t.id === v);
-                         if (team && !shiftForm.department_id) setShiftForm({...shiftForm, team_id: v, department_id: team.parent_id || ""});
-                         else setShiftForm({...shiftForm, team_id: v});
-                      }} 
-                      options={[{ label: "Global/Any Squad", value: "" }, ...teams.filter(t => !shiftForm.department_id || t.parent_id === shiftForm.department_id).map(t => ({ label: t.name, value: t.id }))]}
-                    />
-
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Active From</label>
-                          <DatePicker value={shiftForm.valid_from} onChange={(d) => setShiftForm({...shiftForm, valid_from: d})} label="" />
-                       </div>
-                       <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Active Until</label>
-                          <DatePicker value={shiftForm.valid_to} onChange={(d) => setShiftForm({...shiftForm, valid_to: d})} label="" />
-                       </div>
-                    </div>
-
-                    <div className="space-y-3">
-                       <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Protocol Signature Color</label>
-                       <div className="flex flex-wrap gap-3 pt-1">
-                          {['#10b981', '#0ea5e9', '#f59e0b', '#6366f1', '#f43f5e', '#8b5cf6', '#000000'].map(c => (
-                             <button key={c} onClick={() => setShiftForm({...shiftForm, color_code: c})}
-                                className={cn("h-8 w-8 rounded-full border-2 transition-all hover:scale-110 shadow-sm", shiftForm.color_code === c ? "border-theme-primary scale-110 shadow-md" : "border-white/50")}
-                                style={{ backgroundColor: c }}>
-                               {shiftForm.color_code === c && <Check size={14} className="mx-auto text-white drop-shadow-lg" strokeWidth={4} />}
-                             </button>
-                          ))}
-                       </div>
-                    </div>
-                 </div>
-
-                 <div className="bg-theme-surface flex items-center justify-end border-t border-theme-border pt-4 gap-3 mt-4">
-                    <Button type="button" variant="secondary" size="sm" onClick={() => setShowDefineModal(false)}>Cancel</Button>
-                    <Button onClick={handleSaveShift} size="sm" loading={submitting}>
-                      {editingShiftId ? 'Save Changes' : 'Create Protocol'}
-                    </Button>
-                 </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">End Time</Label>
+                <Input type="time" value={shiftForm.end_time} onChange={(e) => setShiftForm({...shiftForm, end_time: e.target.value})} />
               </div>
-           </div>
-        </div>
-      )}
+            </div>
 
-      {deleteConfirm && (
-        <div className="fixed inset-x-0 top-8 z-[9000] flex justify-center px-4 animate-in slide-in-from-top-8 duration-300">
-           <div className="flex items-center gap-6 bg-theme-surface px-6 py-4 shadow-xl rounded-2xl border border-theme-border min-w-[400px]">
-              <div className="flex items-center gap-4">
-                 <div className="h-10 w-10 flex items-center justify-center bg-rose-500/10 text-rose-500 rounded-xl">
-                    <Trash2 size={20} />
-                 </div>
-                 <div className="flex flex-col">
-                    <p className="text-sm font-semibold text-theme-fg tracking-tight">Delete <span className="text-rose-500 font-bold">"{deleteConfirm.name}"</span>?</p>
-                    <p className="text-xs text-theme-muted mt-0.5">All personnel will be recalled to pool.</p>
-                 </div>
+            <CustomSelect
+              label="Department" icon={<Building size={12} />} placeholder="Select Department"
+              value={shiftForm.department_id} onChange={(v) => setShiftForm({...shiftForm, department_id: v, team_id: ""})}
+              options={[{ label: "Global / Any Department", value: "" }, ...departments.map(d => ({ label: d.name, value: d.id }))]}
+            />
+
+            <CustomSelect
+              label="Team" icon={<LayoutGrid size={12} />} placeholder="Select Team"
+              value={shiftForm.team_id} onChange={(v) => {
+                const team = teams.find(t => t.id === v);
+                if (team && !shiftForm.department_id) setShiftForm({...shiftForm, team_id: v, department_id: team.parent_id || ""});
+                else setShiftForm({...shiftForm, team_id: v});
+              }}
+              options={[{ label: "Global / Any Team", value: "" }, ...teams.filter(t => !shiftForm.department_id || t.parent_id === shiftForm.department_id).map(t => ({ label: t.name, value: t.id }))]}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Active From</Label>
+                <DatePicker value={shiftForm.valid_from} onChange={(d) => setShiftForm({...shiftForm, valid_from: d})} label="" />
               </div>
-              
-              <div className="flex items-center gap-3 ml-auto">
-                 <Button onClick={() => setDeleteConfirm(null)} disabled={submitting} variant="secondary" size="sm" className="px-4">
-                   Cancel
-                 </Button>
-                 <Button onClick={handleDeleteConfirm} disabled={submitting} variant="primary" size="sm" className="bg-rose-600 hover:bg-rose-700 text-white px-5 border-rose-600">
-                   {submitting ? "Deleting..." : "Delete"}
-                 </Button>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Active Until</Label>
+                <DatePicker value={shiftForm.valid_to} onChange={(d) => setShiftForm({...shiftForm, valid_to: d})} label="" />
               </div>
-           </div>
-        </div>
-      )}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Color Tag</Label>
+              <div className="flex flex-wrap gap-2">
+                {['#10b981', '#0ea5e9', '#f59e0b', '#6366f1', '#f43f5e', '#8b5cf6', '#000000'].map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setShiftForm({...shiftForm, color_code: c})}
+                    className={cn(
+                      "h-8 w-8 rounded-full border-2 transition-all hover:scale-110",
+                      shiftForm.color_code === c ? "border-foreground scale-110" : "border-border"
+                    )}
+                    style={{ backgroundColor: c }}
+                    aria-label={`Color ${c}`}
+                  >
+                    {shiftForm.color_code === c && <Check size={14} className="mx-auto text-white drop-shadow" strokeWidth={3} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="!mx-0 !mb-0 !rounded-none flex-row items-center sm:justify-end gap-2 border-t border-border bg-background px-6 py-4">
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowDefineModal(false)}>Cancel</Button>
+            <Button onClick={handleSaveShift} size="sm" disabled={submitting}>
+              {submitting && <Loader2 className="animate-spin" />}
+              {editingShiftId ? "Save Changes" : "Create Shift"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DELETE CONFIRMATION DIALOG */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(o) => !o && setDeleteConfirm(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive flex-shrink-0">
+                <Trash2 size={18} />
+              </div>
+              <div className="flex-1 text-left">
+                <DialogTitle className="text-sm font-semibold">Delete shift?</DialogTitle>
+                <DialogDescription className="text-xs">
+                  "{deleteConfirm?.name}" will be removed. All personnel assigned to it will be unassigned.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="!flex-row !justify-end gap-2">
+            <Button onClick={() => setDeleteConfirm(null)} disabled={submitting} variant="outline" size="sm">Cancel</Button>
+            <Button onClick={handleDeleteConfirm} disabled={submitting} variant="destructive" size="sm">
+              {submitting && <Loader2 className="animate-spin" />}
+              {submitting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardShell>
   );
 }

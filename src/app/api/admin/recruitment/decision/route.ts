@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: Request) {
   try {
@@ -96,7 +98,7 @@ export async function POST(req: Request) {
     const html = `
       <!DOCTYPE html>
       <html>
-      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; line-height:1.5;">
+      <body style="font-family: 'Inter', Arial, sans-serif; color: #1e293b; line-height:1.5;">
         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
           <p style="font-size:16px;">Dear <b>${application.applicant_name}</b>,</p>
           ${greeting}
@@ -118,6 +120,15 @@ export async function POST(req: Request) {
       to: application.applicant_email,
       subject,
       html,
+    });
+
+    const actor = await getActor();
+    await logAudit({
+      actorId: actor?.userId ?? null,
+      action: `recruitment.${decision}`, section: "Recruitment",
+      summary: `${isAccepted ? "Accepted" : "Rejected"} ${application.applicant_name}'s application`,
+      targetType: "application", targetId: application_id,
+      changes: { decision: { from: "pending", to: decision } },
     });
 
     return NextResponse.json({ success: true, message: `Decision: ${decision}. Email sent to ${application.applicant_email}` });

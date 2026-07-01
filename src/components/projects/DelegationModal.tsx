@@ -6,9 +6,9 @@ import {
   UserCircle2, ShieldCheck, ChevronRight, Target, Zap,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
-import { MultiSelect } from "@/components/ui/MultiSelect";
-import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui/ToastLegacy";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
 import dayjs from "dayjs";
 
@@ -50,7 +50,7 @@ export function DelegationModal({ project, teams, employees, onClose, onSuccess 
   }, [onClose]);
 
   const handleSave = async () => {
-    const mustAssignLeads = (user?.role === "admin" && !canManagerDelegate) || user?.role === "dept_lead";
+    const mustAssignLeads = (user?.role === "admin" && !canManagerDelegate) || !!user?.is_dept_lead;
     if (mustAssignLeads && selectedTeams.some((tid) => !leadAssignments[tid])) {
       showToast("Please assign a team lead for every team, or allow manager to edit.", "error");
       return;
@@ -158,7 +158,7 @@ export function DelegationModal({ project, teams, employees, onClose, onSuccess 
           </div>
 
           {/* Permission toggles */}
-          {(user?.role === "admin" || user?.role === "dept_lead") && (
+          {(user?.role === "admin" || user?.is_dept_lead) && (
             <div className="rounded-lg border border-theme-border bg-theme-card divide-y divide-theme-border">
 
               {user?.role === "admin" && (
@@ -235,8 +235,8 @@ export function DelegationModal({ project, teams, employees, onClose, onSuccess 
                 const teamEmployees = employees.filter((e) => e.team_id === tid || e.department_id === tid);
                 const isEditable =
                   user?.role === "admin" ||
-                  (user?.role === "dept_lead" && canManagerDelegate) ||
-                  (user?.role === "team_lead" && canLeadDelegate);
+                  (user?.is_dept_lead && canManagerDelegate) ||
+                  (user?.is_team_lead && canLeadDelegate);
 
                 return (
                   <div key={tid} className={cn("rounded-xl border bg-theme-card overflow-hidden", isEditable ? "border-theme-border" : "border-theme-border/50 opacity-80")}>

@@ -1,159 +1,197 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Wand2, Type, RotateCcw, Languages, BookOpen, Search, Lightbulb, PenTool, Eraser } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  Sparkles, Wand2, RotateCcw, BookOpen, Search, Lightbulb,
+  PenTool, AlertCircle,
+} from "lucide-react";
 import axios from "axios";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface AISidebarProps {
   content: string;
-  onApplyChange: (newContent: string) => void;
-  onInsertContent: (content: string) => void;
+  /** Called when AI produces a result — parent handles the on-doc ghost/preview */
+  onAIDraft: (draft: string) => void;
+  /** Called whenever the loading state changes so parent can show on-doc loader */
+  onLoadingChange?: (loading: boolean) => void;
+  onRenameDocument?: (newTitle: string) => void;
 }
 
-export function AISidebar({ content, onApplyChange, onInsertContent }: AISidebarProps) {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState("");
+const QUICK_ACTIONS = [
+  { id: "summarize",  icon: BookOpen,  label: "Summarize",        description: "Create a concise summary of your document" },
+  { id: "improve",    icon: Wand2,     label: "Improve writing",  description: "Fix grammar, flow and professional tone" },
+  { id: "rewrite",    icon: RotateCcw, label: "Rewrite",          description: "Express the same ideas in a fresh way" },
+  { id: "brainstorm", icon: Lightbulb, label: "Brainstorm",       description: "Generate ideas based on current content" },
+  { id: "plagiarism", icon: Search,    label: "Plagiarism check", description: "Verify original content and detect matches" },
+  { id: "shorten",    icon: PenTool,   label: "Make shorter",     description: "Condensed version for quick reading" },
+];
+
+// Patterns that mean "rename this document to X"
+const RENAME_RE = [
+  /^(?:rename|call|title|name)\s+(?:this\s+)?(?:document|doc|it)\s+(?:as|to|"')?(.+?)["']?$/i,
+  /^change\s+(?:the\s+)?(?:document\s+)?(?:title|name)\s+(?:to|as)\s+(.+)$/i,
+  /^(?:set|update)\s+(?:the\s+)?(?:title|name)\s+(?:to|as)\s+(.+)$/i,
+  /^rename\s+to\s+(.+)$/i,
+];
+
+function detectRename(p: string): string | null {
+  const t = p.trim();
+  for (const re of RENAME_RE) {
+    const m = t.match(re);
+    if (m?.[1]) return m[1].trim().replace(/^["']|["']$/g, "");
+  }
+  return null;
+}
+
+export function AISidebar({ content, onAIDraft, onLoadingChange, onRenameDocument }: AISidebarProps) {
+  const [loading, setLoading]   = useState(false);
+
+  const setLoadingState = (val: boolean) => { setLoading(val); onLoadingChange?.(val); };
+  const [error, setError]       = useState<string | null>(null);
+  const [renamed, setRenamed]   = useState<string | null>(null);
+  const [prompt, setPrompt]     = useState("");
+  const [lastLabel, setLastLabel] = useState("");
 
   const runAIAction = async (action: string, customPrompt?: string) => {
-    setLoading(true);
-    setResult(null);
+    const effectivePrompt = customPrompt || prompt;
+
+    // Rename intent — client-side, no AI call
+    if (action === "custom" && onRenameDocument) {
+      const newTitle = detectRename(effectivePrompt);
+      if (newTitle) {
+        onRenameDocument(newTitle);
+        setRenamed(newTitle);
+        setPrompt("");
+        setTimeout(() => setRenamed(null), 3500);
+        return;
+      }
+    }
+
+    setLoadingState(true);
+    setError(null);
+    const label = QUICK_ACTIONS.find(a => a.id === action)?.label ?? "Generating";
+    setLastLabel(action === "custom" ? "Writing…" : `${label}…`);
+
     try {
-      const response = await axios.post('/api/workspace/ai', {
+      const response = await axios.post("/api/workspace/ai", {
         action,
-        content: content,
-        customPrompt: customPrompt || prompt
+        content,
+        customPrompt: effectivePrompt || undefined,
       });
-      setResult(response.data.result);
-    } catch (error) {
-      console.error("AI Action failed", error);
+      const draft = response.data.result;
+      if (draft) {
+        onAIDraft(draft);
+        if (action === "custom") setPrompt("");
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || "AI engine unavailable — try again.";
+      setError(msg);
     } finally {
-      setLoading(false);
+      setLoadingState(false);
     }
   };
 
-  const AIActionBtn = ({ icon: Icon, label, onClick, description }: any) => (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      className="w-full p-4 rounded-2xl bg-theme-raised/50 border border-theme-border hover:border-theme-primary/30 transition-all text-left group"
-    >
-      <div className="flex items-center gap-3 mb-1">
-        <div className="h-8 w-8 rounded-xl bg-theme-primary/10 text-theme-primary flex items-center justify-center group-hover:scale-110 transition-transform">
-          <Icon size={16} />
-        </div>
-        <span className="text-xs font-black text-theme-fg uppercase tracking-widest">{label}</span>
-      </div>
-      <p className="text-[10px] text-theme-muted font-bold ml-11">{description}</p>
-    </button>
-  );
-
   return (
-    <div className="flex flex-col h-full bg-theme-surface border-l border-theme-border w-80 overflow-hidden">
-      <div className="p-6 border-b border-theme-border bg-theme-raised/30">
-        <div className="flex items-center gap-2 mb-1">
-          <Sparkles className="text-theme-primary" size={18} />
-          <h2 className="text-sm font-black text-theme-fg uppercase tracking-tight">AI Writing Assistant</h2>
+    <div className="flex flex-col h-full bg-card w-full overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-border flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">AI Writing Assistant</h2>
         </div>
-        <p className="text-[10px] text-theme-muted font-bold">Powered by Gemma4:e4b Intelligence</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Powered by Gemma4:e4b Intelligence</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
-        {/* Custom Prompt */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+        {/* Prompt input */}
         <div className="space-y-2">
-          <textarea
+          <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Ask AI to write anything..."
-            className="w-full h-24 p-3 bg-theme-raised rounded-xl text-xs font-bold text-theme-fg border border-theme-border focus:outline-none focus:ring-2 focus:ring-theme-primary/20 placeholder:text-theme-muted/50"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && prompt.trim() && !loading) {
+                e.preventDefault();
+                runAIAction("custom");
+              }
+            }}
+            placeholder={
+              'Write anything…\n• "write 100 lines about Mahabharata"\n• "rename this document as Project Brief"\n• Ctrl+Enter to send'
+            }
+            className="h-28 resize-none text-sm"
           />
-          <button
-            onClick={() => runAIAction('custom')}
-            disabled={loading || !prompt}
-            className="w-full py-2 bg-theme-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-theme-primary/90 transition-all disabled:opacity-50"
+          <Button
+            type="button"
+            onClick={() => runAIAction("custom")}
+            disabled={loading || !prompt.trim()}
+            className="w-full"
           >
-            Generate Content
-          </button>
+            <Sparkles size={14} className="mr-1.5" />
+            Generate content
+          </Button>
         </div>
 
-        <div className="h-px bg-theme-border my-4" />
+        <Separator />
 
-        {/* Quick Actions */}
-        <div className="space-y-3">
-          <AIActionBtn 
-            icon={BookOpen} 
-            label="Summarize" 
-            description="Create a concise summary of your document"
-            onClick={() => runAIAction('summarize')}
-          />
-          <AIActionBtn 
-            icon={Wand2} 
-            label="Improve Writing" 
-            description="Fix grammar, flow and professional tone"
-            onClick={() => runAIAction('improve')}
-          />
-          <AIActionBtn 
-            icon={RotateCcw} 
-            label="Rewrite" 
-            description="Express the same ideas in a fresh way"
-            onClick={() => runAIAction('rewrite')}
-          />
-          <AIActionBtn 
-            icon={Lightbulb} 
-            label="Brainstorm" 
-            description="Generate ideas based on current content"
-            onClick={() => runAIAction('brainstorm')}
-          />
-          <AIActionBtn 
-            icon={Search} 
-            label="Plagiarism Check" 
-            description="Verify original content and detect matches"
-            onClick={() => runAIAction('plagiarism')}
-          />
-          <AIActionBtn 
-            icon={PenTool} 
-            label="Make Shorter" 
-            description="Condensed version for quick reading"
-            onClick={() => runAIAction('shorten')}
-          />
-        </div>
-
-        {/* AI Result Area */}
-        {result && (
-          <div className="mt-6 p-4 rounded-2xl bg-theme-primary/5 border border-theme-primary/20 animate-in fade-in slide-in-from-bottom-2">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-black text-theme-primary uppercase tracking-widest">AI Result</span>
-              <div className="flex gap-2">
-                <button 
-                   onClick={() => onInsertContent(result)}
-                   className="text-[10px] font-black text-theme-primary hover:underline"
-                >
-                  INSERT
-                </button>
-                <button 
-                   onClick={() => setResult(null)}
-                   className="text-[10px] font-black text-theme-muted hover:text-theme-fg"
-                >
-                  DISCARD
-                </button>
+        {/* Quick actions */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground">Quick actions</p>
+          {QUICK_ACTIONS.map(({ id, icon: Icon, label, description }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => runAIAction(id)}
+              disabled={loading}
+              className="w-full rounded-md border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-md bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                  <Icon size={14} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-foreground leading-tight">{label}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{description}</p>
+                </div>
               </div>
-            </div>
-            <div className="text-xs text-theme-fg font-medium leading-relaxed max-h-60 overflow-y-auto pr-2 scrollbar-hide whitespace-pre-wrap">
-              {result}
+            </button>
+          ))}
+        </div>
+
+        {/* Rename success */}
+        {renamed && (
+          <Card className="border-emerald-500/30 bg-emerald-500/5">
+            <CardContent className="px-4 py-3">
+              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                Document renamed to <span className="font-bold">"{renamed}"</span>
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Error */}
+        {error && (
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardContent className="flex items-start gap-2.5 px-4 py-3">
+              <AlertCircle size={14} className="text-destructive flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-destructive leading-snug">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Loading state — minimal chip; full animation shows on the document */}
+        {loading && (
+          <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-primary/20 bg-primary/5">
+            <div className="h-3.5 w-3.5 rounded-full border-2 border-primary/30 border-t-primary animate-spin flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-primary truncate">{lastLabel}</p>
+              <p className="text-[10px] text-muted-foreground">Writing on document…</p>
             </div>
           </div>
         )}
 
-        {loading && (
-          <div className="mt-6 p-8 flex flex-col items-center justify-center gap-4 bg-theme-raised/30 rounded-2xl border border-dashed border-theme-border">
-            <div className="relative">
-              <div className="h-10 w-10 rounded-full border-2 border-theme-primary/20 border-t-theme-primary animate-spin" />
-              <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-theme-primary animate-pulse" size={16} />
-            </div>
-            <p className="text-[10px] font-black text-theme-muted uppercase tracking-widest animate-pulse">Gemma is thinking...</p>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -14,19 +14,28 @@ import {
   Trash2,
   Settings2
 } from "lucide-react";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue, SelectLabel, SelectSeparator } from "@/components/ui/Select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue, SelectLabel, SelectSeparator } from "@/components/ui/select";
 import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
-import { useToast } from "@/components/ui/Toast";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { usePermission } from "@/hooks/usePermission";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type ViewMode = "grid" | "table";
 
 export default function TeamsPage() {
-  const { showToast } = useToast();
   const { canCreate, canEdit, canDelete } = usePermission("teams");
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("All");
@@ -136,7 +145,7 @@ export default function TeamsPage() {
 
   async function handleSaveEntity() {
     if (!form.name || !form.head_designation) {
-      showToast("Identity breakdown required.", "warning");
+      toast.warning("Identity breakdown required.");
       return;
     }
 
@@ -163,13 +172,13 @@ export default function TeamsPage() {
       
       if (res.data.error) throw new Error(res.data.error);
       
-      showToast(`Node '${form.name}' synchronized to the cloud.`, "success");
+      toast.success(`Node '${form.name}' synchronized to the cloud.`);
       setShowForm(false);
       setEditingItem(null);
       setForm({ id: "", name: "", type: "department", parent_id: "none", head_designation: "" });
       fetchData();
     } catch (e: any) {
-      showToast("Sync Interrupted: " + (e.response?.data?.error || e.message), "error");
+      toast.error("Sync Interrupted: " + (e.response?.data?.error || e.message));
     }
   }
 
@@ -179,11 +188,11 @@ export default function TeamsPage() {
     try {
       const res = await axios.delete(`/api/teams?id=${id}`);
       if (res.data.error) throw new Error(res.data.error);
-      showToast(`Node '${name}' purged from architecture.`, "success");
+      toast.success(`Node '${name}' purged from architecture.`);
       setDeleteConfirm(null);
       fetchData();
     } catch (e: any) {
-      showToast("Purge Failed: " + e.message, "error");
+      toast.error("Purge Failed: " + e.message);
     }
   }
 
@@ -195,11 +204,11 @@ export default function TeamsPage() {
         .eq('id', config.id);
       
       if (error) throw error;
-      showToast("Root Identity recalibrated.", "success");
+      toast.success("Root Identity recalibrated.");
       setShowConfigForm(false);
       fetchData();
     } catch (e: any) {
-      showToast("Config Fail: " + e.message, "error");
+      toast.error("Config Fail: " + e.message);
     }
   }
 
@@ -214,7 +223,7 @@ export default function TeamsPage() {
             <Settings2 size={14} className="mr-1.5" /> Root Node
           </Button>
           {canCreate && (
-            <Button variant="primary" size="sm" onClick={() => { setEditingItem(null); setForm({ id: "", type: 'department', name: "", head_designation: "", parent_id: "none" }); setShowForm(true); }}>
+            <Button variant="default" size="sm" onClick={() => { setEditingItem(null); setForm({ id: "", type: 'department', name: "", head_designation: "", parent_id: "none" }); setShowForm(true); }}>
               <Plus size={14} className="mr-1" /> Add
             </Button>
           )}
@@ -257,37 +266,29 @@ export default function TeamsPage() {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-             <div className="w-36">
-                <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="h-8 text-xs bg-theme-raised border-theme-border font-semibold">
-                    <SelectValue placeholder="All Units" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All Entities</SelectItem>
-                    <SelectItem value="department">Departments</SelectItem>
-                    <SelectItem value="team">Teams</SelectItem>
-                  </SelectContent>
-                </Select>
-             </div>
-             <div className="w-40">
-                <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
-                  <SelectTrigger className="h-8 text-[10px] bg-theme-raised border-theme-border font-black uppercase">
-                    <SelectValue placeholder="Sort Method" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name">Alphabetical</SelectItem>
-                    <SelectItem value="created_at">Recently Added</SelectItem>
-                  </SelectContent>
-                </Select>
-             </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+             <Select value={typeFilter} onValueChange={setTypeFilter}>
+               <SelectTrigger className="w-36 text-xs"><SelectValue placeholder="All Units" /></SelectTrigger>
+               <SelectContent>
+                 <SelectItem value="All">All Entities</SelectItem>
+                 <SelectItem value="department">Departments</SelectItem>
+                 <SelectItem value="team">Teams</SelectItem>
+               </SelectContent>
+             </Select>
+             <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+               <SelectTrigger className="w-40 text-xs"><SelectValue placeholder="Sort Method" /></SelectTrigger>
+               <SelectContent>
+                 <SelectItem value="name">Alphabetical</SelectItem>
+                 <SelectItem value="created_at">Recently Added</SelectItem>
+               </SelectContent>
+             </Select>
              <div className="relative">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={13} />
-               <input
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={13} />
+               <Input
                  value={search}
                  onChange={(e) => setSearch(e.target.value)}
                  placeholder="Search tree…"
-                 className="h-8 w-44 rounded-lg border border-theme-border bg-theme-page pl-8 pr-3 text-xs text-theme-fg outline-none focus:border-theme-strong transition-all"
+                 className="w-44 pl-9 text-xs"
                />
              </div>
           </div>
@@ -318,7 +319,7 @@ export default function TeamsPage() {
                       </div>
                       <div className="min-w-0">
                         <h4 className="truncate text-sm font-semibold text-theme-fg">{item.name}</h4>
-                        <Badge variant={isDept ? "warning" : "default"} className="mt-1 text-[10px] px-1.5">
+                        <Badge variant={isDept ? "default" : "secondary"} className={cn("mt-1 text-[10px] px-1.5", isDept && "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-transparent hover:bg-amber-500/20")}>
                           {isDept ? 'Department' : 'Operational Unit'}
                         </Badge>
                       </div>
@@ -368,181 +369,168 @@ export default function TeamsPage() {
       </div>
 
       {/* CREATE / EDIT MODAL */}
-      {showForm && (
-        <div className="fixed inset-0 z-[1002] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-theme-surface shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="bg-theme-surface flex items-center justify-between border-b border-theme-border px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-black text-white shadow-md">
-                   {editingItem ? <Edit2 size={14} /> : <Plus size={14} />}
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-theme-fg">
-                    {editingItem ? `Edit ${editingItem.name}` : `Create New Unit`}
-                  </h3>
-                  <p className="text-xs text-theme-muted mt-0.5">
-                    Define the structural properties of this organizational unit.
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setShowForm(false)} className="rounded-lg p-1.5 text-theme-muted hover:bg-theme-page hover:text-theme-fg transition-colors"><X size={16} /></button>
+      {/* CREATE / EDIT UNIT DIALOG */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="sm:max-w-lg !grid-rows-[auto_1fr_auto] !grid p-0 overflow-hidden gap-0 max-h-[calc(100vh-6rem)] sm:max-h-[80vh]">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0 border-b border-border px-6 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
+              {editingItem ? <Edit2 size={16} /> : <Plus size={16} />}
+            </div>
+            <div className="flex-1 text-left">
+              <DialogTitle className="text-sm font-semibold">
+                {editingItem ? `Edit ${editingItem.name}` : "Create New Unit"}
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Define the structural properties of this organizational unit.
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+
+          <div className="min-h-0 overflow-y-auto px-6 py-5 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Unit Type</Label>
+              <Select onValueChange={(v) => setForm({ ...form, type: v, parent_id: "none" })} value={form.type} required>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="department">Department</SelectItem>
+                  <SelectItem value="team">Team</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="p-6 bg-theme-page/50">
-              <div className="space-y-4">
-                <div className="bg-theme-surface border border-theme-border p-4 rounded-xl space-y-4 shadow-sm">
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold text-theme-muted">Unit Type</label>
-                    <Select onValueChange={(v) => setForm({ ...form, type: v, parent_id: "none" })} value={form.type} required>
-                      <SelectTrigger className="font-semibold border-theme-border bg-theme-page h-9 text-xs"><SelectValue placeholder="Select type" /></SelectTrigger>
-                      <SelectContent>
+            {form.type === "team" && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Parent Department</Label>
+                <Select onValueChange={(v) => setForm({ ...form, parent_id: v })} value={form.parent_id} required>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select parent" /></SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    <SelectItem value="none">Set as Independent</SelectItem>
+                    <SelectGroup>
+                      <SelectLabel>Departments</SelectLabel>
+                      {departments.map((d: any) => (
+                        <SelectItem key={d.id} value={d.id}>{d.name} (Dept)</SelectItem>
+                      ))}
+                    </SelectGroup>
+                    {subTeams.length > 0 && (
+                      <>
+                        <SelectSeparator />
                         <SelectGroup>
-                          <SelectItem value="department">Department</SelectItem>
-                          <SelectItem value="team">Team</SelectItem>
+                          <SelectLabel>Existing Teams</SelectLabel>
+                          {subTeams.map((t: any) => (
+                            <SelectItem key={t.id} value={t.id}>{t.name} (Team)</SelectItem>
+                          ))}
                         </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-                  {form.type === "team" && (
-                    <div>
-                      <label className="mb-2 block text-xs font-semibold text-theme-muted">Parent Department</label>
-                      <Select onValueChange={(v) => setForm({ ...form, parent_id: v })} value={form.parent_id} required>
-                        <SelectTrigger className="font-semibold border-theme-border bg-theme-page h-9 text-xs"><SelectValue placeholder="Select parent" /></SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          <SelectGroup>
-                            <SelectItem value="none">Set as Independent</SelectItem>
-                            <SelectLabel>Departments</SelectLabel>
-                            {departments.map((d: any) => (
-                              <SelectItem key={d.id} value={d.id}>{d.name} (Dept)</SelectItem>
-                            ))}
-                            <SelectSeparator />
-                            <SelectLabel>Existing Teams</SelectLabel>
-                            {subTeams.map((t: any) => (
-                              <SelectItem key={t.id} value={t.id}>{t.name} (Team)</SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold text-theme-muted">Name</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Sales Division"
-                      value={form.name || ""}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      className="field h-10 px-4"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold text-theme-muted">Lead Designation</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. General Manager"
-                      value={form.head_designation || ""}
-                      onChange={(e) => setForm({ ...form, head_designation: e.target.value })}
-                      className="field h-10 px-4"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-theme-surface flex items-center justify-end border-t border-theme-border pt-4 gap-3 mt-4">
-                  <Button variant="secondary" size="sm" onClick={() => setShowForm(false)} className="font-semibold px-4">Cancel</Button>
-                  <Button variant="primary" size="sm" onClick={handleSaveEntity} className="font-semibold px-6">
-                    {editingItem ? 'Save Changes' : 'Create Unit'}
-                  </Button>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Name</Label>
+                <Input
+                  type="text"
+                  required
+                  placeholder="e.g. Sales Division"
+                  value={form.name || ""}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Lead Designation</Label>
+                <Input
+                  type="text"
+                  required
+                  placeholder="e.g. General Manager"
+                  value={form.head_designation || ""}
+                  onChange={(e) => setForm({ ...form, head_designation: e.target.value })}
+                />
               </div>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* ROOT CONFIG MODAL */}
-      {showConfigForm && (
-        <div className="fixed inset-0 z-[1002] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-theme-surface shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="bg-theme-raised flex items-center justify-between border-b border-theme-border px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-black text-white shadow-md">
-                   <Settings2 size={14} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-theme-fg">Company Configuration</h3>
-                  <p className="text-xs text-theme-muted mt-0.5">Edit major company profile metadata.</p>
-                </div>
-              </div>
-              <button onClick={() => setShowConfigForm(false)} className="rounded-lg p-1.5 text-theme-muted hover:bg-theme-page hover:text-theme-fg transition-colors"><X size={16} /></button>
+          <DialogFooter className="!mx-0 !mb-0 !rounded-none flex-row items-center sm:justify-end gap-2 border-t border-border bg-background px-6 py-4">
+            <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveEntity}>
+              {editingItem ? "Save Changes" : "Create Unit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* COMPANY CONFIG DIALOG */}
+      <Dialog open={showConfigForm} onOpenChange={setShowConfigForm}>
+        <DialogContent className="sm:max-w-lg p-0 overflow-hidden gap-0">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0 border-b border-border px-6 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
+              <Settings2 size={16} />
             </div>
-            <div className="p-6 bg-theme-page/50 space-y-4">
-               <div>
-                  <label className="mb-2 block text-xs font-semibold text-theme-muted">Company Name</label>
-                  <input
-                    type="text"
-                    value={configForm.company_name}
-                    onChange={(e) => setConfigForm({ ...configForm, company_name: e.target.value })}
-                    className="field h-10 px-4"
-                  />
-               </div>
-               <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold text-theme-muted">Founder / CEO</label>
-                    <input
-                      type="text"
-                      value={configForm.founder_name}
-                      onChange={(e) => setConfigForm({ ...configForm, founder_name: e.target.value })}
-                      className="field h-10 px-4"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold text-theme-muted">Designation</label>
-                    <input
-                      type="text"
-                      value={configForm.founder_designation}
-                      onChange={(e) => setConfigForm({ ...configForm, founder_designation: e.target.value })}
-                      className="field h-10 px-4"
-                    />
-                  </div>
-               </div>
-               <div className="bg-theme-surface flex items-center justify-end border-t border-theme-border pt-4 gap-3 mt-4">
-                  <Button variant="secondary" size="sm" onClick={() => setShowConfigForm(false)} className="font-semibold px-4">Cancel</Button>
-                  <Button variant="primary" size="sm" onClick={handleUpdateConfig} className="font-semibold px-6">Save</Button>
-               </div>
+            <div className="flex-1 text-left">
+              <DialogTitle className="text-sm font-semibold">Company Configuration</DialogTitle>
+              <DialogDescription className="text-xs">Edit major company profile metadata.</DialogDescription>
+            </div>
+          </DialogHeader>
+
+          <div className="px-6 py-5 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Company Name</Label>
+              <Input
+                type="text"
+                value={configForm.company_name}
+                onChange={(e) => setConfigForm({ ...configForm, company_name: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Founder / CEO</Label>
+                <Input
+                  type="text"
+                  value={configForm.founder_name}
+                  onChange={(e) => setConfigForm({ ...configForm, founder_name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Designation</Label>
+                <Input
+                  type="text"
+                  value={configForm.founder_designation}
+                  onChange={(e) => setConfigForm({ ...configForm, founder_designation: e.target.value })}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      )}
-      {deleteConfirm && (
-        <div className="fixed inset-x-0 top-8 z-[9000] flex justify-center px-4 animate-in slide-in-from-top-8 duration-300">
-           <div className="flex items-center gap-6 bg-theme-surface px-6 py-4 shadow-xl rounded-2xl border border-theme-border min-w-[400px]">
-              <div className="flex items-center gap-4">
-                 <div className="h-10 w-10 flex items-center justify-center bg-rose-500/10 text-rose-500 rounded-xl">
-                    <Trash2 size={20} />
-                 </div>
-                 <div className="flex flex-col">
-                    <p className="text-sm font-semibold text-theme-fg tracking-tight">Delete <span className="text-rose-500 font-bold">"{deleteConfirm.name}"</span>?</p>
-                    <p className="text-xs text-theme-muted mt-0.5">This action cannot be undone.</p>
-                 </div>
+
+          <DialogFooter className="!mx-0 !mb-0 !rounded-none flex-row items-center sm:justify-end gap-2 border-t border-border bg-background px-6 py-4">
+            <Button variant="outline" size="sm" onClick={() => setShowConfigForm(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleUpdateConfig}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DELETE CONFIRMATION DIALOG */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(o) => !o && setDeleteConfirm(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive flex-shrink-0">
+                <Trash2 size={18} />
               </div>
-              
-              <div className="flex items-center gap-3 ml-auto">
-                 <Button onClick={() => setDeleteConfirm(null)} variant="secondary" size="sm" className="px-4">
-                   Cancel
-                 </Button>
-                 <Button onClick={handleDelete} variant="primary" size="sm" className="bg-rose-600 hover:bg-rose-700 text-white px-5 border-rose-600">
-                   Delete
-                 </Button>
+              <div className="flex-1 text-left">
+                <DialogTitle className="text-sm font-semibold">Delete unit?</DialogTitle>
+                <DialogDescription className="text-xs">
+                  "{deleteConfirm?.name}" will be permanently removed. This action cannot be undone.
+                </DialogDescription>
               </div>
-           </div>
-        </div>
-      )}
+            </div>
+          </DialogHeader>
+          <DialogFooter className="!flex-row !justify-end gap-2">
+            <Button onClick={() => setDeleteConfirm(null)} variant="outline" size="sm">Cancel</Button>
+            <Button onClick={handleDelete} variant="destructive" size="sm">Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardShell>
   );
 }

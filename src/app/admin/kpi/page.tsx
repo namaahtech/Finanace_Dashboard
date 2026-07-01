@@ -3,11 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { usePermission } from "@/hooks/usePermission";
 import { getYearRange } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   calculateBehavioralScore,
   calculateFinalKpiScore,
@@ -35,7 +42,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 
 // ─── Types ───────────────────────────────────────────────
 interface User {
@@ -577,21 +584,22 @@ export default function AdminKpiPage() {
                   {/* Employee */}
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold text-theme-muted uppercase tracking-wide">Employee</label>
-                    <select
-                      value={selectedUser}
-                      onChange={(e) => {
-                        setSelectedUser(e.target.value);
+                    <Select
+                      value={selectedUser || undefined}
+                      onValueChange={(v) => {
+                        setSelectedUser(v);
                         setForm(createDefaultForm(form.month, form.year));
                       }}
-                      className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all"
                     >
-                      <option value="">Select employee…</option>
-                      {users.map((emp) => (
-                        <option key={emp._id || emp.id || emp.employeeId} value={emp._id || emp.id || emp.employeeId}>
-                          {emp.name} — {emp.employeeId}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Select employee…" /></SelectTrigger>
+                      <SelectContent>
+                        {users.map((emp) => (
+                          <SelectItem key={emp._id || emp.id || emp.employeeId} value={emp._id || emp.id || emp.employeeId}>
+                            {emp.name} — {emp.employeeId}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Month nav */}
@@ -605,22 +613,20 @@ export default function AdminKpiPage() {
                         <ChevronLeft size={14} />
                       </button>
                       <div className="flex flex-1 gap-2">
-                        <select
-                          value={form.month}
-                          onChange={(e) => resetForPeriod(parseInt(e.target.value), form.year)}
-                          className="flex-1 rounded-lg border border-theme-border bg-theme-page px-2 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all"
-                        >
-                          {MONTH_NAMES.map((m, i) => (
-                            <option key={i + 1} value={i + 1}>{m}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={form.year}
-                          onChange={(e) => resetForPeriod(form.month, parseInt(e.target.value))}
-                          className="w-24 rounded-lg border border-theme-border bg-theme-page px-2 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all"
-                        >
-                          {getYearRange().map((y) => <option key={y} value={y}>{y}</option>)}
-                        </select>
+                        <Select value={String(form.month)} onValueChange={(v) => resetForPeriod(parseInt(v), form.year)}>
+                          <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {MONTH_NAMES.map((m, i) => (
+                              <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select value={String(form.year)} onValueChange={(v) => resetForPeriod(form.month, parseInt(v))}>
+                          <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {getYearRange().map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <button
                         onClick={() => navigatePeriod(1)}
@@ -709,7 +715,7 @@ export default function AdminKpiPage() {
                           ].map((s, i) => (
                             <div key={i} style={{ padding: "11px 14px", borderRight: i < 2 ? "1px solid rgba(249,115,22,0.1)" : "none" }}>
                               <p style={{ fontSize: "8px", fontWeight: 800, letterSpacing: "0.1em", color: "#94a3b8", textTransform: "uppercase", marginBottom: "4px" }}>{s.label}</p>
-                              <p style={{ fontSize: "16px", fontWeight: 900, color: s.color, fontFamily: "monospace", lineHeight: 1, letterSpacing: "-0.02em" }}>{s.value}</p>
+                              <p style={{ fontSize: "16px", fontWeight: 900, color: s.color, lineHeight: 1, letterSpacing: "-0.02em" }}>{s.value}</p>
                               {i === 0 && <p style={{ fontSize: "9px", color: "#94a3b8", marginTop: "2px" }}>of ₹{target.toLocaleString("en-IN")} target</p>}
                               {i === 2 && <p style={{ fontSize: "9px", color: "#94a3b8", marginTop: "2px" }}>{activeSlab ? `${activeSlab.commission_percent}% rate` : "No slab"}</p>}
                             </div>
@@ -741,8 +747,8 @@ export default function AdminKpiPage() {
                                   {cp.cleared ? <Trophy size={11} style={{ color: isActive ? "#f97316" : "#10b981" }} /> : <div style={{ width: "11px", height: "11px", borderRadius: "2px", border: "1.5px solid #475569" }} />}
                                   <span style={{ fontSize: "8px", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: isActive ? "#ea580c" : cp.cleared ? "#10b981" : "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cp.name.split("(")[0].trim()}</span>
                                 </div>
-                                <p style={{ fontSize: "18px", fontWeight: 900, lineHeight: 1, color: isActive ? "#f97316" : cp.cleared ? "#10b981" : "#475569", fontFamily: "monospace", letterSpacing: "-0.03em" }}>{cp.commission_percent}%</p>
-                                <p style={{ fontSize: "8px", color: "#64748b", marginTop: "2px", fontFamily: "monospace" }}>{cp.min_target > 0 ? `≥ ₹${cp.min_target.toLocaleString("en-IN")}` : "Base"}</p>
+                                <p style={{ fontSize: "18px", fontWeight: 900, lineHeight: 1, color: isActive ? "#f97316" : cp.cleared ? "#10b981" : "#475569", letterSpacing: "-0.03em" }}>{cp.commission_percent}%</p>
+                                <p style={{ fontSize: "8px", color: "#64748b", marginTop: "2px" }}>{cp.min_target > 0 ? `≥ ₹${cp.min_target.toLocaleString("en-IN")}` : "Base"}</p>
                                 <span style={{ display: "inline-block", marginTop: "5px", fontSize: "7px", fontWeight: 800, letterSpacing: "0.05em", padding: "1px 5px", borderRadius: "3px", background: isActive ? "rgba(249,115,22,0.15)" : cp.cleared ? "rgba(16,185,129,0.12)" : "rgba(148,163,184,0.1)", color: isActive ? "#f97316" : cp.cleared ? "#10b981" : "#94a3b8" }}>
                                   {isActive ? "⚡ EARNING" : cp.cleared ? "✓ CLEARED" : "○ LOCKED"}
                                 </span>

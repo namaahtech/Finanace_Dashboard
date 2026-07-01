@@ -11,10 +11,19 @@ export async function GET() {
 
   const { data: config } = await supabase
     .from("zoho_config")
-    .select("org_id, zoid, org_domain, domain_synced_at")
+    .select("id, org_id, zoid, org_domain, domain_synced_at")
     .maybeSingle();
 
-  const orgId = config?.org_id || config?.zoid;
+  let orgId = config?.org_id || config?.zoid;
+  if (!orgId && process.env.ZOHO_ORG_ID) {
+    orgId = process.env.ZOHO_ORG_ID;
+    if (config?.id) {
+      await supabase
+        .from("zoho_config")
+        .update({ org_id: orgId, zoid: orgId })
+        .eq("id", config.id);
+    }
+  }
   const token = await getActiveToken();
 
   // Try to fetch live domain list from Zoho
@@ -56,17 +65,26 @@ export async function POST(req: NextRequest) {
 
   const { data: config } = await supabase
     .from("zoho_config")
-    .select("org_id, zoid")
+    .select("id, org_id, zoid")
     .maybeSingle();
 
   if (!config) {
     return NextResponse.json({ error: "Zoho not configured yet." }, { status: 400 });
   }
 
+  let orgId = config.org_id || config.zoid;
+  if (!orgId && process.env.ZOHO_ORG_ID) {
+    orgId = process.env.ZOHO_ORG_ID;
+    await supabase
+      .from("zoho_config")
+      .update({ org_id: orgId, zoid: orgId })
+      .eq("id", config.id);
+  }
+
   await supabase
     .from("zoho_config")
     .update({ org_domain: clean, domain_synced_at: new Date().toISOString() })
-    .or(`org_id.eq.${config.org_id || "null"},zoid.eq.${config.zoid || "null"}`);
+    .eq("id", config.id);
 
   return NextResponse.json({ success: true, domain: clean });
 }

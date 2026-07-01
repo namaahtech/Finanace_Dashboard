@@ -36,9 +36,9 @@ export interface MonthlyAttendanceSummary {
 /**
  * Expected Google Sheet format:
  * Row 1 (header): Date | EMP001 | EMP002 | EMP003 | ...
- * Rows 2+: 2024-01-01 | P | A | PTO | ...
+ * Rows 2+: 2024-01-01 | P | A | Sick Leave | ...
  *
- * Status codes: P=Present, A=Absent, PTO=PTO/Leave, H=Holiday, WO=Weekend Off
+ * Status codes: P=Present, A=Absent, Sick Leave=Sick Leave/Leave, H=Holiday, WO=Weekend Off
  */
 export async function fetchMonthlyAttendance(
   employeeId: string,
@@ -99,7 +99,7 @@ function normalizeStatus(raw: string): AttendanceRecord["status"] {
     case "A":
     case "ABSENT":
       return "absent";
-    case "PTO":
+    case "Sick Leave":
     case "L":
     case "LEAVE":
       return "pto";

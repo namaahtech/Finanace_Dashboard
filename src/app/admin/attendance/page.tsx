@@ -5,21 +5,29 @@ import {
   Users, Clock, CalendarDays, Search, Download, UserCheck, UserX,
   TrendingUp, ChevronLeft, ChevronRight, Edit2, X, CheckCircle2,
   AlarmClock, Palmtree, LayoutGrid, List, CalendarRange, Play, Square, Timer,
-  RotateCcw, Target, Coffee, ChevronDown, Settings, Check, Landmark, Building2, ShieldAlert
+  RotateCcw, Target, Coffee, ChevronDown, Settings, Check, Landmark, Building2, ShieldAlert,
+  ArrowRightLeft, FileCheck2, AlertTriangle, Link2, ExternalLink
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
-import { TimePicker } from "@/components/ui/TimePicker";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
+import { TimePicker } from "@/components/ui/TimePickerLegacy";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { usePermission } from "@/hooks/usePermission";
 import dayjs from "dayjs";
 
 // ─── Types ───────────────────────────────────────────────
 type AttStatus = "present" | "late" | "absent" | "leave" | "holiday" | "half_day" | "on_duty";
-type ViewTab = "daily" | "logsheet" | "summary" | "leaves" | "holidays" | "protocols";
+type ViewTab = "daily" | "logsheet" | "summary" | "leaves" | "weekoff_requests" | "sick_certs" | "holidays" | "protocols";
 
 interface LeaveRequest {
   id: string;
@@ -83,6 +91,26 @@ function formatDurationDisplay(clock_in: string, clock_out: string | null, recor
   const hrs = Math.floor(diffMin / 60);
   const mins = diffMin % 60;
   return `${hrs} hr ${mins} min`;
+}
+
+// ─── Live duration for currently checked-in employees ─────
+function LiveDuration({ clockIn, recordDate }: { clockIn: string; recordDate: string }) {
+  const [now, setNow] = useState(dayjs());
+  useEffect(() => {
+    const iv = setInterval(() => setNow(dayjs()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+  const diff = now.diff(dayjs(`${recordDate} ${clockIn}`), "second");
+  if (diff < 0) return <span className="text-theme-fg font-semibold tabular-nums">—</span>;
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  const s = diff % 60;
+  return (
+    <span className="flex items-center gap-1 text-emerald-500 font-bold tabular-nums text-xs">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+      {`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`}
+    </span>
+  );
 }
 
 // ─── Digital Clock & Session Timer ────────────────────────
@@ -173,6 +201,10 @@ export default function AdminAttendancePage() {
   });
 
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
+  const [leaveTypeMap, setLeaveTypeMap] = useState<Record<string, Record<string, string>>>({});
+  const [weekoffRequests, setWeekoffRequests] = useState<any[]>([]);
+  const [sickCerts, setSickCerts] = useState<any[]>([]);
+  const [actionLoading2, setActionLoading2] = useState<string | null>(null);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
     empId: "",
@@ -209,7 +241,25 @@ export default function AdminAttendancePage() {
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [attSettings, setAttSettings] = useState({ id: 1, holiday_is_paid_leave: false });
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [attSettings, setAttSettings] = useState<any>({
+    id: 1,
+    holiday_is_paid_leave: false,
+    // Weekly-off policy
+    weekoff_mode: "flexible",            // 'flexible' | 'fixed_weekend'
+    weekoffs_per_month: 4,
+    max_weekoffs_per_week: 1,
+    weekoff_carry_forward: true,
+    recycle_day: 25,
+    lock_day: 28,
+    auto_assign_sundays: true,
+    fixed_weekend_days: ["Sun", "Sat"],
+    // Sick-leave policy
+    sick_leave_forward_days: 2,
+    sick_leave_backward_days: 2,
+    certificate_deadline_days: 7,
+    require_cert_approval: true,
+  });
 
   // Initial Auth & Data
   async function init() {
@@ -236,15 +286,12 @@ export default function AdminAttendancePage() {
     const { data: att } = await supabase.from("attendance_logs").select("*, modified_by_name:employees!modified_by(name)").eq("date", dateStr);
     const logMap: Record<string, DayRecord & { modified_by_name?: string }> = {};
     att?.forEach(l => {
-      logMap[l.employee_id] = {
-        clock_in: l.clock_in,
-        clock_out: l.clock_out,
-        status: l.status,
-        id: l.id,
-        modified_by_name: l.modified_by_name?.name
-      };
+      logMap[l.employee_id] = { clock_in: l.clock_in, clock_out: l.clock_out, status: l.status, id: l.id, modified_by_name: l.modified_by_name?.name };
     });
     setDailyLogs(logMap);
+    const mStart = dayjs(dateStr).startOf("month").format("YYYY-MM-DD");
+    const mEnd   = dayjs(dateStr).endOf("month").format("YYYY-MM-DD");
+    loadLeaveTypeMap(mStart, mEnd);
   }
 
   async function loadMonthData() {
@@ -257,6 +304,23 @@ export default function AdminAttendancePage() {
       bigMap[l.employee_id][l.date] = { clock_in: l.clock_in, clock_out: l.clock_out, status: l.status };
     });
     setMonthLogs(bigMap);
+    loadLeaveTypeMap(start, end);
+    loadHolidays(); // needed by log sheet for auto-absent calculation
+  }
+
+  async function loadLeaveTypeMap(start: string, end: string) {
+    const { data } = await supabase.from("leave_requests")
+      .select("employee_id, from_date, to_date, start_date, end_date, type, status")
+      .gte("start_date", start).lte("end_date", end)
+      .in("status", ["approved", "Approved"]);
+    const map: Record<string, Record<string, string>> = {};
+    data?.forEach(req => {
+      if (!map[req.employee_id]) map[req.employee_id] = {};
+      let d = dayjs(req.from_date || req.start_date);
+      const endD = dayjs(req.to_date || req.end_date);
+      while (!d.isAfter(endD)) { map[req.employee_id][d.format("YYYY-MM-DD")] = req.type; d = d.add(1, "day"); }
+    });
+    setLeaveTypeMap(map);
   }
 
   async function loadLeaves() {
@@ -264,6 +328,48 @@ export default function AdminAttendancePage() {
       .select("*, employee:employees(name, department)")
       .order("created_at", { ascending: false });
     setLeaves(data || []);
+  }
+
+  async function loadWeekoffRequests() {
+    const res = await fetch("/api/attendance/weekoff/change-request?all=1");
+    if (res.ok) setWeekoffRequests(await res.json());
+  }
+
+  async function loadSickCerts() {
+    const res = await fetch("/api/attendance/sick-leave?all=1");
+    if (res.ok) setSickCerts(await res.json());
+  }
+
+  async function handleWeekoffDecision(id: string, action: "approve" | "reject") {
+    setActionLoading2(id + action);
+    try {
+      const res = await fetch("/api/attendance/weekoff/change-request", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      showToast(`Request ${action}d`, "success");
+      await loadWeekoffRequests();
+    } catch (e: any) { showToast(e.message || "Failed", "error"); }
+    finally { setActionLoading2(null); }
+  }
+
+  async function handleSickCertDecision(id: string, action: "approve" | "reject") {
+    setActionLoading2(id + action);
+    try {
+      const res = await fetch("/api/attendance/sick-leave", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      showToast(`Certificate ${action}d`, "success");
+      await loadSickCerts();
+    } catch (e: any) { showToast(e.message || "Failed", "error"); }
+    finally { setActionLoading2(null); }
   }
 
   async function loadHolidays() {
@@ -282,44 +388,84 @@ export default function AdminAttendancePage() {
 
   async function loadSettings() {
     const { data } = await supabase.from("attendance_settings").select("*").eq("id", 1).maybeSingle();
-    if (data) setAttSettings(data);
+    if (data) setAttSettings((prev: any) => ({ ...prev, ...data }));
   }
 
-  async function updateSettings(holidayIsPaid: boolean) {
-    const { error } = await supabase.from("attendance_settings").upsert({
-      id: 1,
-      holiday_is_paid_leave: holidayIsPaid,
-      updated_at: new Date().toISOString(),
-      updated_by: userId
-    }, { onConflict: 'id' });
-    if (error) showToast(error.message, "error");
-    else showToast("Protocol Updated: Government Holidays = Paid Leave", "success");
+  // Update a single setting field in local state (persisted on Save).
+  function setSetting(key: string, value: any) {
+    setAttSettings((prev: any) => ({ ...prev, [key]: value }));
+  }
+
+  // Persist the entire settings object via admin API route (bypasses RLS).
+  async function saveSettings() {
+    setSavingSettings(true);
+    try {
+      const res = await fetch("/api/attendance/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...attSettings, id: 1 }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      showToast("Attendance settings saved.", "success");
+    } catch (e: any) {
+      showToast(e.message || "Failed to save settings", "error");
+    } finally {
+      setSavingSettings(false);
+    }
   }
 
   useEffect(() => { init(); }, []); // Run once on mount
   useEffect(() => { loadLogsForDate(selectedDate); }, [selectedDate]); // Refetch on date change
   useEffect(() => {
     if (tab === "leaves") loadLeaves();
+    else if (tab === "weekoff_requests") loadWeekoffRequests();
+    else if (tab === "sick_certs") loadSickCerts();
     else if (tab === "holidays") loadHolidays();
     else if (tab === "protocols") loadProtocols();
     else if (tab !== "daily") loadMonthData();
   }, [tab, selectedDate]);
 
   useEffect(() => {
-    const chan = supabase.channel("att_updates").on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs' }, () => {
+    const chan = supabase.channel("att_updates").on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs' }, (payload: any) => {
+      // Optimistic state update from payload — no waiting for a full round-trip
+      if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+        const rec = payload.new;
+        if (rec?.date === selectedDate) {
+          setDailyLogs(prev => ({
+            ...prev,
+            [rec.employee_id]: { clock_in: rec.clock_in, clock_out: rec.clock_out, status: rec.status, id: rec.id },
+          }));
+        }
+      } else if (payload.eventType === "DELETE") {
+        const rec = payload.old;
+        if (rec?.date === selectedDate) {
+          setDailyLogs(prev => { const next = { ...prev }; delete next[rec.employee_id]; return next; });
+        }
+      }
+      // Full reload for accuracy (modified_by_name join etc.)
       loadLogsForDate(selectedDate);
       if (tab !== "daily") loadMonthData();
     }).subscribe();
+
     const chan2 = supabase.channel("holidays_updates").on('postgres_changes', { event: '*', schema: 'public', table: 'system_holidays' }, () => {
       loadHolidays();
     }).subscribe();
     const chan3 = supabase.channel("settings_updates").on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_settings' }, () => {
       loadSettings();
     }).subscribe();
-    return () => { 
-      supabase.removeChannel(chan); 
-      supabase.removeChannel(chan2); 
-      supabase.removeChannel(chan3); 
+
+    // Polling fallback for daily tab — catches any missed real-time events
+    const isToday = selectedDate === dayjs().format("YYYY-MM-DD");
+    const pollId = tab === "daily" && isToday
+      ? setInterval(() => loadLogsForDate(selectedDate), 10_000)
+      : null;
+
+    return () => {
+      supabase.removeChannel(chan);
+      supabase.removeChannel(chan2);
+      supabase.removeChannel(chan3);
+      if (pollId) clearInterval(pollId);
     };
   }, [tab, selectedDate]);
 
@@ -435,13 +581,49 @@ export default function AdminAttendancePage() {
 
   async function handleLeaveStatus(id: string, status: "approved" | "rejected") {
     try {
-      const { error } = await supabase.from("leave_requests").update({
-        status,
-        approved_by: userId
-      }).eq("id", id);
+      const { data: req, error: fetchErr } = await supabase.from("leave_requests")
+        .select("*, emp:employees(monthly_leave_quota, weekly_off_allotment)")
+        .eq("id", id).single();
+      if (fetchErr) throw fetchErr;
+
+      const { error } = await supabase.from("leave_requests").update({ status, approved_by: userId }).eq("id", id);
       if (error) throw error;
-      showToast(`Protocol ${status} successfully`, "success");
-      loadLeaves();
+
+      if (status === "approved" && req) {
+        // Mark attendance_logs as "leave" for each day in the range
+        let d = dayjs(req.from_date || req.start_date);
+        const endD = dayjs(req.to_date || req.end_date);
+        while (!d.isAfter(endD)) {
+          await supabase.from("attendance_logs").upsert(
+            { employee_id: req.employee_id, date: d.format("YYYY-MM-DD"), status: "leave", clock_in: null, clock_out: null },
+            { onConflict: "employee_id,date" }
+          );
+          d = d.add(1, "day");
+        }
+        // Deduct quota for Sick Leave or Weekly Off
+        const empQ = req.emp;
+        if (req.type === "Sick Leave" && empQ && Number(empQ.monthly_leave_quota) > 0) {
+          await supabase.from("employees").update({ monthly_leave_quota: Number(empQ.monthly_leave_quota) - 1 }).eq("id", req.employee_id);
+        } else if (req.type === "Weekly Off" && empQ && Number(empQ.weekly_off_allotment) > 0) {
+          await supabase.from("employees").update({ weekly_off_allotment: Number(empQ.weekly_off_allotment) - 1 }).eq("id", req.employee_id);
+        }
+      }
+
+      // Notify the employee
+      if (req) {
+        const dateLabel = dayjs(req.from_date || req.start_date).format("D MMM YYYY");
+        try { await supabase.from("system_notifications").insert({
+          user_id: req.employee_id,
+          title: `Leave ${status === "approved" ? "Approved" : "Rejected"}: ${req.type}`,
+          message: `Your ${req.type} request for ${dateLabel} has been ${status}.`,
+          type: status === "approved" ? "success" : "danger",
+          link: "/dashboard/attendance"
+        }); } catch {}
+      }
+
+      showToast(`Leave ${status} successfully`, "success");
+      loadLeaves(); loadLogsForDate(selectedDate);
+      if (tab !== "daily") loadMonthData();
     } catch (e: any) {
       showToast(e.message, "error");
     }
@@ -581,12 +763,14 @@ export default function AdminAttendancePage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5 shadow-inner">
               {[
-                { key: "daily", label: "Daily Attendance", icon: List },
-                { key: "logsheet", label: "Log Sheet", icon: LayoutGrid },
-                { key: "summary", label: "Monthly Summary", icon: CalendarRange },
-                { key: "leaves", label: "Leave Approval", icon: Palmtree },
-                { key: "holidays", label: "Holidays", icon: Palmtree },
-                { key: "protocols", label: "Shift Times", icon: AlarmClock },
+                { key: "daily",            label: "Daily Attendance",  icon: List },
+                { key: "logsheet",         label: "Log Sheet",         icon: LayoutGrid },
+                { key: "summary",          label: "Monthly Summary",   icon: CalendarRange },
+                { key: "leaves",           label: "Leave Approval",    icon: Palmtree },
+                { key: "weekoff_requests", label: "Weekoff Requests",  icon: ArrowRightLeft },
+                { key: "sick_certs",       label: "Sick Leave",        icon: ShieldAlert },
+                { key: "holidays",         label: "Holidays",          icon: Palmtree },
+                { key: "protocols",        label: "Shift Times",       icon: AlarmClock },
               ].map(({ key, label, icon: Icon }) => (
                 <button key={key} onClick={() => setTab(key as ViewTab)}
                   className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all", tab === key ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}>
@@ -672,17 +856,21 @@ export default function AdminAttendancePage() {
                             <td className="px-5 py-3"><p className="text-xs font-semibold text-theme-fg">{emp.department}</p><p className="text-xs text-theme-muted">{emp.designation}</p></td>
                             <td className="px-5 py-3">
                               <div className="flex flex-col">
-                                <span className="font-mono text-xs font-bold text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}</span>
+                                <span className="tabular-nums text-xs font-bold text-theme-fg">{log?.clock_in ? dayjs(`2000-01-01 ${log.clock_in}`).format("hh:mm A") : "—"}</span>
                                 {log?.clock_in && <span className="text-[10px] text-theme-subtle font-medium mt-0.5">{dayjs(selectedDate).format("DD MMM, YYYY")}</span>}
                               </div>
                             </td>
                             <td className="px-5 py-3">
                               <div className="flex flex-col">
-                                <span className="font-mono text-xs font-bold text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}</span>
+                                <span className="tabular-nums text-xs font-bold text-theme-fg">{log?.clock_out ? dayjs(`2000-01-01 ${log.clock_out}`).format("hh:mm A") : "—"}</span>
                                 {log?.clock_out && <span className="text-[10px] text-theme-subtle font-medium mt-0.5">{dayjs(selectedDate).format("DD MMM, YYYY")}</span>}
                               </div>
                             </td>
-                            <td className="px-5 py-3 text-xs font-semibold text-theme-fg tabular-nums">{log?.clock_in ? formatDurationDisplay(log.clock_in, log.clock_out, selectedDate) : "—"}</td>
+                            <td className="px-5 py-3 text-xs font-semibold text-theme-fg tabular-nums">
+                              {log?.clock_in && !log?.clock_out
+                                ? <LiveDuration clockIn={log.clock_in} recordDate={selectedDate} />
+                                : (log?.clock_in ? formatDurationDisplay(log.clock_in, log.clock_out, selectedDate) : "—")}
+                            </td>
                             <td className="px-5 py-3">
                               <div className="flex items-center gap-1.5 text-xs font-semibold text-theme-muted">
                                 <Coffee size={13} />
@@ -691,8 +879,15 @@ export default function AdminAttendancePage() {
                             </td>
                             <td className="px-5 py-3 text-right">
                               <div className="flex items-center justify-end gap-3">
-                                <div className="flex flex-col items-end">
+                                <div className="flex flex-col items-end gap-0.5">
                                   <Badge variant={STATUS_BADGE[log?.status || 'absent']}>{log?.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1).replace('_', ' ') : "Absent"}</Badge>
+                                  {log?.status === "leave" && leaveTypeMap[emp.id]?.[selectedDate] && (
+                                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md",
+                                      leaveTypeMap[emp.id][selectedDate] === "Sick Leave" ? "bg-indigo-500/10 text-indigo-600" :
+                                      leaveTypeMap[emp.id][selectedDate] === "Weekly Off" ? "bg-sky-500/10 text-sky-600" :
+                                      "bg-amber-500/10 text-amber-600"
+                                    )}>{leaveTypeMap[emp.id][selectedDate]}</span>
+                                  )}
                                   {log?.modified_by_name && (
                                     <span className="text-xs font-medium text-amber-600 mt-1 opacity-80">Modified by {log.modified_by_name}</span>
                                   )}
@@ -760,12 +955,35 @@ export default function AdminAttendancePage() {
                       <tr key={emp.id} className="hover:bg-theme-raised/10 transition-colors">
                         <td className="sticky left-0 bg-theme-surface px-4 py-2 z-10 font-bold text-theme-fg text-[11px]">{emp.name}</td>
                         {Array.from({ length: dayjs(selectedDate).daysInMonth() }, (_, i) => i + 1).map(d => {
-                          const dateCode = dayjs(selectedDate).date(d).format("YYYY-MM-DD");
+                          const dateObj = dayjs(selectedDate).date(d);
+                          const dateCode = dateObj.format("YYYY-MM-DD");
+                          const today = dayjs().format("YYYY-MM-DD");
                           const st = monthLogs[emp.id]?.[dateCode]?.status;
+                          const leaveType = st === "leave" ? leaveTypeMap[emp.id]?.[dateCode] : undefined;
+                          const dayOfWeek = dateObj.day(); // 0=Sun 6=Sat
+                          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                          const isHoliday = !!holidays[dateCode];
+                          const isPast = dateCode < today;
+                          // Auto-absent: past working day with no record
+                          const empHasAnyRecord = Object.keys(monthLogs[emp.id] || {}).length > 0;
+                          const isAutoAbsent = !st && isPast && !isWeekend && !isHoliday;
+
+                          const cellLabel = st === "leave"
+                            ? (leaveType === "Sick Leave" ? "SL" : leaveType === "Weekly Off" ? "WO" : leaveType === "Unpaid" ? "UL" : "Le")
+                            : (st ? STATUS_LABEL[st] : isAutoAbsent ? "A" : "—");
+                          const cellClass = st === "leave" && leaveType
+                            ? (leaveType === "Sick Leave" ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400"
+                              : leaveType === "Weekly Off" ? "bg-sky-500/15 text-sky-700 dark:text-sky-400"
+                              : "bg-amber-500/15 text-amber-700 dark:text-amber-400")
+                            : st ? STATUS_CELL[st]
+                            : isAutoAbsent
+                              // dimmer red if never checked in at all; normal absent red if at least one record exists
+                              ? (empHasAnyRecord ? STATUS_CELL["absent"] : "bg-red-500/8 text-red-400/60")
+                              : "bg-theme-raised/30 text-theme-subtle/20";
                           return (
                             <td key={d} className="px-0.5 py-1 text-center">
-                              <div className={cn("mx-auto h-6 w-7 flex items-center justify-center rounded text-[9px] font-black transition-all", st ? STATUS_CELL[st] : "bg-theme-raised/30 text-theme-subtle/20")}>
-                                {st ? STATUS_LABEL[st] : "—"}
+                              <div className={cn("mx-auto h-6 flex items-center justify-center rounded text-[9px] font-black transition-all", leaveType ? "w-9 px-1" : "w-7", cellClass)}>
+                                {cellLabel}
                               </div>
                             </td>
                           )
@@ -851,7 +1069,14 @@ export default function AdminAttendancePage() {
                           <p className="text-sm font-semibold text-theme-fg">{req.employee?.name}</p>
                           <p className="text-xs text-theme-muted mt-0.5">{req.employee?.department}</p>
                         </td>
-                        <td className="px-5 py-3 text-xs font-semibold text-theme-fg capitalize">{req.type}</td>
+                        <td className="px-5 py-3">
+                          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold",
+                            req.type === "Sick Leave" ? "bg-indigo-500/10 text-indigo-700" :
+                            req.type === "Weekly Off" ? "bg-sky-500/10 text-sky-700" :
+                            req.type === "Unpaid" ? "bg-amber-500/10 text-amber-700" :
+                            "bg-theme-raised text-theme-muted"
+                          )}>{req.type}</span>
+                        </td>
                         <td className="px-5 py-3">
                           <p className="text-sm font-semibold text-theme-fg">{dayjs(req.from_date).format("D MMM")} — {dayjs(req.to_date).format("D MMM")}</p>
                           <p className="text-xs text-theme-muted">{dayjs(req.to_date).diff(dayjs(req.from_date), 'day') + 1} Days</p>
@@ -859,15 +1084,175 @@ export default function AdminAttendancePage() {
                         <td className="px-5 py-3 text-sm text-theme-muted max-w-xs truncate">{req.reason || "—"}</td>
                         <td className="px-5 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {req.status === "pending" ? (
+                            {req.status.toLowerCase() === "pending" ? (
                               <>
                                 <button onClick={() => handleLeaveStatus(req.id, "approved")} className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all"><CheckCircle2 size={14} /></button>
                                 <button onClick={() => handleLeaveStatus(req.id, "rejected")} className="h-8 w-8 flex items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 hover:bg-rose-500 hover:text-white transition-all"><X size={14} /></button>
                               </>
                             ) : (
-                              <Badge variant={req.status === "approved" ? "success" : "danger"}>{req.status.toUpperCase()}</Badge>
+                              <Badge variant={req.status.toLowerCase() === "approved" ? "success" : "danger"}>{req.status.toUpperCase()}</Badge>
                             )}
                           </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Weekoff Change Requests Tab ─────────────────────────────── */}
+          {tab === "weekoff_requests" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-base font-black text-theme-fg tracking-tight">Weekoff Change Requests</h3>
+                <button onClick={loadWeekoffRequests} className="text-xs text-theme-primary hover:underline">Refresh</button>
+              </div>
+              <div className="page-card p-0 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
+                      <th className="px-5 py-3">Employee</th>
+                      <th className="px-5 py-3">Original Date</th>
+                      <th className="px-5 py-3">Requested Date</th>
+                      <th className="px-5 py-3">Reason</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-theme-border">
+                    {weekoffRequests.length === 0 ? (
+                      <tr><td colSpan={6} className="px-6 py-12 text-center text-xs text-theme-muted">No weekoff change requests.</td></tr>
+                    ) : weekoffRequests.map(req => (
+                      <tr key={req.id} className="hover:bg-theme-raised/30 transition-colors">
+                        <td className="px-5 py-3">
+                          <p className="text-sm font-semibold text-theme-fg">{req.employee?.name ?? "—"}</p>
+                          <p className="text-xs text-theme-muted">{req.employee?.department ?? ""}</p>
+                        </td>
+                        <td className="px-5 py-3">
+                          <p className="text-sm font-semibold text-theme-fg">{dayjs(req.original_date).format("DD MMM YYYY")}</p>
+                          <p className="text-xs text-theme-muted">{dayjs(req.original_date).format("dddd")}</p>
+                        </td>
+                        <td className="px-5 py-3">
+                          <p className="text-sm font-semibold text-emerald-600">{req.requested_date ? dayjs(req.requested_date).format("DD MMM YYYY") : "—"}</p>
+                          <p className="text-xs text-theme-muted">{req.requested_date ? dayjs(req.requested_date).format("dddd") : ""}</p>
+                        </td>
+                        <td className="px-5 py-3 text-xs text-theme-muted max-w-xs">{req.reason}</td>
+                        <td className="px-5 py-3">
+                          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold",
+                            req.status === "pending"  ? "bg-amber-500/10 text-amber-700" :
+                            req.status === "approved" ? "bg-emerald-500/10 text-emerald-700" :
+                            "bg-red-500/10 text-red-700"
+                          )}>{req.status}</span>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          {req.status === "pending" ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleWeekoffDecision(req.id, "approve")}
+                                disabled={actionLoading2 === req.id + "approve"}
+                                className="h-8 px-3 flex items-center gap-1 rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-white text-xs font-bold transition-all disabled:opacity-50">
+                                <CheckCircle2 size={13} /> Approve
+                              </button>
+                              <button
+                                onClick={() => handleWeekoffDecision(req.id, "reject")}
+                                disabled={actionLoading2 === req.id + "reject"}
+                                className="h-8 px-3 flex items-center gap-1 rounded-lg bg-rose-500/10 text-rose-600 hover:bg-rose-500 hover:text-white text-xs font-bold transition-all disabled:opacity-50">
+                                <X size={13} /> Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-theme-muted">Decided by {req.decider?.name ?? "admin"}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Sick Leave / Certificate Approvals Tab ───────────────────── */}
+          {tab === "sick_certs" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-base font-black text-theme-fg tracking-tight">Sick Leave & Certificates</h3>
+                <button onClick={loadSickCerts} className="text-xs text-theme-primary hover:underline">Refresh</button>
+              </div>
+              <div className="page-card p-0 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
+                      <th className="px-5 py-3">Employee</th>
+                      <th className="px-5 py-3">Period</th>
+                      <th className="px-5 py-3">Reason</th>
+                      <th className="px-5 py-3">Certificate</th>
+                      <th className="px-5 py-3">Deadline</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-theme-border">
+                    {sickCerts.length === 0 ? (
+                      <tr><td colSpan={7} className="px-6 py-12 text-center text-xs text-theme-muted">No sick leaves found.</td></tr>
+                    ) : sickCerts.map(sl => (
+                      <tr key={sl.id} className={cn("hover:bg-theme-raised/30 transition-colors", sl.blocks_checkin && "bg-red-500/5")}>
+                        <td className="px-5 py-3">
+                          <p className="text-sm font-semibold text-theme-fg">{sl.employee?.name ?? "—"}</p>
+                          <p className="text-xs text-theme-muted">{sl.employee?.department ?? ""}</p>
+                          {sl.blocks_checkin && <span className="text-[9px] font-bold text-red-600 flex items-center gap-0.5 mt-0.5"><AlertTriangle size={9} /> Check-in blocked</span>}
+                        </td>
+                        <td className="px-5 py-3">
+                          <p className="text-sm font-semibold text-theme-fg">{dayjs(sl.from_date).format("DD MMM")} – {dayjs(sl.to_date).format("DD MMM YYYY")}</p>
+                          <p className="text-xs text-theme-muted">{sl.days} day(s)</p>
+                        </td>
+                        <td className="px-5 py-3 text-xs text-theme-muted max-w-[160px] truncate">{sl.reason}</td>
+                        <td className="px-5 py-3">
+                          {sl.certificate_url ? (
+                            <a href={sl.certificate_url} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs text-theme-primary hover:underline">
+                              <Link2 size={11} /> View <ExternalLink size={10} />
+                            </a>
+                          ) : (
+                            <span className="text-xs text-theme-subtle">Not submitted</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-xs">
+                          <span className={cn(dayjs().isAfter(dayjs(sl.certificate_deadline)) && sl.cert_status === "pending" ? "text-red-600 font-bold" : "text-theme-muted")}>
+                            {dayjs(sl.certificate_deadline).format("DD MMM YYYY")}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold",
+                            sl.cert_status === "pending"   ? "bg-amber-500/10 text-amber-700" :
+                            sl.cert_status === "submitted" ? "bg-indigo-500/10 text-indigo-700" :
+                            sl.cert_status === "approved"  ? "bg-emerald-500/10 text-emerald-700" :
+                            "bg-red-500/10 text-red-700"
+                          )}>{sl.cert_status}</span>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          {sl.cert_status === "submitted" && sl.approval_required ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleSickCertDecision(sl.id, "approve")}
+                                disabled={actionLoading2 === sl.id + "approve"}
+                                className="h-8 px-3 flex items-center gap-1 rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-white text-xs font-bold transition-all disabled:opacity-50">
+                                <FileCheck2 size={13} /> Approve
+                              </button>
+                              <button
+                                onClick={() => handleSickCertDecision(sl.id, "reject")}
+                                disabled={actionLoading2 === sl.id + "reject"}
+                                className="h-8 px-3 flex items-center gap-1 rounded-lg bg-rose-500/10 text-rose-600 hover:bg-rose-500 hover:text-white text-xs font-bold transition-all disabled:opacity-50">
+                                <X size={13} /> Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-theme-muted">
+                              {sl.cert_status === "approved" ? `✓ ${sl.decider?.name ?? "admin"}` : "—"}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1034,7 +1419,7 @@ export default function AdminAttendancePage() {
                         {holi && (
                           <div className="mt-auto space-y-1 rounded px-1.5 py-1 mb-1 shadow-sm relative group/holi z-20" style={{ backgroundColor: `${holi.color}20`, borderLeft: `3px solid ${holi.color}` }}>
                             <span className="block text-[9px] font-black uppercase tracking-widest truncate" style={{ color: holi.color }}>{holi.title}</span>
-                            {holi.is_half_day && <span className="block text-[9px] font-bold font-mono opacity-100" style={{ color: holi.color }}>{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>}
+                            {holi.is_half_day && <span className="block text-[9px] font-bold tabular-nums opacity-100" style={{ color: holi.color }}>{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>}
 
                             {/* Hover Tooltip Popup */}
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-theme-surface border border-theme-border rounded-xl shadow-2xl p-4 opacity-0 pointer-events-none group-hover/holi:opacity-100 transition-all duration-200 z-[100] transform scale-95 group-hover/holi:scale-100">
@@ -1043,7 +1428,7 @@ export default function AdminAttendancePage() {
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">{holi.type}</span>
                                 {holi.is_half_day ? (
-                                  <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider font-mono">{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>
+                                  <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider tabular-nums">{dayjs(`2000-01-01 ${holi.start_time}`).format('HH:mm')} - {dayjs(`2000-01-01 ${holi.end_time}`).format('HH:mm')}</span>
                                 ) : (
                                   <span className="text-[10px] font-black px-2 py-1 rounded bg-theme-raised text-theme-fg uppercase tracking-wider">Full Day</span>
                                 )}
@@ -1092,9 +1477,9 @@ export default function AdminAttendancePage() {
                         </td>
                         <td className="px-5 py-3">
                            <div className="flex items-center gap-2">
-                             <Badge variant="default" className="font-mono text-[10px] uppercase">{dayjs(`2000-01-01 ${p.check_in_time}`).format("hh:mm A")}</Badge>
+                             <Badge variant="default" className="tabular-nums text-[10px] uppercase">{dayjs(`2000-01-01 ${p.check_in_time}`).format("hh:mm A")}</Badge>
                              <span className="text-theme-subtle">to</span>
-                             <Badge variant="default" className="font-mono text-[10px] uppercase">{dayjs(`2000-01-01 ${p.check_out_time}`).format("hh:mm A")}</Badge>
+                             <Badge variant="default" className="tabular-nums text-[10px] uppercase">{dayjs(`2000-01-01 ${p.check_out_time}`).format("hh:mm A")}</Badge>
                            </div>
                         </td>
                         <td className="px-5 py-3 text-xs font-semibold text-theme-fg">{p.type}</td>
@@ -1188,16 +1573,15 @@ export default function AdminAttendancePage() {
                 <div>
                   <label className="block text-[10px] font-black text-theme-muted uppercase tracking-widest mb-2">Category</label>
                   <div className="hidden">
-                    <select
-                    value={holidayForm.type}
-                    onChange={e => setHolidayForm({ ...holidayForm, type: e.target.value })}
-                    className="w-full h-12 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm cursor-pointer"
-                  >
-                    <option value="government">Government Holiday</option>
-                    <option value="public">Public Holiday</option>
-                    <option value="company">Company Holiday</option>
-                    <option value="restricted">Restricted Holiday</option>
-                    </select>
+                    <Select value={holidayForm.type} onValueChange={(v) => setHolidayForm({ ...holidayForm, type: v })}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="government">Government Holiday</SelectItem>
+                        <SelectItem value="public">Public Holiday</SelectItem>
+                        <SelectItem value="company">Company Holiday</SelectItem>
+                        <SelectItem value="restricted">Restricted Holiday</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="relative">
                     <button
@@ -1353,14 +1737,12 @@ export default function AdminAttendancePage() {
             <div className="p-6 space-y-5">
               <div>
                 <label className="block text-xs font-medium text-theme-muted mb-1.5">Select Employee</label>
-                <select
-                  value={leaveForm.empId}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, empId: e.target.value })}
-                  className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-medium text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
-                >
-                  <option value="">Choose Employee...</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.name} ({e.employee_id})</option>)}
-                </select>
+                <Select value={leaveForm.empId || undefined} onValueChange={(v) => setLeaveForm({ ...leaveForm, empId: v })}>
+                  <SelectTrigger className="w-full h-11"><SelectValue placeholder="Choose Employee..." /></SelectTrigger>
+                  <SelectContent>
+                    {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name} ({e.employee_id})</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1448,14 +1830,13 @@ export default function AdminAttendancePage() {
 
                  <div>
                     <label className="block text-xs font-black uppercase tracking-widest text-theme-muted mb-2">Target Scope</label>
-                    <select 
-                       value={protocolForm.type}
-                       onChange={(e) => setProtocolForm({...protocolForm, type: e.target.value})}
-                       className="w-full h-11 bg-theme-page border border-theme-border rounded-xl px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm"
-                    >
-                       <option value="All">Global - All Employees</option>
-                       {depts.filter(d => d !== "All").map(d => <option key={d} value={`Department:${d}`}>{d} Department</option>)}
-                    </select>
+                    <Select value={protocolForm.type} onValueChange={(v) => setProtocolForm({...protocolForm, type: v})}>
+                      <SelectTrigger className="w-full h-11"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All">Global - All Employees</SelectItem>
+                        {depts.filter(d => d !== "All").map(d => <SelectItem key={d} value={`Department:${d}`}>{d} Department</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                  </div>
 
                  <div>
@@ -1582,9 +1963,9 @@ export default function AdminAttendancePage() {
       )}
       {showSettingsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-theme-surface w-full max-w-md rounded-[2rem] shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-8 border-b border-theme-border bg-gradient-to-br from-theme-surface to-theme-page/30">
-              <div className="flex items-center justify-between mb-6">
+          <div className="bg-theme-surface w-full max-w-lg rounded-[2rem] shadow-2xl border border-theme-border overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-7 border-b border-theme-border bg-gradient-to-br from-theme-surface to-theme-page/30">
+              <div className="flex items-center justify-between mb-5">
                 <div className="h-12 w-12 flex items-center justify-center bg-theme-primary/10 text-theme-primary rounded-2xl">
                   <Settings size={24} />
                 </div>
@@ -1596,38 +1977,165 @@ export default function AdminAttendancePage() {
               <p className="text-sm text-theme-muted font-medium mt-1">Configure global attendance rules and protocols.</p>
             </div>
 
-            <div className="p-8 space-y-6">
-              <div className="group flex items-center justify-between p-4 rounded-2xl border border-theme-border bg-theme-page hover:border-theme-primary/30 transition-all cursor-pointer" onClick={() => updateSettings(!attSettings.holiday_is_paid_leave)}>
-                <div className="flex gap-4 items-center">
-                  <div className={cn("h-10 w-10 flex items-center justify-center rounded-xl transition-all", attSettings.holiday_is_paid_leave ? "bg-emerald-500/10 text-emerald-500" : "bg-theme-raised text-theme-muted")}>
-                    <Palmtree size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-theme-fg">Holidays as Paid Leave</h4>
-                    <p className="text-[11px] text-theme-muted font-medium mt-0.5">Government holidays are automatically paid.</p>
-                  </div>
+            <div className="p-6 space-y-5 max-h-[62vh] overflow-y-auto">
+
+              {/* Holidays */}
+              <SettingToggle
+                icon={Palmtree}
+                label="Holidays as Paid Leave"
+                sub="Government holidays are automatically paid."
+                value={attSettings.holiday_is_paid_leave}
+                onToggle={() => setSetting("holiday_is_paid_leave", !attSettings.holiday_is_paid_leave)}
+              />
+
+              {/* Weekly Off Policy */}
+              <div className="rounded-2xl border border-theme-border bg-theme-page p-4 space-y-3.5">
+                <div className="flex items-center gap-2">
+                  <CalendarRange size={16} className="text-theme-primary" />
+                  <h4 className="text-[13px] font-black text-theme-fg uppercase tracking-wide">Weekly Off Policy</h4>
                 </div>
-                <div className={cn("w-12 h-6 rounded-full relative transition-all duration-300", attSettings.holiday_is_paid_leave ? "bg-emerald-500" : "bg-theme-border")}>
-                   <div className={cn("absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 shadow-sm", attSettings.holiday_is_paid_leave ? "left-7" : "left-1")}></div>
+
+                {/* Mode radios — selecting one reveals its conditions below */}
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { v: "flexible",      t: "Flexible quota", d: "Employees pre-allot N offs/month" },
+                    { v: "fixed_weekend", t: "Fixed weekend",  d: "Chosen days auto-off for everyone" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => setSetting("weekoff_mode", opt.v)}
+                      className={cn(
+                        "rounded-xl border p-3 text-left transition-all",
+                        attSettings.weekoff_mode === opt.v
+                          ? "border-theme-primary bg-theme-primary/5 ring-1 ring-theme-primary/30"
+                          : "border-theme-border hover:border-theme-primary/40"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={cn("h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0", attSettings.weekoff_mode === opt.v ? "border-theme-primary" : "border-theme-border")}>
+                          {attSettings.weekoff_mode === opt.v && <span className="h-2 w-2 rounded-full bg-theme-primary" />}
+                        </span>
+                        <span className="text-[13px] font-bold text-theme-fg">{opt.t}</span>
+                      </div>
+                      <p className="text-[10px] text-theme-muted mt-1 leading-snug">{opt.d}</p>
+                    </button>
+                  ))}
                 </div>
+
+                {/* Flexible-mode conditions */}
+                {attSettings.weekoff_mode === "flexible" && (
+                  <div className="space-y-2.5 pt-1">
+                    <SettingNumber icon={CalendarRange} label="Weekly offs per month" value={attSettings.weekoffs_per_month} min={0} max={10} onChange={(v: number) => setSetting("weekoffs_per_month", v)} />
+                    <SettingNumber icon={Coffee} label="Max off-days per week" value={attSettings.max_weekoffs_per_week} min={1} max={2} onChange={(v: number) => setSetting("max_weekoffs_per_week", v)} />
+                    <SettingNumber icon={RotateCcw} label="Recycle day" sub="Day of month balances reset fresh." value={attSettings.recycle_day} min={1} max={28} onChange={(v: number) => setSetting("recycle_day", v)} />
+                    <SettingNumber icon={AlarmClock} label="Lock day" sub="Pre-allotment deadline (day of month)." value={attSettings.lock_day} min={1} max={28} onChange={(v: number) => setSetting("lock_day", v)} />
+                    <SettingToggle icon={RotateCcw} label="Carry forward unused off" sub="Unused week-1 off → week-2, week-3 → week-4 (paired)." value={attSettings.weekoff_carry_forward} onToggle={() => setSetting("weekoff_carry_forward", !attSettings.weekoff_carry_forward)} />
+                    <SettingToggle icon={CalendarDays} label="Auto-assign Sundays after lock" sub="If an employee never pre-allots, every Sunday becomes their off." value={attSettings.auto_assign_sundays} onToggle={() => setSetting("auto_assign_sundays", !attSettings.auto_assign_sundays)} />
+                  </div>
+                )}
+
+                {/* Fixed-weekend-mode conditions */}
+                {attSettings.weekoff_mode === "fixed_weekend" && (
+                  <div className="pt-1">
+                    <p className="text-[11px] text-theme-muted mb-2 font-medium">Days marked as weekly off for everyone:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => {
+                        const on = (attSettings.fixed_weekend_days || []).includes(d);
+                        return (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => {
+                              const cur: string[] = attSettings.fixed_weekend_days || [];
+                              setSetting("fixed_weekend_days", on ? cur.filter((x) => x !== d) : [...cur, d]);
+                            }}
+                            className={cn("px-3 py-1.5 rounded-lg text-xs font-bold border transition-all", on ? "bg-theme-primary text-theme-surface border-theme-primary" : "border-theme-border text-theme-muted hover:border-theme-primary/40")}
+                          >
+                            {d}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20">
-                <div className="flex gap-3">
-                  <Target size={16} className="text-amber-600 mt-0.5" />
-                  <p className="text-xs font-medium text-amber-700/80 leading-relaxed">
-                    Changes to these protocols are synced in real-time across all employee and lead dashboards.
-                  </p>
+              {/* Sick Leave Policy */}
+              <div className="rounded-2xl border border-theme-border bg-theme-page p-4 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Coffee size={16} className="text-theme-primary" />
+                  <h4 className="text-[13px] font-black text-theme-fg uppercase tracking-wide">Sick Leave Policy</h4>
                 </div>
+                <SettingNumber label="Selectable days forward (today + N)" value={attSettings.sick_leave_forward_days} min={0} max={30} onChange={(v: number) => setSetting("sick_leave_forward_days", v)} />
+                <SettingNumber label="Selectable days backward (today − N)" value={attSettings.sick_leave_backward_days} min={0} max={30} onChange={(v: number) => setSetting("sick_leave_backward_days", v)} />
+                <SettingNumber label="Certificate deadline (days after leave)" value={attSettings.certificate_deadline_days} min={1} max={60} onChange={(v: number) => setSetting("certificate_deadline_days", v)} />
+                <SettingToggle label="Require approval for late certificate" sub="If on, a late certificate needs head approval before check-in is unblocked." value={attSettings.require_cert_approval} onToggle={() => setSetting("require_cert_approval", !attSettings.require_cert_approval)} />
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 flex gap-2">
+                <Target size={14} className="text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-[11px] font-medium text-amber-700/80 leading-relaxed">
+                  Changes sync in real-time across all employee and lead dashboards.
+                </p>
               </div>
             </div>
 
-            <div className="p-8 bg-theme-page border-t border-theme-border flex items-center justify-end">
-              <Button onClick={() => setShowSettingsModal(false)} className="px-8 rounded-xl font-bold">Done</Button>
+            <div className="p-6 bg-theme-page border-t border-theme-border flex items-center justify-end gap-2">
+              <Button variant="secondary" onClick={() => setShowSettingsModal(false)} className="px-6 rounded-xl font-bold">Cancel</Button>
+              <Button onClick={saveSettings} disabled={savingSettings} className="px-8 rounded-xl font-bold">
+                {savingSettings ? "Saving…" : "Save Settings"}
+              </Button>
             </div>
           </div>
         </div>
       )}
     </>
+  );
+}
+
+// ── Reusable settings controls (Attendance Controls modal) ───────────────────
+function SettingNumber({ icon: Icon, label, sub, value, min, max, onChange }: {
+  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  label: string; sub?: string; value: number; min?: number; max?: number; onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-theme-border bg-theme-surface">
+      <div className="flex items-center gap-2.5 min-w-0">
+        {Icon && <Icon size={15} className="text-theme-muted shrink-0" />}
+        <div className="min-w-0">
+          <p className="text-[12px] font-bold text-theme-fg leading-tight">{label}</p>
+          {sub && <p className="text-[10px] text-theme-muted mt-0.5 leading-snug">{sub}</p>}
+        </div>
+      </div>
+      <input
+        type="number"
+        value={value ?? 0}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(Math.max(min ?? 0, Math.min(max ?? 999, parseInt(e.target.value) || 0)))}
+        className="w-16 shrink-0 rounded-lg border border-theme-border bg-theme-page px-2 py-1.5 text-sm font-bold text-theme-fg text-center"
+      />
+    </div>
+  );
+}
+
+function SettingToggle({ icon: Icon, label, sub, value, onToggle }: {
+  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  label: string; sub?: string; value: boolean; onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-theme-border bg-theme-surface cursor-pointer" onClick={onToggle}>
+      <div className="flex items-center gap-2.5 min-w-0">
+        {Icon && <Icon size={15} className={cn("shrink-0", value ? "text-emerald-500" : "text-theme-muted")} />}
+        <div className="min-w-0">
+          <p className="text-[12px] font-bold text-theme-fg leading-tight">{label}</p>
+          {sub && <p className="text-[10px] text-theme-muted mt-0.5 leading-snug">{sub}</p>}
+        </div>
+      </div>
+      <div className={cn("w-11 h-6 rounded-full relative transition-all shrink-0", value ? "bg-emerald-500" : "bg-theme-border")}>
+        <div className={cn("absolute top-1 w-4 h-4 rounded-full bg-white transition-all shadow-sm", value ? "left-6" : "left-1")} />
+      </div>
+    </div>
   );
 }

@@ -31,3 +31,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local diagnostic / scratch scripts — NEVER commit (may contain secrets/PII)
+/scratch/
+
+# claude code local settings (per-machine)
+.claude/settings.local.json
+
+# local env (belt-and-suspenders alongside .env*.local above)
+.env
+.env.local

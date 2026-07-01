@@ -3,22 +3,24 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { useToast } from "@/components/ui/Toast";
+import { toast } from "sonner";
 import { formatCurrency, getYearRange, cn } from "@/lib/utils";
 import {
-  FileText,
-  ChevronDown,
-  RefreshCw,
-  CheckCircle2,
-  Send,
-  IndianRupee,
-  Users,
-  TrendingUp,
-  Zap,
-  Lock,
+  FileText, RefreshCw, CheckCircle2, Send, IndianRupee, TrendingUp, Zap, Lock, Loader2,
 } from "lucide-react";
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => ({
@@ -30,8 +32,8 @@ function monthLabel(m: number, y: number) {
   return new Date(y, m - 1).toLocaleString("en-IN", { month: "short", year: "numeric" });
 }
 
-function getInitials(name: string) {
-  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+function initials(name?: string) {
+  return (name || "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
 interface Employee { id: string; _id?: string; name: string; employeeId: string; department: string; }
@@ -60,15 +62,14 @@ interface Payslip {
   employee?: { name: string; employee_id: string; department: string; designation: string };
 }
 
-const STATUS_CONFIG = {
-  draft:    { label: "Draft",    color: "text-amber-600",   bg: "bg-amber-500/10",   dot: "bg-amber-500"  },
-  approved: { label: "Approved", color: "text-sky-600",     bg: "bg-sky-500/10",     dot: "bg-sky-500"    },
-  released: { label: "Released", color: "text-emerald-600", bg: "bg-emerald-500/10", dot: "bg-emerald-500"},
-};
+function statusBadge(status: Payslip["status"]) {
+  if (status === "released") return <Badge className="bg-emerald-500 hover:bg-emerald-500/90 text-white capitalize">{status}</Badge>;
+  if (status === "approved") return <Badge className="bg-sky-500 hover:bg-sky-500/90 text-white capitalize">{status}</Badge>;
+  return <Badge variant="secondary" className="capitalize">{status}</Badge>;
+}
 
 export default function AdminPayslipsPage() {
   const { user } = useAuth();
-  const { showToast } = useToast();
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [payslips,  setPayslips]  = useState<Payslip[]>([]);
@@ -103,7 +104,7 @@ export default function AdminPayslipsPage() {
   useEffect(() => { loadPayslips(); }, [loadPayslips]);
 
   async function handleGenerate() {
-    if (!selectedEmp) { showToast("Select an employee first", "warning"); return; }
+    if (!selectedEmp) { toast.warning("Select an employee first"); return; }
     setGenerating(true);
     try {
       await axios.post("/api/payslips/generate", {
@@ -112,10 +113,10 @@ export default function AdminPayslipsPage() {
         year:         genYear,
         generated_by: user?.id,
       });
-      showToast("Payslip generated successfully", "success");
+      toast.success("Payslip generated");
       await loadPayslips();
     } catch (e: any) {
-      showToast(e?.response?.data?.error ?? "Generation failed", "error");
+      toast.error(e?.response?.data?.error ?? "Generation failed");
     } finally { setGenerating(false); }
   }
 
@@ -129,10 +130,10 @@ export default function AdminPayslipsPage() {
         status:      newStatus,
         approved_by: user?.id,
       });
-      showToast(`Payslip ${newStatus}`, "success");
+      toast.success(`Payslip ${newStatus}`);
       await loadPayslips();
     } catch (e: any) {
-      showToast(e?.response?.data?.error ?? "Update failed", "error");
+      toast.error(e?.response?.data?.error ?? "Update failed");
     } finally { setUpdatingId(null); }
   }
 
@@ -142,272 +143,248 @@ export default function AdminPayslipsPage() {
   const totalApproved = payslips.filter(p => p.status === "approved").length;
   const totalDraft    = payslips.filter(p => p.status === "draft").length;
 
+  const stats = [
+    { label: "Total Payslips", value: String(payslips.length),         icon: FileText,     tone: "text-foreground",  bg: "bg-muted" },
+    { label: "Drafts",         value: String(totalDraft),              icon: Lock,         tone: "text-amber-600",   bg: "bg-amber-500/10" },
+    { label: "Approved",       value: String(totalApproved),           icon: CheckCircle2, tone: "text-sky-600",     bg: "bg-sky-500/10" },
+    { label: "Released Total", value: formatCurrency(totalReleased),   icon: IndianRupee,  tone: "text-emerald-600", bg: "bg-emerald-500/10" },
+  ];
+
   return (
     <DashboardShell
       moduleKey="payroll"
       title="Payroll & Payslips"
       subtitle="Generate, approve, and release employee payslips with auto-linked earnings."
       actions={
-        <Button variant="secondary" size="sm" onClick={loadPayslips} loading={loadingPayslips}>
-          <RefreshCw size={13} className="mr-1.5" /> Refresh
+        <Button variant="outline" size="sm" onClick={loadPayslips} disabled={loadingPayslips}>
+          {loadingPayslips ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+          Refresh
         </Button>
       }
     >
       <div className="space-y-5">
-
-        {/* Stats */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {[
-            { label: "Total Payslips", value: payslips.length,    icon: FileText,     color: "text-theme-fg",    bg: "bg-theme-raised" },
-            { label: "Drafts",         value: totalDraft,          icon: Lock,         color: "text-amber-600",   bg: "bg-amber-500/10" },
-            { label: "Approved",       value: totalApproved,       icon: CheckCircle2, color: "text-sky-600",     bg: "bg-sky-500/10"   },
-            { label: "Released Total", value: formatCurrency(totalReleased), icon: IndianRupee, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-          ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="page-card flex items-center gap-3">
-              <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl", bg)}>
-                <Icon size={15} className={color} />
-              </div>
-              <div>
-                <p className="text-[11px] text-theme-muted">{label}</p>
-                <p className={cn("text-xl font-black leading-tight", color)}>{value}</p>
-              </div>
-            </div>
+          {stats.map(({ label, value, icon: Icon, tone, bg }) => (
+            <Card key={label}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={cn("flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg", bg)}>
+                  <Icon size={15} className={tone} />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className={cn("text-lg font-semibold tabular-nums leading-tight", tone)}>{value}</p>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
 
         <div className="grid gap-5 lg:grid-cols-5">
-
           {/* Generator panel */}
           <div className="lg:col-span-2">
-            <div className="page-card">
-              <div className="mb-4 flex items-center gap-2">
-                <Zap size={15} className="text-amber-500" />
-                <span className="text-sm font-semibold text-theme-fg">Generate Payslip</span>
-              </div>
-              <p className="mb-4 text-[11px] text-theme-muted leading-relaxed">
-                Auto-calculates from base salary, incentive grants, and sales commission for the selected period.
-              </p>
+            <Card>
+              <CardContent className="p-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Zap size={15} className="text-amber-500" />
+                  <span className="text-sm font-semibold text-foreground">Generate Payslip</span>
+                </div>
+                <p className="mb-4 text-xs text-muted-foreground leading-relaxed">
+                  Auto-calculates from base salary, incentive grants, and sales commission for the selected period.
+                </p>
 
-              <div className="space-y-3">
-                {/* Employee */}
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Employee</label>
-                  <div className="relative">
-                    <select
-                      value={selectedEmp}
-                      onChange={(e) => setSelectedEmp(e.target.value)}
-                      className="w-full appearance-none rounded-lg border border-theme-border bg-theme-page pl-3 pr-8 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
-                    >
-                      <option value="">All employees</option>
-                      {employees.map((e) => (
-                        <option key={e.id || e._id} value={e.id || e._id}>{e.name} — {e.employeeId}</option>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Employee</Label>
+                    <Select value={selectedEmp || "all"} onValueChange={(v) => setSelectedEmp(v === "all" ? "" : v)}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="All employees" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All employees</SelectItem>
+                        {employees.map((e) => (
+                          <SelectItem key={e.id || e._id} value={e.id || e._id || ""}>
+                            {e.name} — {e.employeeId}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Month</Label>
+                      <Select value={String(genMonth)} onValueChange={(v) => setGenMonth(Number(v))}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {MONTHS.map((m) => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Year</Label>
+                      <Select value={String(genYear)} onValueChange={(v) => setGenYear(Number(v))}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {getYearRange().map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {selectedEmp && (
+                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2.5 space-y-1.5">
+                      <p className="text-xs font-semibold text-muted-foreground mb-1">Auto-linked sources</p>
+                      {[
+                        { label: "Base salary",        icon: IndianRupee, color: "text-muted-foreground" },
+                        { label: "HRA (40% of basic)", icon: TrendingUp,  color: "text-sky-500" },
+                        { label: "Incentive grants",   icon: Zap,         color: "text-amber-500" },
+                        { label: "Sales commission",   icon: TrendingUp,  color: "text-emerald-500" },
+                      ].map(({ label, icon: Icon, color }) => (
+                        <div key={label} className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Icon size={12} className={color} />
+                          <span>{label}</span>
+                        </div>
                       ))}
-                    </select>
-                    <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-muted" />
-                  </div>
-                </div>
-
-                {/* Month / Year */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Month</label>
-                    <div className="relative">
-                      <select
-                        value={genMonth}
-                        onChange={(e) => setGenMonth(Number(e.target.value))}
-                        className="w-full appearance-none rounded-lg border border-theme-border bg-theme-page pl-3 pr-8 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
-                      >
-                        {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                      </select>
-                      <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-muted" />
                     </div>
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Year</label>
-                    <div className="relative">
-                      <select
-                        value={genYear}
-                        onChange={(e) => setGenYear(Number(e.target.value))}
-                        className="w-full appearance-none rounded-lg border border-theme-border bg-theme-page pl-3 pr-8 py-2 text-sm text-theme-fg outline-none focus:border-theme-strong transition-all cursor-pointer"
-                      >
-                        {getYearRange().map((y) => <option key={y} value={y}>{y}</option>)}
-                      </select>
-                      <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-muted" />
-                    </div>
-                  </div>
+                  )}
+
+                  <Button
+                    type="button"
+                    className="w-full"
+                    disabled={generating || !selectedEmp}
+                    onClick={handleGenerate}
+                  >
+                    {generating ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+                    Generate Payslip
+                  </Button>
                 </div>
-
-                {/* Breakdown preview */}
-                {selectedEmp && (
-                  <div className="rounded-xl border border-theme-border bg-theme-raised px-4 py-3 space-y-1.5 text-xs">
-                    <p className="font-semibold text-theme-muted uppercase tracking-wide text-[10px] mb-2">Auto-linked sources</p>
-                    {[
-                      { label: "Base salary",       icon: IndianRupee, color: "text-theme-muted" },
-                      { label: "HRA (40% of basic)", icon: TrendingUp,  color: "text-sky-500"    },
-                      { label: "Incentive grants",   icon: Zap,         color: "text-amber-500"  },
-                      { label: "Sales commission",   icon: TrendingUp,  color: "text-emerald-500"},
-                    ].map(({ label, icon: Icon, color }) => (
-                      <div key={label} className="flex items-center gap-2 text-theme-muted">
-                        <Icon size={11} className={color} />
-                        <span>{label}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <Button
-                  variant="primary"
-                  className="w-full"
-                  loading={generating}
-                  disabled={!selectedEmp}
-                  onClick={handleGenerate}
-                >
-                  <Zap size={13} className="mr-1.5" />
-                  Generate Payslip
-                </Button>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Payslips table */}
           <div className="lg:col-span-3">
-            <div className="page-card overflow-hidden p-0">
-              {/* Header + tabs */}
-              <div className="flex flex-col gap-3 border-b border-theme-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <Card className="p-0 overflow-hidden">
+              <div className="flex flex-col gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
-                  <FileText size={14} className="text-theme-muted" />
-                  <span className="text-sm font-semibold text-theme-fg">
+                  <FileText size={14} className="text-muted-foreground" />
+                  <span className="text-sm font-semibold text-foreground">
                     Payslip Records
                     {selectedEmp && (
-                      <span className="ml-2 text-xs font-normal text-theme-muted">
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
                         — {employees.find(e => (e.id || e._id) === selectedEmp)?.name}
                       </span>
                     )}
                   </span>
                 </div>
-                <div className="flex rounded-xl border border-theme-border bg-theme-raised p-1 gap-0.5">
-                  {[
-                    { id: "all",      label: "All"      },
-                    { id: "draft",    label: "Drafts"   },
-                    { id: "approved", label: "Approved" },
-                    { id: "released", label: "Released" },
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setStatusFilter(t.id)}
-                      className={cn(
-                        "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
-                        statusFilter === t.id
-                          ? "bg-theme-surface text-theme-fg shadow-sm"
-                          : "text-theme-muted hover:text-theme-fg"
-                      )}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
+                <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+                  <TabsList>
+                    <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+                    <TabsTrigger value="draft" className="text-xs">Drafts</TabsTrigger>
+                    <TabsTrigger value="approved" className="text-xs">Approved</TabsTrigger>
+                    <TabsTrigger value="released" className="text-xs">Released</TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
 
-              {/* Table */}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-theme-border bg-theme-page text-left text-xs text-theme-muted">
-                      <th className="px-5 py-3 font-semibold">Employee</th>
-                      <th className="px-5 py-3 font-semibold">Period</th>
-                      <th className="px-5 py-3 font-semibold">Gross</th>
-                      <th className="px-5 py-3 font-semibold text-red-500">Deductions</th>
-                      <th className="px-5 py-3 font-semibold text-emerald-600">Net Pay</th>
-                      <th className="px-5 py-3 font-semibold">Status</th>
-                      <th className="px-5 py-3 font-semibold text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-theme-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Gross</TableHead>
+                      <TableHead className="text-rose-500">Deductions</TableHead>
+                      <TableHead className="text-emerald-600">Net Pay</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {loadingPayslips ? (
                       Array.from({ length: 4 }).map((_, i) => (
-                        <tr key={i}>
+                        <TableRow key={i}>
                           {Array.from({ length: 7 }).map((_, j) => (
-                            <td key={j} className="px-5 py-3">
-                              <div className="h-3 animate-pulse rounded bg-theme-raised" />
-                            </td>
+                            <TableCell key={j}><Skeleton className="h-4 w-20" /></TableCell>
                           ))}
-                        </tr>
+                        </TableRow>
                       ))
                     ) : filtered.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-12 text-center text-sm text-theme-subtle">
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
                           No payslips found. Generate one to get started.
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ) : filtered.map((p) => {
-                      const sc = STATUS_CONFIG[p.status] ?? STATUS_CONFIG.draft;
                       const empName = p.employee?.name ?? "—";
                       const empId   = p.employee?.employee_id ?? "";
                       const isUpdating = updatingId === p.id;
                       return (
-                        <tr key={p.id} className="group transition-colors hover:bg-theme-raised/40">
-                          <td className="px-5 py-3">
+                        <TableRow key={p.id}>
+                          <TableCell>
                             <div className="flex items-center gap-2.5">
-                              <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-black">
-                                {getInitials(empName)}
-                              </div>
+                              <Avatar className="h-8 w-8">
+                                <AvatarFallback className="text-[10px] font-semibold">{initials(empName)}</AvatarFallback>
+                              </Avatar>
                               <div>
-                                <p className="text-xs font-semibold text-theme-fg">{empName}</p>
-                                <p className="text-[10px] text-theme-subtle">{empId}</p>
+                                <p className="text-sm font-medium text-foreground">{empName}</p>
+                                <p className="text-xs text-muted-foreground">{empId}</p>
                               </div>
                             </div>
-                          </td>
-                          <td className="px-5 py-3 text-xs text-theme-muted">{monthLabel(p.month, p.year)}</td>
-                          <td className="px-5 py-3 text-xs font-semibold text-theme-fg">{formatCurrency(p.gross_pay)}</td>
-                          <td className="px-5 py-3 text-xs font-semibold text-red-500">−{formatCurrency(p.total_deductions)}</td>
-                          <td className="px-5 py-3 text-sm font-black text-emerald-600">{formatCurrency(p.net_pay)}</td>
-                          <td className="px-5 py-3">
-                            <span className={cn("inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold", sc.bg, sc.color)}>
-                              <span className={cn("h-1.5 w-1.5 rounded-full", sc.dot)} />
-                              {sc.label}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3">
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{monthLabel(p.month, p.year)}</TableCell>
+                          <TableCell className="text-sm font-medium text-foreground tabular-nums">{formatCurrency(p.gross_pay)}</TableCell>
+                          <TableCell className="text-sm font-medium text-rose-500 tabular-nums">−{formatCurrency(p.total_deductions)}</TableCell>
+                          <TableCell className="text-sm font-semibold text-emerald-600 tabular-nums">{formatCurrency(p.net_pay)}</TableCell>
+                          <TableCell>{statusBadge(p.status)}</TableCell>
+                          <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               {p.status === "draft" && (
-                                <button
-                                  onClick={() => updateStatus(p, "approved")}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 text-sky-600 border-sky-500/30 hover:bg-sky-500 hover:text-white"
                                   disabled={isUpdating}
-                                  className="flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-500/10 px-2.5 py-1 text-[11px] font-semibold text-sky-600 hover:bg-sky-500/20 transition-colors disabled:opacity-50"
+                                  onClick={() => updateStatus(p, "approved")}
                                 >
-                                  <CheckCircle2 size={11} /> Approve
-                                </button>
+                                  {isUpdating ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
+                                  Approve
+                                </Button>
                               )}
                               {p.status === "approved" && (
-                                <button
-                                  onClick={() => updateStatus(p, "released")}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-8 bg-emerald-500 hover:bg-emerald-500/90"
                                   disabled={isUpdating}
-                                  className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                                  onClick={() => updateStatus(p, "released")}
                                 >
-                                  <Send size={11} /> Release
-                                </button>
+                                  {isUpdating ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+                                  Release
+                                </Button>
                               )}
                               {p.status === "released" && (
-                                <span className="text-[11px] text-emerald-600 font-semibold">✓ Released</span>
+                                <span className="text-xs text-emerald-600 font-medium inline-flex items-center gap-1">
+                                  <CheckCircle2 size={12} /> Released
+                                </span>
                               )}
                             </div>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
 
-              <div className="flex items-center justify-between border-t border-theme-border bg-theme-page px-5 py-2.5">
-                <span className="text-xs text-theme-subtle">{filtered.length} payslip{filtered.length !== 1 ? "s" : ""}</span>
-                <span className="text-xs text-theme-subtle">
-                  Net total: <span className="font-bold text-theme-fg">
+              <div className="flex items-center justify-between border-t border-border bg-muted/30 px-5 py-2.5">
+                <span className="text-xs text-muted-foreground">{filtered.length} payslip{filtered.length !== 1 ? "s" : ""}</span>
+                <span className="text-xs text-muted-foreground">
+                  Net total: <span className="font-semibold text-foreground">
                     {formatCurrency(filtered.reduce((s, p) => s + p.net_pay, 0))}
                   </span>
                 </span>
               </div>
-            </div>
+            </Card>
           </div>
         </div>
       </div>

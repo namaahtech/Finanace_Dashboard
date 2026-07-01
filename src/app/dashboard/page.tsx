@@ -5,10 +5,11 @@ import Link from "next/link";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { CalendarWidget } from "@/components/calendar/CalendarWidget";
+import { ManagerHubWidget } from "@/components/dashboard/ManagerHubWidget";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { formatCurrency, cn } from "@/lib/utils";
 import { ProjectModal } from "@/components/projects/ProjectModal";
 import { ProjectCard } from "@/components/projects/ProjectCard";
@@ -252,6 +253,9 @@ export default function EmployeeDashboard() {
             </div>
           ))}
         </div>
+
+        {/* Manager Hub — only renders when user is_dept_lead or is_team_lead */}
+        <ManagerHubWidget />
 
         {/* Calendar Widget */}
         {user?.id && (

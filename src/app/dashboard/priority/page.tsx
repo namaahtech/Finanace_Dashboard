@@ -2,11 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge, statusBadgeVariant } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Badge, statusBadgeVariant } from "@/components/ui/BadgeLegacy";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { useApi } from "@/hooks/useApi";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/ToastLegacy";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import axios from "axios";
 import { Zap, AlertCircle, X, Plus } from "lucide-react";
 
@@ -122,23 +129,20 @@ export default function PriorityPage() {
                 <label className="mb-1.5 block text-xs font-semibold text-theme-muted">
                   Select Incentive
                 </label>
-                <select
-                  className="field"
-                  value={form.incentiveId}
-                  onChange={(e) => setForm({ ...form, incentiveId: e.target.value })}
-                  required
-                >
-                  <option value="">— Select an incentive —</option>
-                  {claimable.map((i) => (
-                    <option key={i._id} value={i._id}>
-                      {new Date(i.year, i.month - 1).toLocaleString("en-IN", {
-                        month: "long",
-                        year: "numeric",
-                      })}{" "}
-                      — {formatCurrency(i.amount)}
-                    </option>
-                  ))}
-                </select>
+                <Select value={form.incentiveId || undefined} onValueChange={(v) => setForm({ ...form, incentiveId: v })}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="— Select an incentive —" /></SelectTrigger>
+                  <SelectContent>
+                    {claimable.map((i) => (
+                      <SelectItem key={i._id} value={i._id}>
+                        {new Date(i.year, i.month - 1).toLocaleString("en-IN", {
+                          month: "long",
+                          year: "numeric",
+                        })}{" "}
+                        — {formatCurrency(i.amount)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>

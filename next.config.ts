@@ -2,7 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
-  serverExternalPackages: ["mongoose", "puppeteer"],
+  serverExternalPackages: ["mongoose", "puppeteer", "pdfjs-dist"],
+  webpack(config) {
+    // pdfjs-dist needs canvas alias to prevent server-side canvas import errors
+    config.resolve.alias = { ...config.resolve.alias, canvas: false };
+    return config;
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "lh3.googleusercontent.com" },

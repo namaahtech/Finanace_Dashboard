@@ -6,18 +6,48 @@ import Link from "next/link";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { ShareModal } from "@/components/workspace/ShareModal";
 import {
-  ArrowLeft, Plus, Trash2, MoreVertical, Share2, Bold, Italic,
-  AlignLeft, AlignCenter, AlignRight, FileSpreadsheet, Download, History,
-  Sparkles, Filter, Sigma, Type, X, Search, ChevronDown, Check,
-  Strikethrough, Underline, WrapText, Palette, BarChart2, Grid,
+  ArrowLeft, Plus, MoreVertical, Share2, Bold, Italic,
+  AlignLeft, AlignCenter, AlignRight, FileSpreadsheet, Download,
+  Sparkles, Filter, Sigma, X, Search,
+  Strikethrough, Underline, BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { 
-  ResponsiveContainer, BarChart, Bar, LineChart, Line, 
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area 
+import {
+  ResponsiveContainer, BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area
 } from "recharts";
 
 dayjs.extend(relativeTime);
@@ -33,7 +63,7 @@ interface CellStyle {
 interface SheetData {
   name: string;
   data: string[][];
-  styles?: Record<string, CellStyle>; // key: "row-col"
+  styles?: Record<string, CellStyle>;
   colWidths: number[];
 }
 
@@ -65,14 +95,12 @@ function evaluateFormula(formula: string, data: string[][]): string {
   try {
     const expr = formula.slice(1).toUpperCase();
 
-    // 1. SUM / AVERAGE / MIN / MAX / PRODUCT with multiple arguments/ranges
-    // e.g. =SUM(A1:B3, C5, 10)
     const aggMatch = expr.match(/^(SUM|AVERAGE|MIN|MAX|PRODUCT|COUNT)\((.*)\)$/);
     if (aggMatch) {
       const func = aggMatch[1];
       const argsStr = aggMatch[2];
       const vals: number[] = [];
-      
+
       const args = argsStr.split(",").map(a => a.trim());
       args.forEach(arg => {
         if (arg.includes(":")) {
@@ -95,25 +123,20 @@ function evaluateFormula(formula: string, data: string[][]): string {
       if (func === "MAX") return String(Math.max(...vals));
     }
 
-    // 2. IF(condition, true_val, false_val)
     const ifMatch = expr.match(/^IF\((.*),(.*),(.*)\)$/);
     if (ifMatch) {
       const cond = ifMatch[1].trim();
       const trueVal = ifMatch[2].trim();
       const falseVal = ifMatch[3].trim();
-      
-      // Simple condition evaluation
       const res = evaluateArithmetic(cond.replace(/([A-Z]+\d+)/g, (match) => {
         const col = COLS.indexOf(match.replace(/\d+/, ""));
         const row = parseInt(match.replace(/[A-Z]+/, "")) - 1;
         const v = data[row]?.[col] || "0";
         return isNaN(parseFloat(v)) ? `"${v}"` : v;
       }));
-      
       return res ? trueVal.replace(/^"|"$/g, "") : falseVal.replace(/^"|"$/g, "");
     }
 
-    // 3. CONCATENATE(a, b, ...)
     const concatMatch = expr.match(/^CONCATENATE\((.*)\)$/);
     if (concatMatch) {
       return concatMatch[1].split(",").map(a => {
@@ -127,7 +150,6 @@ function evaluateFormula(formula: string, data: string[][]): string {
       }).join("");
     }
 
-    // 4. Cell reference e.g. =A1
     const refMatch = expr.match(/^([A-Z]+)(\d+)$/);
     if (refMatch) {
       const col = COLS.indexOf(refMatch[1]);
@@ -135,7 +157,6 @@ function evaluateFormula(formula: string, data: string[][]): string {
       if (col >= 0 && row >= 0 && data[row]) return data[row][col] ?? "";
     }
 
-    // 5. Arithmetic expression
     return String(evaluateArithmetic(expr));
   } catch {
     return "#ERR";
@@ -176,26 +197,21 @@ export default function SpreadsheetEditorPage() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
-  const [menu, setMenu] = useState(false);
 
-  // Share
   const [showShare, setShowShare] = useState(false);
 
-  // AI
   const [showAI, setShowAI] = useState(false);
   const [aiAction, setAiAction] = useState("analyze_data");
   const [aiCustom, setAiCustom] = useState("");
   const [aiResult, setAiResult] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
 
-  // Find & Replace
   const [showFR, setShowFR] = useState(false);
   const [findTerm, setFindTerm] = useState("");
   const [replaceTerm, setReplaceTerm] = useState("");
   const [matches, setMatches] = useState<[number, number][]>([]);
   const [matchIdx, setMatchIdx] = useState(0);
 
-  // Charts
   const [showChart, setShowChart] = useState(false);
   const [chartType, setChartType] = useState<"bar" | "line" | "pie" | "area">("bar");
   const [chartData, setChartData] = useState<any[]>([]);
@@ -207,10 +223,8 @@ export default function SpreadsheetEditorPage() {
 
   useEffect(() => { if (id && user?.id) fetchDoc(); }, [id, user?.id]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Don't interfere if editing a cell or searching
       if (editCell || showFR || showAI) {
         if (e.key === "Escape") { setShowAI(false); setShowFR(false); setShowShare(false); }
         return;
@@ -221,21 +235,18 @@ export default function SpreadsheetEditorPage() {
 
       if (selectedCell) {
         const [r, c] = selectedCell;
-        
-        // Navigation
+
         if (e.key === "ArrowUp") { e.preventDefault(); if (r > 0) setSelectedCell([r - 1, c]); }
         if (e.key === "ArrowDown") { e.preventDefault(); if (r < ROWS - 1) setSelectedCell([r + 1, c]); }
         if (e.key === "ArrowLeft") { e.preventDefault(); if (c > 0) setSelectedCell([r, c - 1]); }
         if (e.key === "ArrowRight") { e.preventDefault(); if (c < DISPLAY_COLS - 1) setSelectedCell([r, c + 1]); }
-        
-        // Actions
+
         if (e.key === "Enter") { e.preventDefault(); setEditCell([r, c]); }
         if (e.key === "Backspace" || e.key === "Delete") {
           e.preventDefault();
           updateCell(r, c, "");
         }
 
-        // Start typing to edit
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           setEditCell([r, c]);
         }
@@ -260,8 +271,8 @@ export default function SpreadsheetEditorPage() {
         colWidths: s.colWidths?.length ? s.colWidths : Array(DISPLAY_COLS).fill(150),
       }));
       setSheets(normalized.length ? normalized : [{ name: "Sheet 1", data: ensureSize([], ROWS, DISPLAY_COLS), styles: {}, colWidths: Array(DISPLAY_COLS).fill(150) }]);
-    } catch { 
-      router.push("/admin/workspace/spreadsheets"); 
+    } catch {
+      router.push("/admin/workspace/spreadsheets");
     }
     finally { setLoading(false); }
   }
@@ -368,7 +379,7 @@ export default function SpreadsheetEditorPage() {
     const dataStr = sheet.data
       .filter((r) => r.some((c) => c !== ""))
       .slice(0, 30)
-      .map((r, i) => r.join("\t"))
+      .map((r) => r.join("\t"))
       .join("\n");
     setAiLoading(true);
     setAiResult("");
@@ -380,7 +391,7 @@ export default function SpreadsheetEditorPage() {
         context: `Spreadsheet: ${title}`,
       });
       setAiResult(res.data.result || "No result returned.");
-    } catch (e: any) {
+    } catch {
       setAiResult("AI is unavailable. Make sure Ollama is running locally with the configured model.");
     } finally {
       setAiLoading(false);
@@ -415,11 +426,10 @@ export default function SpreadsheetEditorPage() {
   function generateChart() {
     const sheet = sheets[activeSheet];
     if (!sheet) return;
-    
-    // Simple chart data generation from selected range or first few cols
+
     const dataRows = sheet.data.filter(r => r.some(c => c !== "")).slice(0, 10);
     const formatted = dataRows.map((r, i) => ({
-      name: r[0] || `Row ${i+1}`,
+      name: r[0] || `Row ${i + 1}`,
       value: parseFloat(r[1]) || 0,
       extra: parseFloat(r[2]) || 0,
     }));
@@ -441,34 +451,42 @@ export default function SpreadsheetEditorPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-theme-page">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-12 w-12 rounded-full border-4 border-theme-primary/20 border-t-theme-primary animate-spin" />
-          <p className="text-xs text-theme-muted animate-pulse">Loading spreadsheet…</p>
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4 w-72">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-[420px] w-full" />
+          <Skeleton className="h-6 w-2/3" />
         </div>
       </div>
     );
   }
 
+  const styleAtSelected = selectedCell && currentSheet
+    ? currentSheet.styles?.[`${selectedCell[0]}-${selectedCell[1]}`]
+    : undefined;
+
   return (
-    <div className="flex flex-col h-screen bg-theme-page overflow-hidden">
-      {/* ── HEADER ── */}
-      <header className="h-14 bg-theme-primary flex items-center justify-between px-4 z-50 shadow-md flex-shrink-0">
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
+      {/* HEADER */}
+      <header className="h-14 bg-primary flex items-center justify-between px-4 z-50 shadow-sm flex-shrink-0 border-b border-border">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Link href="/admin/workspace/spreadsheets" className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-all flex-shrink-0">
+          <Link
+            href="/admin/workspace/spreadsheets"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors flex-shrink-0"
+          >
             <ArrowLeft size={16} />
           </Link>
-          <div className="h-6 w-px bg-white/20 flex-shrink-0" />
-          <div className="text-xl bg-white/10 px-1.5 py-1 rounded-lg flex-shrink-0">{doc?.icon ?? "📊"}</div>
+          <Separator orientation="vertical" className="bg-white/20 h-6" />
+          <div className="text-xl bg-white/10 px-1.5 py-1 rounded-md flex-shrink-0">{doc?.icon ?? "📊"}</div>
           <div className="flex flex-col flex-1 min-w-0">
-            <input
+            <Input
               value={title}
               onChange={(e) => saveTitle(e.target.value)}
-              className="bg-transparent font-bold text-white text-sm focus:outline-none placeholder:text-white/40 truncate w-full"
+              className="h-7 bg-transparent border-0 px-0 font-semibold text-white text-sm focus-visible:ring-0 placeholder:text-white/40 truncate"
               placeholder="Untitled Spreadsheet"
             />
-            <p className="text-[10px] text-white/60 flex items-center gap-1.5">
-              <FileSpreadsheet size={9} />
+            <p className="text-xs text-white/70 flex items-center gap-1.5">
+              <FileSpreadsheet size={10} />
               Namaah Sheets
               <span className="opacity-40">·</span>
               {saving ? "Saving…" : savedAt ? `Saved ${dayjs(savedAt).fromNow()}` : `Edited ${dayjs(doc?.last_edited_at).fromNow()}`}
@@ -477,164 +495,178 @@ export default function SpreadsheetEditorPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button
+          <Button
+            type="button"
             onClick={() => setShowShare(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-all"
+            size="sm"
+            className="h-8 bg-white/15 hover:bg-white/25 text-white"
           >
-            <Share2 size={13} /> Share
-          </button>
-          <button
+            <Share2 size={13} className="mr-1.5" /> Share
+          </Button>
+          <Button
+            type="button"
             onClick={() => setShowAI(!showAI)}
+            size="sm"
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
-              showAI ? "bg-white text-theme-primary" : "bg-white/15 hover:bg-white/25 text-white"
+              "h-8",
+              showAI ? "bg-white text-primary hover:bg-white/90" : "bg-white/15 hover:bg-white/25 text-white"
             )}
           >
-            <Sparkles size={13} /> AI
-          </button>
-          <div className="relative">
-            <button
-              onClick={() => setMenu(!menu)}
-              className="h-8 w-8 rounded-lg bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-all"
-            >
-              <MoreVertical size={16} />
-            </button>
-            {menu && (
-              <div className="absolute right-0 top-10 z-[60] w-48 bg-theme-surface border border-theme-border rounded-xl shadow-2xl p-1.5 animate-in slide-in-from-top-2">
-                <button onClick={() => { exportCSV(); setMenu(false); }}
-                  className="w-full text-left text-xs px-3 py-2.5 rounded-lg hover:bg-theme-raised flex items-center gap-2.5 text-theme-fg">
-                  <Download size={13} className="text-theme-primary" /> Export CSV
-                </button>
-                <button onClick={() => { setShowFR(true); setMenu(false); }}
-                  className="w-full text-left text-xs px-3 py-2.5 rounded-lg hover:bg-theme-raised flex items-center gap-2.5 text-theme-fg">
-                  <Search size={13} className="text-amber-500" /> Find & Replace
-                </button>
-                <div className="h-px bg-theme-border my-1" />
-                <button onClick={() => router.push("/admin/workspace/spreadsheets")}
-                  className="w-full text-left text-xs px-3 py-2.5 rounded-lg hover:bg-theme-raised flex items-center gap-2.5 text-theme-fg">
-                  <ArrowLeft size={13} className="text-theme-muted" /> Back to list
-                </button>
-              </div>
-            )}
-          </div>
+            <Sparkles size={13} className="mr-1.5" /> AI
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 bg-white/15 hover:bg-white/25 text-white"
+              >
+                <MoreVertical size={16} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={exportCSV}>
+                <Download size={13} className="mr-2 text-primary" /> Export CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowFR(true)}>
+                <Search size={13} className="mr-2 text-amber-500" /> Find & Replace
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push("/admin/workspace/spreadsheets")}>
+                <ArrowLeft size={13} className="mr-2 text-muted-foreground" /> Back to list
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
-      {/* ── FORMULA BAR ── */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-theme-surface border-b border-theme-border flex-shrink-0">
-        <div className="flex items-center bg-theme-raised border border-theme-border rounded-lg px-3 py-1 min-w-[60px]">
-          <span className="text-[11px] font-bold text-theme-primary">{cellRef}</span>
+      {/* FORMULA BAR */}
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-card border-b border-border flex-shrink-0">
+        <div className="flex items-center bg-muted/40 border border-border rounded-md px-3 h-8 min-w-[64px]">
+          <span className="text-xs font-semibold text-primary">{cellRef}</span>
         </div>
-        <div className="h-5 w-px bg-theme-border" />
-        <span className="text-xs text-theme-muted">=</span>
-        <input
+        <Separator orientation="vertical" className="h-6" />
+        <span className="text-xs text-muted-foreground">ƒx</span>
+        <Input
           value={formulaBar}
           onChange={(e) => {
             setFormulaBar(e.target.value);
             if (selectedCell) updateCell(selectedCell[0], selectedCell[1], e.target.value);
           }}
           placeholder="Enter value or formula (e.g. =SUM(A1:A10))"
-          className="flex-1 bg-transparent text-xs text-theme-fg outline-none placeholder:text-theme-muted/50"
+          className="h-8 flex-1 bg-transparent border-0 focus-visible:ring-0 text-xs"
         />
       </div>
 
-      {/* ── TOOLBAR ── */}
-      <div className="flex items-center gap-1 px-3 py-1.5 bg-theme-surface border-b border-theme-border overflow-x-auto flex-shrink-0">
-        <div className="flex items-center gap-0.5">
-          <button 
-            onClick={() => selectedCell && currentSheet && updateCellStyle(selectedCell[0], selectedCell[1], { bold: !(currentSheet.styles?.[`${selectedCell[0]}-${selectedCell[1]}`]?.bold) })}
-            className={cn("p-1.5 rounded-lg transition-all", currentSheet?.styles?.[`${selectedCell?.[0]}-${selectedCell?.[1]}`]?.bold ? "bg-theme-primary/10 text-theme-primary" : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg")} 
-            title="Bold"
-          >
-            <Bold size={14} />
-          </button>
-          <button 
-            onClick={() => selectedCell && currentSheet && updateCellStyle(selectedCell[0], selectedCell[1], { italic: !(currentSheet.styles?.[`${selectedCell[0]}-${selectedCell[1]}`]?.italic) })}
-            className={cn("p-1.5 rounded-lg transition-all", currentSheet?.styles?.[`${selectedCell?.[0]}-${selectedCell?.[1]}`]?.italic ? "bg-theme-primary/10 text-theme-primary" : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg")} 
-            title="Italic"
-          >
-            <Italic size={14} />
-          </button>
-          <button 
-            onClick={() => selectedCell && currentSheet && updateCellStyle(selectedCell[0], selectedCell[1], { underline: !(currentSheet.styles?.[`${selectedCell[0]}-${selectedCell[1]}`]?.underline) })}
-            className={cn("p-1.5 rounded-lg transition-all", currentSheet?.styles?.[`${selectedCell?.[0]}-${selectedCell?.[1]}`]?.underline ? "bg-theme-primary/10 text-theme-primary" : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg")} 
-            title="Underline"
-          >
-            <Underline size={14} />
-          </button>
-          <button className="p-1.5 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all" title="Strikethrough"><Strikethrough size={14} /></button>
-        </div>
-        <div className="h-5 w-px bg-theme-border mx-1" />
-        <div className="flex items-center gap-0.5">
-          <button 
-            onClick={() => selectedCell && currentSheet && updateCellStyle(selectedCell[0], selectedCell[1], { align: 'left' })}
-            className={cn("p-1.5 rounded-lg transition-all", currentSheet?.styles?.[`${selectedCell?.[0]}-${selectedCell?.[1]}`]?.align === 'left' ? "bg-theme-primary/10 text-theme-primary" : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg")} 
-            title="Align left"
-          >
-            <AlignLeft size={14} />
-          </button>
-          <button 
-            onClick={() => selectedCell && currentSheet && updateCellStyle(selectedCell[0], selectedCell[1], { align: 'center' })}
-            className={cn("p-1.5 rounded-lg transition-all", currentSheet?.styles?.[`${selectedCell?.[0]}-${selectedCell?.[1]}`]?.align === 'center' ? "bg-theme-primary/10 text-theme-primary" : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg")} 
-            title="Align center"
-          >
-            <AlignCenter size={14} />
-          </button>
-          <button 
-            onClick={() => selectedCell && currentSheet && updateCellStyle(selectedCell[0], selectedCell[1], { align: 'right' })}
-            className={cn("p-1.5 rounded-lg transition-all", currentSheet?.styles?.[`${selectedCell?.[0]}-${selectedCell?.[1]}`]?.align === 'right' ? "bg-theme-primary/10 text-theme-primary" : "text-theme-muted hover:bg-theme-raised hover:text-theme-fg")} 
-            title="Align right"
-          >
-            <AlignRight size={14} />
-          </button>
-        </div>
-        <div className="h-5 w-px bg-theme-border mx-1" />
-        <div className="flex items-center gap-0.5">
-          <button onClick={addRow} className="p-1.5 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all flex items-center gap-1 text-[10px] font-semibold" title="Add row">
-            <Plus size={12} /> Row
-          </button>
-          <button onClick={addCol} className="p-1.5 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all flex items-center gap-1 text-[10px] font-semibold" title="Add column">
-            <Plus size={12} /> Col
-          </button>
-        </div>
-        <div className="h-5 w-px bg-theme-border mx-1" />
-        <div className="flex items-center gap-0.5">
-          <button className="p-1.5 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all" title="Filter"><Filter size={14} /></button>
-          <button className="p-1.5 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all" title="Formula"><Sigma size={14} /></button>
-          <button onClick={generateChart} className="p-1.5 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all" title="Chart"><BarChart2 size={14} /></button>
-        </div>
-        <div className="h-5 w-px bg-theme-border mx-1" />
-        <button
+      {/* TOOLBAR */}
+      <div className="flex items-center gap-1 px-3 py-1.5 bg-card border-b border-border overflow-x-auto flex-shrink-0">
+        <Button
+          type="button"
+          variant={styleAtSelected?.bold ? "secondary" : "ghost"}
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => selectedCell && currentSheet && updateCellStyle(selectedCell[0], selectedCell[1], { bold: !styleAtSelected?.bold })}
+          title="Bold"
+        >
+          <Bold size={14} />
+        </Button>
+        <Button
+          type="button"
+          variant={styleAtSelected?.italic ? "secondary" : "ghost"}
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => selectedCell && currentSheet && updateCellStyle(selectedCell[0], selectedCell[1], { italic: !styleAtSelected?.italic })}
+          title="Italic"
+        >
+          <Italic size={14} />
+        </Button>
+        <Button
+          type="button"
+          variant={styleAtSelected?.underline ? "secondary" : "ghost"}
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => selectedCell && currentSheet && updateCellStyle(selectedCell[0], selectedCell[1], { underline: !styleAtSelected?.underline })}
+          title="Underline"
+        >
+          <Underline size={14} />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" title="Strikethrough" disabled>
+          <Strikethrough size={14} />
+        </Button>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        <ToggleGroup
+          type="single"
+          value={styleAtSelected?.align || ""}
+          onValueChange={(v) => {
+            if (!v || !selectedCell || !currentSheet) return;
+            updateCellStyle(selectedCell[0], selectedCell[1], { align: v as 'left' | 'center' | 'right' });
+          }}
+          size="sm"
+        >
+          <ToggleGroupItem value="left" title="Align left"><AlignLeft size={14} /></ToggleGroupItem>
+          <ToggleGroupItem value="center" title="Align center"><AlignCenter size={14} /></ToggleGroupItem>
+          <ToggleGroupItem value="right" title="Align right"><AlignRight size={14} /></ToggleGroupItem>
+        </ToggleGroup>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={addRow}>
+          <Plus size={12} className="mr-1" /> Row
+        </Button>
+        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={addCol}>
+          <Plus size={12} className="mr-1" /> Col
+        </Button>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" title="Filter" disabled>
+          <Filter size={14} />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" title="Formula" disabled>
+          <Sigma size={14} />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={generateChart} title="Chart">
+          <BarChart2 size={14} />
+        </Button>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        <Button
+          type="button"
+          variant={showAI ? "default" : "outline"}
+          size="sm"
+          className="h-8"
           onClick={() => setShowAI(!showAI)}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all",
-            showAI ? "bg-theme-primary text-theme-surface" : "bg-theme-primary/10 text-theme-primary hover:bg-theme-primary/20"
-          )}
         >
-          <Sparkles size={12} /> AI Assist
-        </button>
-        <button
-          onClick={() => { setShowFR(true); }}
-          className="ml-1 flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-semibold text-theme-muted hover:bg-theme-raised transition-all"
+          <Sparkles size={12} className="mr-1.5" /> AI Assist
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8"
+          onClick={() => setShowFR(true)}
         >
-          <Search size={12} /> Find
-        </button>
+          <Search size={12} className="mr-1" /> Find
+        </Button>
       </div>
 
-      {/* ── MAIN AREA ── */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Grid */}
-        <div className="flex-1 overflow-auto bg-theme-page">
+      {/* MAIN */}
+      <div className="flex flex-1 overflow-hidden min-w-0">
+        <div className="flex-1 overflow-auto bg-muted/30">
           {currentSheet && (
             <table className="border-collapse text-xs table-fixed" style={{ width: "max-content" }}>
               <thead className="sticky top-0 z-20">
                 <tr>
-                  <th className="w-12 bg-theme-surface border border-theme-border/60" />
+                  <th className="w-12 bg-muted/50 border border-border" />
                   {currentSheet.data[0]?.map((_, ci) => (
                     <th
                       key={ci}
                       style={{ width: currentSheet.colWidths[ci] ?? 150 }}
-                      className="bg-theme-surface border border-theme-border/60 px-2 py-1.5 text-center text-theme-muted font-semibold select-none text-[11px]"
+                      className="bg-muted/50 border border-border px-2 py-1.5 text-center text-muted-foreground font-semibold select-none text-[11px]"
                     >
                       {COLS[ci] ?? ci}
                     </th>
@@ -644,7 +676,7 @@ export default function SpreadsheetEditorPage() {
               <tbody>
                 {currentSheet.data.map((row, ri) => (
                   <tr key={ri} className="group">
-                    <td className="w-12 bg-theme-surface border border-theme-border/60 px-2 py-1 text-center text-theme-muted font-medium select-none text-[11px]">
+                    <td className="w-12 bg-muted/50 border border-border px-2 py-1 text-center text-muted-foreground font-medium select-none text-[11px]">
                       {ri + 1}
                     </td>
                     {row.map((cell, ci) => {
@@ -659,10 +691,10 @@ export default function SpreadsheetEditorPage() {
                           onClick={() => { setSelectedCell([ri, ci]); setFormulaBar(cell); }}
                           onDoubleClick={() => setEditCell([ri, ci])}
                           className={cn(
-                            "border border-theme-border/40 relative p-0 h-8 transition-all",
-                            isSelected && !isEditing && "ring-2 ring-theme-primary ring-inset z-10 bg-theme-primary/5",
+                            "border border-border/60 relative p-0 h-8 transition-colors bg-card",
+                            isSelected && !isEditing && "ring-2 ring-primary ring-inset z-10 bg-primary/5",
                             isMatch && !isSelected && "bg-amber-500/10",
-                            !isSelected && !isMatch && "hover:bg-theme-surface"
+                            !isSelected && !isMatch && "hover:bg-muted/50"
                           )}
                         >
                           {isEditing ? (
@@ -684,13 +716,13 @@ export default function SpreadsheetEditorPage() {
                                 }
                                 if (e.key === "Escape") setEditCell(null);
                               }}
-                              className="absolute inset-0 w-full h-full px-2 bg-theme-surface text-theme-fg text-xs font-medium focus:outline-none z-20 shadow-lg"
+                              className="absolute inset-0 w-full h-full px-2 bg-card text-foreground text-xs font-medium focus:outline-none z-20 shadow-md"
                             />
                           ) : (
-                            <div 
+                            <div
                               className={cn(
-                                "px-2 py-1 truncate text-xs transition-all", 
-                                displayVal === "#ERR" ? "text-rose-500" : "text-theme-fg"
+                                "px-2 py-1 truncate text-xs",
+                                displayVal === "#ERR" ? "text-destructive" : "text-foreground"
                               )}
                               style={{
                                 fontWeight: currentSheet.styles?.[`${ri}-${ci}`]?.bold ? 'bold' : 'normal',
@@ -713,54 +745,62 @@ export default function SpreadsheetEditorPage() {
           )}
         </div>
 
-        {/* ── AI PANEL ── */}
+        {/* AI PANEL */}
         {showAI && (
-          <div className="w-80 flex-shrink-0 border-l border-theme-border bg-theme-surface flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-theme-border">
+          <aside className="w-80 flex-shrink-0 border-l border-border bg-card flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div className="flex items-center gap-2">
-                <Sparkles size={14} className="text-theme-primary" />
-                <span className="text-xs font-bold text-theme-fg">AI Assist</span>
+                <Sparkles size={14} className="text-primary" />
+                <span className="text-sm font-semibold">AI Assist</span>
               </div>
-              <button onClick={() => setShowAI(false)} className="text-theme-muted hover:text-theme-fg">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setShowAI(false)}
+              >
                 <X size={14} />
-              </button>
+              </Button>
             </div>
 
-            <div className="p-4 space-y-3 flex-1 overflow-y-auto custom-scrollbar">
+            <div className="p-4 space-y-3 flex-1 overflow-y-auto">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-theme-muted">What to do</label>
-                <select
-                  value={aiAction}
-                  onChange={(e) => setAiAction(e.target.value)}
-                  className="w-full rounded-xl border border-theme-border bg-theme-raised px-3 py-2 text-xs text-theme-fg outline-none focus:border-theme-primary"
-                >
-                  <optgroup label="Data Analysis">
-                    <option value="analyze_data">Analyze & summarize data</option>
-                    <option value="predict_values">Predict next values</option>
-                    <option value="clean_data">Suggest data cleaning</option>
-                    <option value="chart_suggest">Suggest best chart type</option>
-                  </optgroup>
-                  <optgroup label="Formulas">
-                    <option value="formula_explain">Explain a formula</option>
-                    <option value="formula_suggest">Suggest a formula</option>
-                  </optgroup>
-                  <optgroup label="Content">
-                    <option value="natural_query">Ask a question about data</option>
-                    <option value="generate_data">Generate sample data</option>
-                    <option value="summarize">Summarize content</option>
-                  </optgroup>
-                </select>
+                <Label className="text-xs">What to do</Label>
+                <Select value={aiAction} onValueChange={setAiAction}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Data Analysis</SelectLabel>
+                      <SelectItem value="analyze_data">Analyze & summarize data</SelectItem>
+                      <SelectItem value="predict_values">Predict next values</SelectItem>
+                      <SelectItem value="clean_data">Suggest data cleaning</SelectItem>
+                      <SelectItem value="chart_suggest">Suggest best chart type</SelectItem>
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Formulas</SelectLabel>
+                      <SelectItem value="formula_explain">Explain a formula</SelectItem>
+                      <SelectItem value="formula_suggest">Suggest a formula</SelectItem>
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Content</SelectLabel>
+                      <SelectItem value="natural_query">Ask a question about data</SelectItem>
+                      <SelectItem value="generate_data">Generate sample data</SelectItem>
+                      <SelectItem value="summarize">Summarize content</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </div>
 
               {(aiAction === "formula_explain" || aiAction === "formula_suggest" || aiAction === "natural_query" || aiAction === "generate_data") && (
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold text-theme-muted">
+                  <Label className="text-xs">
                     {aiAction === "formula_explain" ? "Paste the formula" :
                      aiAction === "formula_suggest" ? "What do you want to calculate?" :
                      aiAction === "natural_query" ? "Your question" :
                      "Describe the data to generate"}
-                  </label>
-                  <textarea
+                  </Label>
+                  <Textarea
                     value={aiCustom}
                     onChange={(e) => setAiCustom(e.target.value)}
                     rows={3}
@@ -770,196 +810,197 @@ export default function SpreadsheetEditorPage() {
                       aiAction === "natural_query" ? "e.g. What is the average of column B?" :
                       "e.g. Employee attendance data with Name, Date, Status"
                     }
-                    className="w-full rounded-xl border border-theme-border bg-theme-raised px-3 py-2 text-xs text-theme-fg outline-none focus:border-theme-primary resize-none"
+                    className="resize-none text-xs"
                   />
                 </div>
               )}
 
-              <button
+              <Button
+                type="button"
                 onClick={runAI}
                 disabled={aiLoading}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-theme-primary py-2.5 text-xs font-semibold text-theme-surface hover:opacity-90 transition-all disabled:opacity-50"
+                size="sm"
+                className="w-full"
               >
                 {aiLoading ? (
-                  <><div className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Thinking…</>
+                  <>
+                    <div className="h-3 w-3 mr-1.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    Thinking…
+                  </>
                 ) : (
-                  <><Sparkles size={12} /> Run AI</>
+                  <><Sparkles size={12} className="mr-1.5" /> Run AI</>
                 )}
-              </button>
+              </Button>
 
               {aiResult && (
-                <div className="rounded-xl border border-theme-border bg-theme-raised p-3 space-y-2">
+                <div className="rounded-md border border-border bg-muted/40 p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-semibold text-theme-muted">Result</p>
-                    <button
+                    <p className="text-xs font-semibold text-muted-foreground">Result</p>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs"
                       onClick={() => navigator.clipboard.writeText(aiResult)}
-                      className="text-[10px] text-theme-primary hover:underline"
                     >
                       Copy
-                    </button>
+                    </Button>
                   </div>
-                  <p className="text-xs text-theme-fg leading-relaxed whitespace-pre-wrap">{aiResult}</p>
+                  <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{aiResult}</p>
                 </div>
               )}
             </div>
-          </div>
+          </aside>
         )}
       </div>
 
-      {/* ── SHEET TABS ── */}
-      <footer className="h-10 bg-theme-surface border-t border-theme-border flex items-center justify-between px-3 z-50 flex-shrink-0">
+      {/* SHEET TABS */}
+      <footer className="h-10 bg-card border-t border-border flex items-center justify-between px-3 z-50 flex-shrink-0">
         <div className="flex items-center gap-0.5 h-full">
           {sheets.map((s, i) => (
             <button
               key={i}
               onClick={() => setActiveSheet(i)}
               className={cn(
-                "px-4 h-full flex items-center text-xs font-semibold transition-all border-b-2",
+                "px-4 h-full flex items-center text-xs font-medium transition-colors border-b-2",
                 activeSheet === i
-                  ? "text-theme-primary border-theme-primary bg-theme-primary/5"
-                  : "text-theme-muted border-transparent hover:bg-theme-raised"
+                  ? "text-primary border-primary bg-primary/5"
+                  : "text-muted-foreground border-transparent hover:bg-muted/50"
               )}
             >
               {s.name}
             </button>
           ))}
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 ml-1"
             onClick={addSheet}
-            className="px-2 h-full flex items-center text-theme-muted hover:bg-theme-raised transition-all rounded-lg"
           >
             <Plus size={13} />
-          </button>
+          </Button>
         </div>
-        <div className="flex items-center gap-4 text-[10px] text-theme-muted">
+        <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
           <span>{currentSheet?.data.length ?? 0} rows · {currentSheet?.data[0]?.length ?? 0} cols</span>
-          {selectedCell && <span className="text-theme-primary font-semibold">{cellRef} selected</span>}
+          {selectedCell && <span className="text-primary font-semibold">{cellRef} selected</span>}
         </div>
       </footer>
 
-      {/* ── FIND & REPLACE ── */}
-      {showFR && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9000] w-80 rounded-2xl border border-theme-border bg-theme-surface shadow-2xl p-4 space-y-3 animate-in zoom-in-95 duration-150">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-theme-fg">Find & Replace</p>
-            <button onClick={() => setShowFR(false)}><X size={14} className="text-theme-muted" /></button>
+      {/* FIND & REPLACE */}
+      <Dialog open={showFR} onOpenChange={setShowFR}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Find & Replace</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Find</Label>
+              <Input
+                autoFocus
+                value={findTerm}
+                onChange={(e) => { setFindTerm(e.target.value); findAll(e.target.value); }}
+                placeholder="Search term…"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Replace with</Label>
+              <Input
+                value={replaceTerm}
+                onChange={(e) => setReplaceTerm(e.target.value)}
+                placeholder="Replacement…"
+              />
+            </div>
+            {matches.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {matches.length} match{matches.length !== 1 ? "es" : ""} found
+              </p>
+            )}
           </div>
-          <div className="space-y-2">
-            <input
-              autoFocus
-              value={findTerm}
-              onChange={(e) => { setFindTerm(e.target.value); findAll(e.target.value); }}
-              placeholder="Find…"
-              className="w-full rounded-xl border border-theme-border bg-theme-raised px-3 py-2 text-xs outline-none focus:border-theme-primary"
-            />
-            <input
-              value={replaceTerm}
-              onChange={(e) => setReplaceTerm(e.target.value)}
-              placeholder="Replace with…"
-              className="w-full rounded-xl border border-theme-border bg-theme-raised px-3 py-2 text-xs outline-none focus:border-theme-primary"
-            />
-          </div>
-          {matches.length > 0 && (
-            <p className="text-[10px] text-theme-muted">{matches.length} match{matches.length !== 1 ? "es" : ""} found</p>
-          )}
-          <div className="flex gap-2">
-            <button
-              onClick={replaceAll}
-              className="flex-1 rounded-xl bg-theme-primary py-2 text-xs font-semibold text-theme-surface hover:opacity-90"
-            >
-              Replace All
-            </button>
-            <button onClick={() => setShowFR(false)} className="flex-1 rounded-xl border border-theme-border py-2 text-xs font-semibold text-theme-fg hover:bg-theme-raised">
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowFR(false)}>Close</Button>
+            <Button type="button" onClick={replaceAll}>Replace All</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* ── CHART MODAL ── */}
-      {showChart && (
-        <div className="fixed inset-0 z-[9500] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-4xl h-[600px] rounded-3xl bg-theme-surface shadow-2xl border border-theme-border flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-theme-border bg-theme-raised/30">
-              <div className="flex items-center gap-3">
-                <BarChart2 size={18} className="text-theme-primary" />
-                <h3 className="text-sm font-bold text-theme-fg">Chart: {title}</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex rounded-xl border border-theme-border bg-theme-surface p-1">
-                  {(["bar", "line", "pie", "area"] as const).map(t => (
-                    <button key={t} onClick={() => setChartType(t)}
-                      className={cn("px-3 py-1 text-[10px] font-bold rounded-lg transition-all capitalize", 
-                        chartType === t ? "bg-theme-primary text-white shadow-sm" : "text-theme-muted hover:text-theme-fg hover:bg-theme-raised"
-                      )}>
-                      {t}
-                    </button>
-                  ))}
-                </div>
-                <button onClick={() => setShowChart(false)} className="rounded-xl p-2 text-theme-muted hover:bg-theme-raised transition-all">
-                  <X size={18} />
-                </button>
-              </div>
+      {/* CHART MODAL */}
+      <Dialog open={showChart} onOpenChange={setShowChart}>
+        <DialogContent className="sm:max-w-4xl !grid-rows-[auto_1fr_auto] !grid max-h-[calc(100vh-6rem)]">
+          <DialogHeader>
+            <div className="flex items-center justify-between gap-4">
+              <DialogTitle className="flex items-center gap-2">
+                <BarChart2 size={16} className="text-primary" /> Chart: {title}
+              </DialogTitle>
+              <ToggleGroup
+                type="single"
+                value={chartType}
+                onValueChange={(v) => v && setChartType(v as typeof chartType)}
+                size="sm"
+              >
+                <ToggleGroupItem value="bar" className="text-xs capitalize">Bar</ToggleGroupItem>
+                <ToggleGroupItem value="line" className="text-xs capitalize">Line</ToggleGroupItem>
+                <ToggleGroupItem value="area" className="text-xs capitalize">Area</ToggleGroupItem>
+                <ToggleGroupItem value="pie" className="text-xs capitalize">Pie</ToggleGroupItem>
+              </ToggleGroup>
             </div>
-            
-            <div className="flex-1 p-8 bg-white/50">
-              <ResponsiveContainer width="100%" height="100%">
-                {chartType === "bar" ? (
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
-                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: 10 }} />
-                    <Bar dataKey="value" fill="#10B981" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="extra" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                ) : chartType === "line" ? (
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
-                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: 10 }} />
-                    <Line type="monotone" dataKey="value" stroke="#10B981" strokeWidth={2} dot={{ r: 4, fill: '#10B981' }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="extra" stroke="#3B82F6" strokeWidth={2} dot={{ r: 4, fill: '#3B82F6' }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                ) : chartType === "area" ? (
-                  <AreaChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
-                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                    <Area type="monotone" dataKey="value" stroke="#10B981" fillOpacity={0.2} fill="url(#colorVal)" />
-                    <defs>
-                      <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                  </AreaChart>
-                ) : (
-                  <PieChart>
-                    <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={120} label>
-                      {chartData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={["#10B981", "#3B82F6", "#F59E0B", "#EF4444", "#8B5CF6"][index % 5]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                )}
-              </ResponsiveContainer>
-            </div>
-            <div className="p-4 border-t border-theme-border bg-theme-surface flex justify-end">
-              <button onClick={() => setShowChart(false)} className="rounded-xl bg-theme-fg text-theme-surface px-6 py-2 text-xs font-bold hover:opacity-90 transition-all">
-                Close Chart
-              </button>
-            </div>
+          </DialogHeader>
+          <div className="flex-1 min-h-[420px] p-4 bg-muted/30 rounded-md border border-border">
+            <ResponsiveContainer width="100%" height="100%">
+              {chartType === "bar" ? (
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', fontSize: 12 }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="value" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="extra" fill="var(--chart-2, #3B82F6)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              ) : chartType === "line" ? (
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', fontSize: 12 }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="value" stroke="var(--primary)" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                  <Line type="monotone" dataKey="extra" stroke="var(--chart-2, #3B82F6)" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                </LineChart>
+              ) : chartType === "area" ? (
+                <AreaChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', fontSize: 12 }} />
+                  <defs>
+                    <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="value" stroke="var(--primary)" fillOpacity={1} fill="url(#colorVal)" />
+                </AreaChart>
+              ) : (
+                <PieChart>
+                  <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={120} label>
+                    {chartData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={["var(--primary)", "#3B82F6", "#F59E0B", "#EF4444", "#8B5CF6"][index % 5]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              )}
+            </ResponsiveContainer>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowChart(false)}>Close Chart</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* ── SHARE MODAL ── */}
+      {/* SHARE MODAL */}
       {showShare && doc && user && (
         <ShareModal
           itemId={id}

@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/layout/AuthProvider";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Send, Search, Loader2, PenLine, Paperclip, X, MailOpen } from "lucide-react";
@@ -11,7 +12,7 @@ import { formatDistanceToNow, format } from "date-fns";
 type MailMessage = {
   id: string; zoho_message_id: string; subject: string;
   from_name: string; from_address: string; to_address: string[];
-  preview: string; received_at: string; has_attachment: boolean;
+  preview: string; body: string; received_at: string; has_attachment: boolean;
   ai_category: string; ai_priority: number;
 };
 
@@ -20,28 +21,75 @@ function getInitials(n: string) {
 }
 
 export default function SentPage() {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<MailMessage[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [search,   setSearch]   = useState("");
   const [selected, setSelected] = useState<MailMessage | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // Intercept attachment clicks and open custom tabbed preview page
+  useEffect(() => {
+    const container = bodyRef.current;
+    if (!container) return;
+    const handler = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest("a");
+      if (!target) return;
+      const href = target.getAttribute("href") || target.href || "";
+      const isAttachmentUrl = href.includes("/api/mail/attachments/download") || href.includes("/api/mail/attachments?");
+      if (!isAttachmentUrl) return;
+      
+      // Stop the native browser download and open the preview page in a new tab instead!
+      e.preventDefault();
+      e.stopPropagation();
+      const previewUrl = href
+        .replace("/api/mail/attachments/download", "/admin/mail/preview")
+        .replace("/api/mail/attachments", "/admin/mail/preview");
+      window.open(previewUrl, "_blank");
+    };
+    container.addEventListener("click", handler);
+    return () => container.removeEventListener("click", handler);
+  }, [selected?.id, selected?.body]);
 
   useEffect(() => {
-    supabase
-      .from("mail_messages")
-      .select("*")
-      .eq("folder", "Sent")
-      .order("received_at", { ascending: false })
-      .then(({ data }) => { setMessages(data || []); setLoading(false); });
+    const fetchSent = () => {
+      supabase
+        .from("mail_messages")
+        .select("*")
+        .eq("folder", "Sent")
+        .order("received_at", { ascending: false })
+        .then(({ data }) => { setMessages(data || []); setLoading(false); });
+    };
+
+    fetchSent();
 
     const ch = supabase
-      .channel("sent_rt")
+      .channel("mail_realtime_sent")
+      .on("broadcast", { event: "new_mail" }, () => {
+        fetchSent();
+      })
+      .on("broadcast", { event: "mail_status_changed" }, () => {
+        fetchSent();
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "mail_messages" }, () => {
-        supabase.from("mail_messages").select("*").eq("folder","Sent")
-          .order("received_at",{ascending:false})
-          .then(({data})=>setMessages(data||[]));
+        fetchSent();
       }).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
+
+  async function selectMessage(msg: MailMessage) {
+    setSelected(msg);
+    try {
+      const res = await fetch(`/api/mail/inbox?detail_id=${msg.id}${user?.id ? `&employee_id=${user.id}` : ""}`);
+      const data = await res.json();
+      if (data.success && data.message) {
+        setSelected(data.message);
+        setMessages((prev) => prev.map((m) => m.id === msg.id ? data.message : m));
+      }
+    } catch (e) {
+      console.error("Failed to load sent message details:", e);
+    }
+  }
 
   const filtered = messages.filter((m) => {
     const q = search.toLowerCase();
@@ -82,7 +130,7 @@ export default function SentPage() {
                 <p className="text-xs text-theme-muted">No sent emails yet</p>
               </div>
             ) : filtered.map((m) => (
-              <div key={m.id} onClick={() => setSelected(m)}
+              <div key={m.id} onClick={() => selectMessage(m)}
                 className={cn("px-4 py-3 cursor-pointer transition-all",
                   selected?.id === m.id ? "bg-theme-primary/5 border-l-2 border-l-theme-primary" : "hover:bg-theme-raised/50")}>
                 <div className="flex items-center gap-2 mb-1">
@@ -125,10 +173,17 @@ export default function SentPage() {
                   </p>
                 </div>
               </div>
-              <div className="rounded-xl border border-theme-border bg-theme-page p-4">
-                <p className="text-sm text-theme-fg leading-relaxed whitespace-pre-wrap">
-                  {selected.preview || "No preview available."}
-                </p>
+              <div className="rounded-xl border border-theme-border bg-theme-page p-4" ref={bodyRef}>
+                {selected.body ? (
+                  <div
+                    className="text-sm text-theme-fg leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: selected.body }}
+                  />
+                ) : (
+                  <p className="text-sm text-theme-fg leading-relaxed whitespace-pre-wrap">
+                    {selected.preview || "No content available."}
+                  </p>
+                )}
               </div>
             </div>
           )}

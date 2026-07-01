@@ -2,6 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useMeetings, Meeting } from "@/hooks/useMeetings";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useNotifications } from "@/components/layout/NotificationProvider";
@@ -140,11 +147,13 @@ function ScheduleModal({ onClose, onScheduled }: { onClose: () => void; onSchedu
           </div>
           <div>
             <label className="text-[10px] font-black text-theme-muted uppercase tracking-wider mb-1.5 block">Notify Channel (optional)</label>
-            <select value={form.channel_id} onChange={e => setForm(f => ({ ...f, channel_id: e.target.value }))}
-              className="w-full bg-theme-bg border border-theme-border rounded-xl px-4 py-2.5 text-sm text-theme-fg outline-none focus:border-theme-primary/50">
-              <option value="">None</option>
-              {channels.map(c => <option key={c.id} value={c.id}>#{c.name} ({c.category})</option>)}
-            </select>
+            <Select value={form.channel_id || "none"} onValueChange={(v) => setForm(f => ({ ...f, channel_id: v === "none" ? "" : v }))}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {channels.map(c => <SelectItem key={c.id} value={c.id}>#{c.name} ({c.category})</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <label className="text-[10px] font-black text-theme-muted uppercase tracking-wider mb-1.5 block">Invite Participants</label>

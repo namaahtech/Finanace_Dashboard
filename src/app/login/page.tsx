@@ -1,27 +1,48 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useAuth } from "@/components/layout/AuthProvider";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/Button";
-import { Mail, Lock, ShieldCheck, ArrowRight, Eye, EyeOff } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
-import { useToast } from "@/components/ui/Toast";
+import { useState, useEffect, Suspense } from "react";
+import { useAuth, getDashboardForRole, type Role } from "@/components/layout/AuthProvider";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Mail, Lock, ShieldCheck, ArrowRight, Eye, EyeOff, Info } from "lucide-react";
+import { Badge } from "@/components/ui/BadgeLegacy";
+import { useToast } from "@/components/ui/ToastLegacy";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-current border-t-transparent opacity-60" /></div>}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const { user, loading: authLoading, login } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams?.get("next");
+  const pwdChanged = searchParams?.get("pwd") === "changed";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Pre-fill company email stored before signOut in ChangePasswordModal
+  useEffect(() => {
+    const stored = sessionStorage.getItem("nexus_post_pwd_email");
+    if (stored) {
+      setEmail(stored);
+      sessionStorage.removeItem("nexus_post_pwd_email");
+    }
+  }, []);
+
+  // Redirect already-authenticated users to their dashboard
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace("/");
+      router.replace(nextPath && nextPath.startsWith("/") ? nextPath : getDashboardForRole(user.role as Role));
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, nextPath]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -58,6 +79,15 @@ export default function LoginPage() {
             <h2 className="text-sm font-black text-theme-fg uppercase tracking-wider">Internal Sign In</h2>
             <p className="text-[11px] text-theme-muted mt-1 font-medium">Access your financial administration dashboard</p>
           </div>
+
+          {pwdChanged && (
+            <div className="mb-6 flex items-start gap-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3">
+              <Info size={14} className="mt-0.5 flex-shrink-0 text-sky-400" />
+              <p className="text-[11px] font-semibold text-sky-300 leading-relaxed">
+                Password updated. Please log in with your <span className="font-black text-sky-200">professional (company) email</span> from now on. Personal email access has been disabled.
+              </p>
+            </div>
+          )}
 
 
 
@@ -122,7 +152,10 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-8 pt-5 border-t border-theme-border/60 flex items-center justify-between">
-            <a href="#" className="text-[11px] font-bold text-theme-muted hover:text-theme-fg transition-colors">
+            <a 
+              href={`/forgot-credentials?email=${encodeURIComponent(email)}`} 
+              className="text-[11px] font-bold text-theme-muted hover:text-theme-fg transition-colors"
+            >
               Forgot credentials?
             </a>
             <Badge variant="success" className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/10 py-1 px-3">

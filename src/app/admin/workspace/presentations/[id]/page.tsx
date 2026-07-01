@@ -6,19 +6,30 @@ import Link from "next/link";
 import { useAuth } from "@/components/layout/AuthProvider";
 import {
   ArrowLeft, Plus, Trash2, Share2, Type, Image as ImageIcon, Square,
-  ChevronLeft, ChevronRight, Play, Copy, Pin,
-  AlignLeft, AlignCenter, AlignRight, Bold, Italic, Sparkles,
-  Download, MoreVertical, Layout, Layers, MousePointer2,
-  Check, X, Maximize2, Minimize2,
+  ChevronLeft, ChevronRight, Play, Copy,
+  Sparkles, Download, MoreVertical, Layout, MousePointer2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 dayjs.extend(relativeTime);
 
-/* ─── Types ──────────────────────────────────────────────────────────────── */
 interface SlideElement {
   id: string;
   type: "text" | "shape" | "image";
@@ -40,7 +51,6 @@ interface PptDoc {
   owner?: { name: string };
 }
 
-/* ─── Constants ──────────────────────────────────────────────────────────── */
 const BG_SWATCHES = [
   "#FFFFFF", "#F8FAFC", "#EFF6FF", "#F0FDF4", "#FAF5FF",
   "#FFF7ED", "#0F172A", "#1E293B", "#18181B", "#111827",
@@ -98,7 +108,6 @@ function makeSlide(layout: Slide["layout"] = "title"): Slide {
   return { id, background: "#FFFFFF", layout: "blank", elements: [] };
 }
 
-/* ─── Slide Canvas ───────────────────────────────────────────────────────── */
 function SlideCanvas({
   slide, selected, editing, onSelect, onEdit, onBlur, onChange,
 }: {
@@ -112,7 +121,7 @@ function SlideCanvas({
 }) {
   return (
     <div
-      className="w-full h-full relative rounded-xl overflow-hidden select-none"
+      className="w-full h-full relative overflow-hidden select-none"
       style={{ background: slide.background }}
       onClick={() => onSelect(null)}
     >
@@ -122,9 +131,9 @@ function SlideCanvas({
           onClick={(e) => { e.stopPropagation(); onSelect(el.id); }}
           onDoubleClick={(e) => { e.stopPropagation(); onEdit(el.id); }}
           className={cn(
-            "absolute transition-all",
-            selected === el.id && editing !== el.id && "ring-2 ring-theme-primary ring-offset-1 cursor-move",
-            selected !== el.id && editing !== el.id && "cursor-pointer hover:ring-1 hover:ring-theme-primary/40",
+            "absolute transition-colors",
+            selected === el.id && editing !== el.id && "ring-2 ring-primary ring-offset-1 cursor-move",
+            selected !== el.id && editing !== el.id && "cursor-pointer hover:ring-1 hover:ring-primary/40",
           )}
           style={{
             left: `${el.x}%`, top: `${el.y}%`,
@@ -153,14 +162,13 @@ function SlideCanvas({
 
       {slide.elements.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <p className="text-sm text-theme-muted opacity-40 font-medium">Blank slide — add elements from the toolbar</p>
+          <p className="text-sm text-muted-foreground font-medium">Blank slide — add elements from the toolbar</p>
         </div>
       )}
     </div>
   );
 }
 
-/* ─── Thumbnail ──────────────────────────────────────────────────────────── */
 function SlideThumbnail({ slide, index, active, onClick, onDuplicate, onDelete }: {
   slide: Slide; index: number; active: boolean;
   onClick: () => void; onDuplicate: () => void; onDelete: () => void;
@@ -172,11 +180,10 @@ function SlideThumbnail({ slide, index, active, onClick, onDuplicate, onDelete }
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       className={cn(
-        "relative aspect-video rounded-lg border-2 cursor-pointer transition-all overflow-hidden group",
-        active ? "border-theme-primary shadow-sm" : "border-theme-border hover:border-theme-strong",
+        "relative aspect-video rounded-md border-2 cursor-pointer transition-colors overflow-hidden group",
+        active ? "border-primary shadow-sm" : "border-border hover:border-foreground/40",
       )}
     >
-      {/* mini preview */}
       <div className="w-full h-full" style={{ background: slide.background }}>
         <div className="absolute inset-0 scale-[0.18] origin-top-left pointer-events-none" style={{ width: "550%", height: "550%" }}>
           {slide.elements.map((el) => (
@@ -189,28 +196,35 @@ function SlideThumbnail({ slide, index, active, onClick, onDuplicate, onDelete }
           ))}
         </div>
       </div>
-      {/* index badge */}
-      <span className="absolute top-1 left-1 text-[8px] font-bold bg-black/20 text-white/80 rounded px-1">
+      <span className="absolute top-1 left-1 text-[8px] font-bold bg-black/30 text-white rounded px-1">
         {index + 1}
       </span>
-      {/* hover actions */}
       {hover && (
-        <div className="absolute inset-0 bg-black/30 flex items-center justify-center gap-1.5">
-          <button onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
-            className="p-1.5 rounded-md bg-white/20 hover:bg-white/40 text-white transition-all">
+        <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-1.5">
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon"
+            className="h-6 w-6 bg-white/20 hover:bg-white/40 text-white"
+            onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+          >
             <Copy size={10} />
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="p-1.5 rounded-md bg-rose-500/30 hover:bg-rose-500/60 text-white transition-all">
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            size="icon"
+            className="h-6 w-6"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          >
             <Trash2 size={10} />
-          </button>
+          </Button>
         </div>
       )}
     </div>
   );
 }
 
-/* ─── Main Page ──────────────────────────────────────────────────────────── */
 export default function PresentationEditorPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -228,8 +242,6 @@ export default function PresentationEditorPage() {
   const [loading, setLoading] = useState(true);
   const [presenting, setPresenting] = useState(false);
   const [presentSlide, setPresentSlide] = useState(0);
-  const [menu, setMenu] = useState(false);
-  const [showLayoutPicker, setShowLayoutPicker] = useState(false);
   const [rightTab, setRightTab] = useState<"theme" | "layers">("theme");
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -273,14 +285,12 @@ export default function PresentationEditorPage() {
     await axios.patch(`/api/workspace/presentations/${id}?userId=${user?.id || "anon"}`, { title: val });
   }
 
-  /* slide operations */
   function addSlide(layout: Slide["layout"] = "blank") {
     const s = [...slides];
     const newSlide = makeSlide(layout);
     s.splice(activeSlide + 1, 0, newSlide);
     updateSlides(s);
     setActiveSlide(activeSlide + 1);
-    setShowLayoutPicker(false);
   }
 
   function duplicateSlide(idx: number) {
@@ -338,26 +348,25 @@ export default function PresentationEditorPage() {
 
   const current = slides[activeSlide];
 
-  /* ── Loading ─────────────────────────────────────────────────────────── */
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-theme-page">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 rounded-full border-4 border-theme-primary/20 border-t-theme-primary animate-spin" />
-          <p className="text-xs text-theme-muted font-medium">Loading presentation…</p>
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4 w-72">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-[420px] w-full" />
+          <Skeleton className="h-6 w-2/3" />
         </div>
       </div>
     );
   }
 
-  /* ── Presentation mode ───────────────────────────────────────────────── */
   if (presenting) {
     const ps = slides[presentSlide];
     return (
       <div className="fixed inset-0 bg-black z-[9999] flex flex-col">
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="relative shadow-2xl" style={{ width: "min(90vw, 160vh)", aspectRatio: "16/9" }}>
-            <div className="w-full h-full rounded-2xl overflow-hidden" style={{ background: ps.background }}>
+            <div className="w-full h-full rounded-md overflow-hidden" style={{ background: ps.background }}>
               {ps.elements.map((el) => (
                 <div key={el.id} className="absolute overflow-hidden" style={{
                   left: `${el.x}%`, top: `${el.y}%`,
@@ -370,162 +379,187 @@ export default function PresentationEditorPage() {
             </div>
           </div>
         </div>
-        {/* controls */}
-        <div className="h-14 flex items-center justify-center gap-6">
-          <button
+        <div className="h-14 flex items-center justify-center gap-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="bg-white/10 hover:bg-white/20 text-white"
             onClick={() => setPresentSlide(p => Math.max(0, p - 1))}
             disabled={presentSlide === 0}
-            className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 transition-all"
           >
-            <ChevronLeft size={20} />
-          </button>
-          <span className="text-white/50 text-sm font-medium tabular-nums">
+            <ChevronLeft size={18} />
+          </Button>
+          <span className="text-white/70 text-sm font-medium tabular-nums">
             {presentSlide + 1} / {slides.length}
           </span>
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="bg-white/10 hover:bg-white/20 text-white"
             onClick={() => setPresentSlide(p => Math.min(slides.length - 1, p + 1))}
             disabled={presentSlide === slides.length - 1}
-            className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 transition-all"
           >
-            <ChevronRight size={20} />
-          </button>
-          <button
+            <ChevronRight size={18} />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="ml-4 bg-white/10 hover:bg-destructive/50 text-white"
             onClick={() => { setPresenting(false); setPresentSlide(0); }}
-            className="ml-4 p-2.5 rounded-xl bg-white/10 hover:bg-rose-500/40 text-white transition-all"
           >
-            <X size={20} />
-          </button>
+            <X size={18} />
+          </Button>
         </div>
       </div>
     );
   }
 
-  /* ── Editor layout ───────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col h-screen bg-theme-page overflow-hidden">
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
 
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <header className="h-14 bg-theme-surface border-b border-theme-border flex items-center justify-between px-4 z-50 flex-shrink-0 gap-4">
+      {/* HEADER */}
+      <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 z-50 flex-shrink-0 gap-4">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <Link
             href="/admin/workspace/presentations"
-            className="p-2 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all flex-shrink-0"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
           >
             <ArrowLeft size={16} />
           </Link>
 
           <span className="text-lg flex-shrink-0">{doc?.icon ?? "📑"}</span>
 
-          <input
+          <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={(e) => saveTitle(e.target.value)}
-            className="bg-transparent font-semibold text-sm text-theme-fg focus:outline-none min-w-0 flex-1 truncate"
+            className="h-8 bg-transparent border-0 px-0 font-semibold text-sm focus-visible:ring-0 min-w-0 flex-1"
             placeholder="Untitled Presentation"
           />
 
-          <span className="text-[11px] text-theme-muted flex-shrink-0 hidden sm:block">
+          <span className="text-xs text-muted-foreground flex-shrink-0 hidden sm:block">
             {saving ? "Saving…" : savedAt ? `Saved ${dayjs(savedAt).fromNow()}` : doc?.last_edited_at ? `Saved ${dayjs(doc.last_edited_at).fromNow()}` : ""}
           </span>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button
+          <Button
+            type="button"
+            size="sm"
             onClick={() => { setPresentSlide(0); setPresenting(true); }}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity"
           >
-            <Play size={12} fill="currentColor" /> Present
-          </button>
-          <button className="p-2 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all">
+            <Play size={12} fill="currentColor" className="mr-1.5" /> Present
+          </Button>
+          <Button type="button" variant="ghost" size="icon">
             <Share2 size={15} />
-          </button>
-          <div className="relative">
-            <button
-              onClick={() => setMenu(!menu)}
-              className="p-2 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all"
-            >
-              <MoreVertical size={15} />
-            </button>
-            {menu && (
-              <div className="absolute right-0 top-10 z-[60] w-44 bg-theme-surface border border-theme-border rounded-xl shadow-xl p-1">
-                <button className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-theme-raised flex items-center gap-2 text-theme-fg">
-                  <Download size={12} className="text-theme-muted" /> Export PDF
-                </button>
-                <div className="h-px bg-theme-border my-1" />
-                <button className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-rose-500/10 flex items-center gap-2 text-rose-500">
-                  <Trash2 size={12} /> Delete
-                </button>
-              </div>
-            )}
-          </div>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="icon">
+                <MoreVertical size={15} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem>
+                <Download size={12} className="mr-2 text-muted-foreground" /> Export PDF
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-destructive focus:text-destructive">
+                <Trash2 size={12} className="mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
-      {/* ── Toolbar ────────────────────────────────────────────────────── */}
-      <div className="h-11 bg-theme-surface border-b border-theme-border flex items-center gap-1 px-3 flex-shrink-0">
-        <ToolBtn icon={<MousePointer2 size={14} />} label="Select" />
-        <ToolBtn icon={<Type size={14} />} label="Add text" onClick={addTextElement} />
-        <ToolBtn icon={<Square size={14} />} label="Shape" />
-        <ToolBtn icon={<ImageIcon size={14} />} label="Image" />
+      {/* TOOLBAR */}
+      <div className="h-11 bg-card border-b border-border flex items-center gap-1 px-3 flex-shrink-0">
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" title="Select" disabled>
+          <MousePointer2 size={14} />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" title="Add text" onClick={addTextElement}>
+          <Type size={14} />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" title="Shape" disabled>
+          <Square size={14} />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" title="Image" disabled>
+          <ImageIcon size={14} />
+        </Button>
 
-        <div className="h-5 w-px bg-theme-border mx-1" />
+        <Separator orientation="vertical" className="mx-1 h-6" />
 
-        <button
-          onClick={() => setShowLayoutPicker(!showLayoutPicker)}
-          className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-theme-muted hover:bg-theme-raised hover:text-theme-fg transition-all"
-        >
-          <Layout size={13} /> Layout
-          {showLayoutPicker && (
-            <div className="absolute top-8 left-0 z-50 w-56 bg-theme-surface border border-theme-border rounded-xl shadow-xl p-2 grid grid-cols-2 gap-1.5">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className="h-8">
+              <Layout size={13} className="mr-1.5" /> Layout
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-72 p-3">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Insert layout</p>
+            <div className="grid grid-cols-2 gap-2">
               {LAYOUTS.map((l) => (
-                <button
+                <Button
                   key={l.id}
-                  onClick={(e) => { e.stopPropagation(); addSlide(l.id); }}
-                  className="text-left p-2.5 rounded-lg hover:bg-theme-raised transition-all border border-theme-border"
+                  type="button"
+                  variant="outline"
+                  className="h-auto flex-col items-start text-left p-2.5"
+                  onClick={() => addSlide(l.id)}
                 >
-                  <p className="text-xs font-semibold text-theme-fg">{l.label}</p>
-                  <p className="text-[10px] text-theme-muted mt-0.5">{l.desc}</p>
-                </button>
+                  <p className="text-xs font-semibold">{l.label}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{l.desc}</p>
+                </Button>
               ))}
             </div>
-          )}
-        </button>
+          </PopoverContent>
+        </Popover>
 
         {selectedEl && (
           <>
-            <div className="h-5 w-px bg-theme-border mx-1" />
-            <button
+            <Separator orientation="vertical" className="mx-1 h-6" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
               onClick={deleteSelectedElement}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-rose-500 hover:bg-rose-500/10 transition-all"
             >
-              <Trash2 size={13} /> Delete element
-            </button>
+              <Trash2 size={13} className="mr-1.5" /> Delete element
+            </Button>
           </>
         )}
 
         <div className="ml-auto flex items-center gap-1">
-          <ToolBtn icon={<Sparkles size={14} />} label="AI Generate" className="text-violet-500 hover:bg-violet-500/10" />
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-violet-500 hover:bg-violet-500/10" title="AI Generate">
+            <Sparkles size={14} />
+          </Button>
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-w-0">
 
-        {/* ── Slide panel ──────────────────────────────────────────────── */}
-        <aside className="w-52 bg-theme-surface border-r border-theme-border flex flex-col overflow-hidden flex-shrink-0">
-          <div className="flex items-center justify-between px-3 py-2.5 border-b border-theme-border">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-theme-muted">
+        {/* SLIDE PANEL */}
+        <aside className="w-52 bg-card border-r border-border flex flex-col overflow-hidden flex-shrink-0">
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
+            <span className="text-xs font-semibold text-muted-foreground">
               Slides · {slides.length}
             </span>
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
               onClick={() => addSlide("blank")}
-              className="p-1 rounded-md hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all"
               title="Add blank slide"
             >
               <Plus size={13} />
-            </button>
+            </Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2.5 space-y-2 scrollbar-hide">
+          <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
             {slides.map((slide, idx) => (
               <SlideThumbnail
                 key={slide.id}
@@ -538,41 +572,48 @@ export default function PresentationEditorPage() {
               />
             ))}
 
-            <button
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full aspect-video h-auto border-dashed text-xs"
               onClick={() => addSlide("blank")}
-              className="w-full aspect-video rounded-lg border-2 border-dashed border-theme-border hover:border-theme-primary/50 hover:bg-theme-raised/50 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-theme-muted hover:text-theme-fg transition-all"
             >
-              <Plus size={12} /> New Slide
-            </button>
+              <Plus size={12} className="mr-1.5" /> New Slide
+            </Button>
           </div>
 
-          {/* slide nav */}
-          <div className="border-t border-theme-border p-2 flex items-center justify-between">
-            <button
+          <div className="border-t border-border p-2 flex items-center justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
               onClick={() => setActiveSlide(p => Math.max(0, p - 1))}
               disabled={activeSlide === 0}
-              className="p-1.5 rounded-lg hover:bg-theme-raised disabled:opacity-30 text-theme-muted transition-all"
             >
               <ChevronLeft size={14} />
-            </button>
-            <span className="text-[10px] font-medium text-theme-muted tabular-nums">
+            </Button>
+            <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
               {activeSlide + 1} / {slides.length}
             </span>
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
               onClick={() => setActiveSlide(p => Math.min(slides.length - 1, p + 1))}
               disabled={activeSlide === slides.length - 1}
-              className="p-1.5 rounded-lg hover:bg-theme-raised disabled:opacity-30 text-theme-muted transition-all"
             >
               <ChevronRight size={14} />
-            </button>
+            </Button>
           </div>
         </aside>
 
-        {/* ── Canvas area ──────────────────────────────────────────────── */}
-        <main className="flex-1 bg-theme-page flex items-center justify-center p-8 overflow-hidden">
+        {/* CANVAS */}
+        <main className="flex-1 bg-muted/30 flex items-center justify-center p-8 overflow-hidden min-w-0">
           {current ? (
             <div
-              className="shadow-xl"
+              className="rounded-md shadow-lg ring-1 ring-border overflow-hidden"
               style={{ width: "min(960px, calc(100% - 2rem))", aspectRatio: "16/9" }}
             >
               <SlideCanvas
@@ -586,144 +627,122 @@ export default function PresentationEditorPage() {
               />
             </div>
           ) : (
-            <p className="text-theme-muted text-sm">No slides yet</p>
+            <p className="text-muted-foreground text-sm">No slides yet</p>
           )}
         </main>
 
-        {/* ── Right panel ──────────────────────────────────────────────── */}
-        <aside className="w-64 bg-theme-surface border-l border-theme-border flex flex-col flex-shrink-0">
-          <div className="flex border-b border-theme-border">
-            {(["theme", "layers"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setRightTab(t)}
-                className={cn(
-                  "flex-1 py-2.5 text-[11px] font-semibold capitalize transition-colors",
-                  rightTab === t ? "text-theme-primary border-b-2 border-theme-primary" : "text-theme-muted hover:text-theme-fg",
-                )}
-              >
-                {t === "theme" ? "Slide Theme" : "Layers"}
-              </button>
-            ))}
-          </div>
+        {/* RIGHT PANEL */}
+        <aside className="w-64 bg-card border-l border-border flex flex-col flex-shrink-0">
+          <Tabs value={rightTab} onValueChange={(v) => setRightTab(v as "theme" | "layers")} className="flex flex-col flex-1 overflow-hidden">
+            <TabsList className="grid grid-cols-2 mx-3 mt-3 mb-2 h-9">
+              <TabsTrigger value="theme" className="text-xs">Theme</TabsTrigger>
+              <TabsTrigger value="layers" className="text-xs">Layers</TabsTrigger>
+            </TabsList>
 
-          {rightTab === "theme" && (
-            <div className="p-4 space-y-5 overflow-y-auto flex-1">
+            <TabsContent value="theme" className="p-4 space-y-5 overflow-y-auto flex-1 mt-0">
               <div>
-                <p className="section-label mb-3">Background</p>
+                <p className="text-xs font-semibold text-muted-foreground mb-3">Background</p>
                 <div className="grid grid-cols-5 gap-2">
                   {BG_SWATCHES.map((c) => (
                     <button
                       key={c}
                       onClick={() => setSlideBackground(c)}
                       className={cn(
-                        "h-9 rounded-lg border-2 transition-all hover:scale-110",
-                        current?.background === c ? "border-theme-primary shadow-sm" : "border-theme-border",
+                        "h-9 rounded-md border-2 transition-transform hover:scale-110",
+                        current?.background === c ? "border-primary shadow-sm" : "border-border",
                       )}
                       style={{ background: c }}
                     />
                   ))}
                 </div>
                 <div className="mt-3 flex items-center gap-2">
-                  <label className="text-[10px] text-theme-muted font-medium">Custom</label>
+                  <span className="text-[10px] text-muted-foreground font-medium">Custom</span>
                   <input
                     type="color"
                     value={current?.background || "#FFFFFF"}
                     onChange={(e) => setSlideBackground(e.target.value)}
-                    className="h-7 w-12 rounded cursor-pointer border border-theme-border bg-transparent"
+                    className="h-7 w-12 rounded cursor-pointer border border-border bg-transparent"
                   />
                 </div>
               </div>
 
               <div>
-                <p className="section-label mb-3">Quick Layouts</p>
+                <p className="text-xs font-semibold text-muted-foreground mb-3">Quick layouts</p>
                 <div className="space-y-1.5">
                   {LAYOUTS.map((l) => (
-                    <button
+                    <Button
                       key={l.id}
+                      type="button"
+                      variant="outline"
+                      className="w-full h-auto flex-col items-start text-left py-2.5"
                       onClick={() => addSlide(l.id)}
-                      className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-theme-raised border border-theme-border transition-all"
                     >
-                      <p className="text-xs font-semibold text-theme-fg">{l.label}</p>
-                      <p className="text-[10px] text-theme-muted">{l.desc}</p>
-                    </button>
+                      <p className="text-xs font-semibold">{l.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{l.desc}</p>
+                    </Button>
                   ))}
                 </div>
               </div>
-            </div>
-          )}
+            </TabsContent>
 
-          {rightTab === "layers" && (
-            <div className="p-4 space-y-2 overflow-y-auto flex-1">
-              <p className="section-label mb-3">Elements on slide {activeSlide + 1}</p>
+            <TabsContent value="layers" className="p-4 space-y-2 overflow-y-auto flex-1 mt-0">
+              <p className="text-xs font-semibold text-muted-foreground mb-3">
+                Elements on slide {activeSlide + 1}
+              </p>
               {current?.elements.length === 0 ? (
-                <p className="text-[11px] text-theme-muted text-center py-6">No elements. Add text from the toolbar.</p>
+                <p className="text-xs text-muted-foreground text-center py-6">No elements. Add text from the toolbar.</p>
               ) : (
                 current?.elements.map((el) => (
-                  <button
+                  <Button
                     key={el.id}
+                    type="button"
+                    variant={selectedEl === el.id ? "secondary" : "outline"}
+                    className="w-full justify-start gap-2.5"
                     onClick={() => setSelectedEl(el.id)}
-                    className={cn(
-                      "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-all",
-                      selectedEl === el.id
-                        ? "border-theme-primary bg-theme-primary/5 text-theme-fg"
-                        : "border-theme-border hover:bg-theme-raised text-theme-fg",
-                    )}
                   >
                     <div className={cn("h-2 w-2 rounded-full flex-shrink-0", el.type === "text" ? "bg-blue-400" : "bg-violet-400")} />
-                    <span className="text-xs font-medium truncate">{el.content || `${el.type} element`}</span>
-                  </button>
+                    <span className="text-xs font-medium truncate flex-1 text-left">{el.content || `${el.type} element`}</span>
+                  </Button>
                 ))
               )}
-              <button
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-dashed text-xs mt-2"
                 onClick={addTextElement}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-theme-border hover:border-theme-primary/50 text-[11px] font-semibold text-theme-muted hover:text-theme-fg transition-all mt-2"
               >
-                <Plus size={11} /> Add Text
-              </button>
-            </div>
-          )}
+                <Plus size={11} className="mr-1.5" /> Add Text
+              </Button>
+            </TabsContent>
+          </Tabs>
 
-          {/* AI assist */}
-          <div className="p-3 border-t border-theme-border">
-            <button className="w-full p-3 rounded-xl border border-theme-border hover:border-violet-500/40 hover:bg-violet-500/5 transition-all text-left">
+          <div className="p-3 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-auto flex-col items-start text-left py-3 hover:border-violet-500/40 hover:bg-violet-500/5"
+            >
               <div className="flex items-center gap-2 mb-1">
                 <Sparkles size={13} className="text-violet-500" />
                 <span className="text-[10px] font-semibold text-violet-500">AI Content Assist</span>
               </div>
-              <p className="text-[10px] text-theme-muted leading-snug">Generate slide content, outlines, and talking points instantly.</p>
-            </button>
+              <p className="text-[10px] text-muted-foreground leading-snug">
+                Generate slide content, outlines, and talking points instantly.
+              </p>
+            </Button>
           </div>
         </aside>
       </div>
 
-      {/* ── Footer ─────────────────────────────────────────────────────── */}
-      <footer className="h-8 bg-theme-surface border-t border-theme-border flex items-center justify-between px-4 flex-shrink-0">
-        <span className="text-[10px] text-theme-muted font-medium">
+      {/* FOOTER */}
+      <footer className="h-8 bg-card border-t border-border flex items-center justify-between px-4 flex-shrink-0">
+        <span className="text-[10px] text-muted-foreground font-medium">
           Slide {activeSlide + 1} of {slides.length} · 16:9 widescreen
         </span>
-        <span className="text-[10px] text-theme-muted">
+        <span className="text-[10px] text-muted-foreground">
           {saving ? "Saving…" : savedAt ? `Last saved ${dayjs(savedAt).fromNow()}` : ""}
         </span>
       </footer>
     </div>
-  );
-}
-
-/* ─── ToolBtn helper ─────────────────────────────────────────────────────── */
-function ToolBtn({ icon, label, onClick, className }: {
-  icon: React.ReactNode; label: string; onClick?: () => void; className?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={label}
-      className={cn(
-        "p-2 rounded-lg hover:bg-theme-raised text-theme-muted hover:text-theme-fg transition-all",
-        className,
-      )}
-    >
-      {icon}
-    </button>
   );
 }

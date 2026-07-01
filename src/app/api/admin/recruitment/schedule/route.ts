@@ -104,7 +104,7 @@ export async function POST(req: Request) {
       const html = `
         <!DOCTYPE html>
         <html>
-        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; line-height:1.6;">
+        <body style="font-family: 'Inter', Arial, sans-serif; color: #1e293b; line-height:1.6;">
           <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
             <div style="text-align:center; margin-bottom: 25px;">
               <h1 style="color:#0f172a; margin:0; font-size:24px;">Interview Invitation</h1>

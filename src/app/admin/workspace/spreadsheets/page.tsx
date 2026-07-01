@@ -12,6 +12,11 @@ import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import axios from "axios";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 dayjs.extend(relativeTime);
 
@@ -192,57 +197,65 @@ export default function SpreadsheetsPage() {
       title="Spreadsheets"
       subtitle="Tables, trackers and data grids"
       actions={
-        <button onClick={createSheet} disabled={creating}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
-          <Plus size={14} /> New Spreadsheet
-        </button>
+        <Button onClick={createSheet} disabled={creating} size="sm">
+          <Plus /> New Spreadsheet
+        </Button>
       }
     >
       {/* Toolbar */}
-      <div className="flex items-center gap-2 mb-6 flex-wrap">
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search spreadsheets…"
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-theme-border bg-theme-surface text-sm text-theme-fg placeholder:text-theme-muted focus:outline-none focus:border-theme-strong transition-colors" />
-          {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2"><X size={13} className="text-theme-muted" /></button>}
-        </div>
-        <div className="flex items-center gap-1 bg-theme-raised rounded-lg p-0.5">
-          {FILTERS.map((f) => (
-            <button key={f.key} onClick={() => setFilter(f.key)}
-              className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
-                filter === f.key ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}>
-              {f.label}
-              <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
-                filter === f.key ? "bg-theme-primary/10 text-theme-primary" : "bg-theme-overlay text-theme-muted")}>{f.count}</span>
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search spreadsheets…" className="pl-9 pr-9" />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors" aria-label="Clear search">
+              <X size={13} />
             </button>
-          ))}
+          )}
         </div>
-        <div className="flex items-center gap-1 bg-theme-raised rounded-lg p-0.5">
-          <button onClick={() => setView("grid")} className={cn("p-2 rounded-md transition-all", view === "grid" ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}><Grid3X3 size={14} /></button>
-          <button onClick={() => setView("list")} className={cn("p-2 rounded-md transition-all", view === "list" ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg")}><List size={14} /></button>
-        </div>
+
+        <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+          <TabsList>
+            {FILTERS.map((f) => (
+              <TabsTrigger key={f.key} value={f.key} className="gap-2 data-[state=active]:font-semibold">
+                {f.label}
+                <span className={cn(
+                  "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
+                  filter === f.key ? "bg-primary text-primary-foreground" : "bg-muted-foreground/15 text-muted-foreground"
+                )}>{f.count}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as typeof view)} variant="outline" size="sm">
+          <ToggleGroupItem value="grid" aria-label="Grid view"><Grid3X3 className="size-3.5" /></ToggleGroupItem>
+          <ToggleGroupItem value="list" aria-label="List view"><List className="size-3.5" /></ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {loading ? (
         <div className={cn("grid gap-3", view === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1")}>
-          {[...Array(8)].map((_, i) => <div key={i} className={cn("rounded-xl bg-theme-card border border-theme-border animate-pulse", view === "grid" ? "h-44" : "h-14")} />)}
+          {[...Array(8)].map((_, i) => <Skeleton key={i} className={cn(view === "grid" ? "h-44" : "h-14")} />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-          <div className="h-14 w-14 rounded-xl bg-theme-raised border border-dashed border-theme-border flex items-center justify-center">
-            <Table2 size={22} className="text-theme-muted opacity-40" />
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center rounded-xl border border-dashed border-border bg-card">
+          <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center">
+            <Table2 size={20} className="text-muted-foreground" />
           </div>
           <div>
-            <p className="font-semibold text-theme-fg mb-1">No spreadsheets found</p>
-            <p className="text-sm text-theme-muted">{search ? "Try a different keyword." : "Create your first spreadsheet to get started."}</p>
+            <p className="font-semibold text-foreground mb-1 text-sm">No spreadsheets found</p>
+            <p className="text-xs text-muted-foreground">{search ? "Try a different keyword." : "Create your first spreadsheet to get started."}</p>
           </div>
-          {!search && <button onClick={createSheet} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-theme-primary text-white text-xs font-semibold"><Plus size={14} /> New Spreadsheet</button>}
+          {!search && (
+            <Button onClick={createSheet} size="sm"><Plus /> New Spreadsheet</Button>
+          )}
         </div>
       ) : (
         <div className="space-y-6">
           {pinned.length > 0 && (
             <div className="space-y-3">
-              <p className="section-label px-1 flex items-center gap-2"><Pin size={10} fill="currentColor" /> Pinned · {pinned.length}</p>
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1"><Pin size={11} fill="currentColor" /> Pinned · {pinned.length}</p>
               <div className={cn("grid gap-3", view === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1")}>
                 {pinned.map((s) => view === "grid" ? <SheetCard key={s.id} {...props(s)} /> : <ListRow key={s.id} {...props(s)} />)}
               </div>
@@ -250,7 +263,7 @@ export default function SpreadsheetsPage() {
           )}
           {rest.length > 0 && (
             <div className="space-y-3">
-              {pinned.length > 0 && <p className="section-label px-1 flex items-center gap-2"><Clock size={10} /> All Spreadsheets · {rest.length}</p>}
+              {pinned.length > 0 && <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1"><Clock size={11} /> All Spreadsheets · {rest.length}</p>}
               <div className={cn("grid gap-3", view === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1")}>
                 {rest.map((s) => view === "grid" ? <SheetCard key={s.id} {...props(s)} /> : <ListRow key={s.id} {...props(s)} />)}
               </div>

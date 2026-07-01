@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/ButtonLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
 
 interface OrgNode {
@@ -34,6 +34,17 @@ const NH   = 140;  // node card height (px, approximate)
 const HGAP = 40;   // min horizontal gap between sibling subtrees
 const VGAP = 64;   // vertical gap between parent bottom and child top
 const PAD  = 72;   // canvas edge padding
+
+const ROLE_LABEL: Record<string, string> = {
+  employee: "Employee",
+  hr: "HR",
+  accounts: "Accounts",
+  admin: "Admin",
+  intern: "Intern",
+  dept_lead: "Department Lead",
+  team_lead: "Team Lead",
+  sales: "Sales",
+};
 
 // ── Compute the horizontal space needed for a subtree ─────────
 function stW(node: OrgNode, exp: Set<string>): number {
@@ -153,17 +164,12 @@ function NodeCard({
           <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-muted")}>{node.role || "N/A"}</span>
         </div>
         
-        {(node.access_level || node.type === "employee" || node.type === "root") && (
-          <div className="flex items-center justify-between text-[9px] uppercase tracking-wider">
-            <span className={isRoot ? "text-white/50" : "text-theme-subtle"}>Access Level</span>
-            <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-primary/80")}>{node.access_level?.replace('_', ' ') || "N/A"}</span>
-          </div>
-        )}
-
-        {(node.matrix_role || node.type === "employee" || node.type === "root") && (
+        {(node.access_level || node.matrix_role || node.type === "employee" || node.type === "root") && (
           <div className="flex items-center justify-between text-[9px] uppercase tracking-wider">
             <span className={isRoot ? "text-white/50" : "text-theme-subtle"}>Matrix Role</span>
-            <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-muted")}>{node.matrix_role || "N/A"}</span>
+            <span className={cn("font-bold truncate max-w-[100px] text-right", isRoot ? "text-white" : "text-theme-primary/80")}>
+              {node.access_level ? (ROLE_LABEL[node.access_level] || node.access_level.replace('_', ' ')) : (node.matrix_role || "N/A")}
+            </span>
           </div>
         )}
       </div>
@@ -208,8 +214,8 @@ export default function ManagerOrgChartPage() {
           return teams
             .filter((t: any) => t.parent_id === parentId)
             .map((t: any) => {
-              const leadEmp = employees.find((e: any) => e.id === t.lead_id) 
-                || employees.find((e: any) => e.team_id === t.id && (e.role === 'team_lead' || e.role === 'dept_lead' || e.role === 'manager'));
+              const leadEmp = employees.find((e: any) => e.id === t.lead_id)
+                || employees.find((e: any) => e.team_id === t.id && (e.is_team_lead || e.is_dept_lead));
               const teamEmps = employees
                 .filter((e: any) => e.team_id === t.id && (!leadEmp || e.id !== leadEmp.id))
                 .map((e: any) => ({
@@ -233,7 +239,7 @@ export default function ManagerOrgChartPage() {
 
         const leadEmp = employees.find((e: any) => e.id === dept.lead_id) 
                      || employees.find((e: any) => e.id === user.id) 
-                     || employees.find((e: any) => (e.department === dept.name || e.team_id === dept.id) && (e.role === 'dept_lead' || e.role === 'admin' || e.role === 'manager')) 
+                     || employees.find((e: any) => (e.department === dept.name || e.team_id === dept.id) && (e.role === 'admin' || e.is_dept_lead))
                      || (user as any);
         const deptEmps = employees
           .filter((e: any) => (e.team_id === dept.id || (e.department === dept.name && !e.team_id)) && (!leadEmp || e.id !== leadEmp.id))

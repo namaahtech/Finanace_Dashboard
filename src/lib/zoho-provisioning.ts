@@ -8,8 +8,18 @@ async function getOrgConfig() {
   const supabase = getSupabaseAdmin();
   const { data } = await supabase
     .from("zoho_config")
-    .select("org_id, zoid, org_domain, client_id, client_secret")
+    .select("id, org_id, zoid, org_domain, client_id, client_secret")
     .maybeSingle();
+
+  if (data && (!data.org_id || !data.zoid) && process.env.ZOHO_ORG_ID) {
+    const orgId = process.env.ZOHO_ORG_ID;
+    data.org_id = orgId;
+    data.zoid = orgId;
+    await supabase
+      .from("zoho_config")
+      .update({ org_id: orgId, zoid: orgId })
+      .eq("id", data.id);
+  }
   return data;
 }
 
@@ -49,6 +59,58 @@ export async function syncDomainFromZoho(): Promise<string | null> {
   return org?.org_domain || null;
 }
 
+// ── License check: is a Zoho mailbox seat available? ─────────────────────────
+export interface MailboxLicense {
+  used:      number | null;
+  allowed:   number | null;
+  available: number | null;
+  canCreate: boolean;
+  source:    "zoho" | "unknown" | "not_connected";
+}
+
+export async function checkMailboxLicense(): Promise<MailboxLicense> {
+  const org   = await getOrgConfig();
+  const token = await getActiveToken();
+  const orgId = org?.org_id || org?.zoid;
+
+  if (!token || !orgId) {
+    // Can't verify — don't hard-block; the actual create will surface a Zoho error.
+    return { used: null, allowed: null, available: null, canCreate: true, source: "not_connected" };
+  }
+
+  try {
+    // Used seats = current org accounts
+    const accRes  = await fetch(`${ZOHO_MAIL_API}/organization/${orgId}/accounts`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    });
+    const accJson = await accRes.json();
+    const accounts: any[] = accJson?.data || [];
+    const used = Array.isArray(accounts) ? accounts.length : null;
+
+    // Allowed seats — field name varies across Zoho plans, so probe several.
+    let allowed: number | null = null;
+    try {
+      const orgRes  = await fetch(`${ZOHO_MAIL_API}/organization/${orgId}`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      });
+      const orgJson = await orgRes.json();
+      const d: any  = orgJson?.data || {};
+      const cand    = d.allowedUsers ?? d.allowedAccounts ?? d.noOfSubscription
+                   ?? d.licenseCount ?? d.planUserLimit ?? d.userLimit ?? null;
+      allowed = typeof cand === "number" ? cand : (cand != null ? parseInt(String(cand)) : null);
+      if (Number.isNaN(allowed as number)) allowed = null;
+    } catch {}
+
+    const available = allowed != null && used != null ? Math.max(0, allowed - used) : null;
+    // Only block when we can confidently say seats are full.
+    const canCreate = available == null ? true : available > 0;
+
+    return { used, allowed, available, canCreate, source: "zoho" };
+  } catch {
+    return { used: null, allowed: null, available: null, canCreate: true, source: "unknown" };
+  }
+}
+
 // ── Build email address from full name + domain ───────────────────────────────
 function buildEmail(name: string, domain: string): string {
   const parts = name.trim().toLowerCase().split(/\s+/);
@@ -67,53 +129,44 @@ async function createZohoAccount(
   displayName: string,
   password: string,
 ): Promise<{ zohoUserId: string | null; zohoAccountId: string | null; finalEmail: string }> {
-  const payload = {
-    primaryEmailAddress,
-    displayName,
-    password,
-    role: "member",
+  const base = { displayName, password, role: "member" as const };
+
+  const attempt = async (email: string) => {
+    const res = await fetch(`${ZOHO_MAIL_API}/organization/${orgId}/accounts`, {
+      method:  "POST",
+      headers: { Authorization: `Zoho-oauthtoken ${token}`, "Content-Type": "application/json" },
+      body:    JSON.stringify({ ...base, primaryEmailAddress: email }),
+    });
+    const json = await res.json();
+    console.log(`[Zoho Create Account] ${email} → ${res.status}:`, JSON.stringify(json?.status || json?.data || json));
+    return { res, json };
   };
 
-  const res  = await fetch(`${ZOHO_MAIL_API}/organization/${orgId}/accounts`, {
-    method:  "POST",
-    headers: {
-      Authorization:  `Zoho-oauthtoken ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  const json = await res.json();
-
-  // Handle mailbox collision — append 3-digit suffix and retry
-  if (
+  // A collision is anything that means "this address can't be used" — an existing
+  // mailbox in THIS org OR an address Zoho still has reserved from a prior deleted
+  // user ("EMAILADDRESS_ALREADY_EXISTS"). In every collision case we retry with a
+  // numeric suffix so provisioning ALWAYS succeeds instead of silently failing.
+  const isCollision = (res: Response, json: any) =>
     json?.data?.errorCode === "MAILBOX_ALREADY_EXISTS" ||
+    json?.data?.errorCode === "EMAILADDRESS_ALREADY_EXISTS" ||
     json?.status?.code === 409 ||
-    res.status === 409
-  ) {
-    const suffix   = Math.floor(Math.random() * 900) + 100;
-    const [loc, dm] = primaryEmailAddress.split("@");
-    const newEmail  = `${loc}${suffix}@${dm}`;
+    res.status === 409;
 
-    const retry = await fetch(`${ZOHO_MAIL_API}/organization/${orgId}/accounts`, {
-      method:  "POST",
-      headers: {
-        Authorization:  `Zoho-oauthtoken ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ...payload, primaryEmailAddress: newEmail }),
-    });
-    const retryJson = await retry.json();
-    return {
-      zohoUserId:    retryJson?.data?.mailboxId   || retryJson?.data?.accountId || null,
-      zohoAccountId: retryJson?.data?.accountId   || null,
-      finalEmail:    newEmail,
-    };
+  const [loc, dm] = primaryEmailAddress.split("@");
+  let email = primaryEmailAddress;
+  let { res, json } = await attempt(email);
+
+  // Retry up to 5 times with a fresh suffix until Zoho accepts the address.
+  for (let i = 0; i < 5 && isCollision(res, json); i++) {
+    const suffix = Math.floor(Math.random() * 900) + 100;
+    email = `${loc}${suffix}@${dm}`;
+    ({ res, json } = await attempt(email));
   }
 
   return {
-    zohoUserId:    json?.data?.mailboxId   || json?.data?.accountId || null,
-    zohoAccountId: json?.data?.accountId   || null,
-    finalEmail:    primaryEmailAddress,
+    zohoUserId:    json?.data?.mailboxId || json?.data?.accountId || null,
+    zohoAccountId: json?.data?.accountId || null,
+    finalEmail:    email,
   };
 }
 
@@ -220,14 +273,17 @@ export async function provisionZohoMailbox(params: {
     );
   }
 
-  // ── Audit log ────────────────────────────────────────────────────────────────
+  // ── Audit log (non-blocking) ──────────────────────────────────────────────────
   await supabase.from("audit_logs").insert({
+    actor_id:    params.employeeId,
     user_id:     params.employeeId,
     action:      "mailbox_provisioned",
+    table_name:  "employees",
+    record_id:   params.employeeId,
     target_type: "mailbox",
     target_id:   zohoEmail,
-    metadata:    { zoho_user_id: zohoUserId, zoho_account_id: zohoAccountId, domain },
-  }).catch(() => {});
+    new_values:  { zoho_user_id: zohoUserId, zoho_account_id: zohoAccountId, domain },
+  }).then(undefined, () => {});
 
   return { zoho_email: zohoEmail, zoho_user_id: zohoUserId, zoho_account_id: zohoAccountId };
 }
@@ -248,6 +304,55 @@ export async function disableZohoMailbox(zohoUserId: string): Promise<void> {
     },
     body: JSON.stringify({ accountEnabled: false }),
   }).catch(() => {});
+}
+
+// ── Enable/Activate a Zoho mailbox in real-time ──────────────────────────────
+// NOTE: Zoho Mail API does NOT support enabling/disabling mailboxes via API on free plans.
+// The correct way to record a Zoho "login" event is through the SAML SSO flow.
+// This function verifies mailbox exists and is accessible.
+export async function activateZohoMailbox(zohoUserId: string): Promise<boolean> {
+  const org   = await getOrgConfig();
+  const token = await getActiveToken();
+  const orgId = org?.org_id || org?.zoid;
+
+  if (!token || !orgId || !zohoUserId) {
+    console.warn("[Zoho mailbox check] Missing credentials or token.");
+    return false;
+  }
+
+  try {
+    // Fetch all accounts and find this user — to verify the mailbox is active
+    const listUrl = `${ZOHO_MAIL_API}/organization/${orgId}/accounts`;
+    const res = await fetch(listUrl, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    });
+
+    if (!res.ok) {
+      console.warn(`[Zoho mailbox check] Failed to list accounts: ${res.status}`);
+      return false;
+    }
+
+    const json = await res.json();
+    const accounts: any[] = json?.data || [];
+    
+    // Match by accountId or by ZUID (zohoUserId could be either)
+    const account = accounts.find(
+      (a: any) => a.accountId === zohoUserId || String(a.zuid) === String(zohoUserId)
+    );
+
+    if (!account) {
+      console.warn(`[Zoho mailbox check] Account not found in Zoho for ID: ${zohoUserId}`);
+      return false;
+    }
+
+    const isEnabled = account.enabled === true || account.status === true;
+    const lastLogin = account.lastLogin;
+    console.log(`[Zoho Mailbox Check] Account: ${account.primaryEmailAddress}, enabled: ${isEnabled}, lastLogin: ${lastLogin}`);
+    return isEnabled;
+  } catch (e: any) {
+    console.error("[Zoho mailbox check] API error:", e.message);
+    return false;
+  }
 }
 
 // ── Grant a user access to a shared mailbox ───────────────────────────────────
@@ -273,10 +378,92 @@ export async function grantSharedMailboxAccess(params: {
 
 // ── Generate a random temporary password ─────────────────────────────────────
 export function generateTempPassword(length = 12): string {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!";
-  let pwd = "";
-  for (let i = 0; i < length; i++) {
-    pwd += chars[Math.floor(Math.random() * chars.length)];
+  const uppers = "ABCDEFGHJKMNPQRSTUVWXYZ";
+  const lowers = "abcdefghjkmnpqrstuvwxyz";
+  const digits = "23456789";
+  const symbols = "@#!$%&*";
+  
+  // Guarantee at least one of each character class
+  const pwdParts = [
+    uppers[Math.floor(Math.random() * uppers.length)],
+    lowers[Math.floor(Math.random() * lowers.length)],
+    digits[Math.floor(Math.random() * digits.length)],
+    symbols[Math.floor(Math.random() * symbols.length)],
+  ];
+  
+  const allChars = uppers + lowers + digits + symbols;
+  for (let i = pwdParts.length; i < length; i++) {
+    pwdParts.push(allChars[Math.floor(Math.random() * allChars.length)]);
   }
-  return pwd;
+  
+  // Shuffle the password characters using Fisher-Yates algorithm
+  for (let i = pwdParts.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pwdParts[i], pwdParts[j]] = [pwdParts[j], pwdParts[i]];
+  }
+  
+  return pwdParts.join("");
+}
+
+// ── Update Zoho account password ──────────────────────────────────────────────
+export async function updateZohoPassword(zohoAccountId: string, newPassword: string): Promise<boolean> {
+  const org = await getOrgConfig();
+  const token = await getActiveToken();
+  const orgId = org?.org_id || org?.zoid;
+
+  if (!token || !orgId || !zohoAccountId) {
+    console.warn("[Zoho password update] Missing credentials or token — skipping password sync.");
+    return false;
+  }
+
+  try {
+    // 1. Fetch Zoho accounts to get the ZUID for this accountId
+    const listUrl = `${ZOHO_MAIL_API}/organization/${orgId}/accounts`;
+    const listRes = await fetch(listUrl, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` }
+    });
+    
+    if (!listRes.ok) {
+      throw new Error(`Failed to fetch accounts list: ${listRes.status}`);
+    }
+    
+    const listJson = await listRes.json();
+    const accounts = listJson?.data || [];
+    const userAccount = accounts.find((a: any) => a.accountId === zohoAccountId);
+    
+    if (!userAccount) {
+      console.warn(`[Zoho password update] Account not found in Zoho for account ID: ${zohoAccountId}`);
+      return false;
+    }
+    
+    const zuid = userAccount.zuid;
+    if (!zuid) {
+      console.warn(`[Zoho password update] ZUID not found for account ID: ${zohoAccountId}`);
+      return false;
+    }
+
+    // 2. Perform the password reset PUT request using the correct ZUID
+    const url = `${ZOHO_MAIL_API}/organization/${orgId}/accounts/${zohoAccountId}`;
+    console.log(`[Zoho Password Update] Requesting PUT for ZUID: ${zuid} at URL: ${url}`);
+    
+    // Construct raw JSON string to preserve 64-bit integer precision for zuid
+    const rawBody = `{"zuid": ${zuid}, "password": ${JSON.stringify(newPassword)}, "mode": "resetPassword"}`;
+
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Zoho-oauthtoken ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: rawBody,
+    });
+
+    const json = await res.json();
+    console.log(`[Zoho Password Update] Status: ${res.status}, Response:`, JSON.stringify(json));
+    
+    return res.ok;
+  } catch (e: any) {
+    console.error("[Zoho password update] API error:", e.message);
+    return false;
+  }
 }

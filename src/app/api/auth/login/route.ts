@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { activateZohoMailbox } from "@/lib/zoho-provisioning";
 
 // Anon client for signInWithPassword — service role key rejects user auth calls
 const getAnonClient = () =>
@@ -23,103 +24,120 @@ export async function POST(req: NextRequest) {
     const { email, password } = LoginSchema.parse(body);
 
     const supabase = getSupabaseAdmin();
+    const cleanEmail = email.trim().toLowerCase();
 
-    // ── 1. Try Supabase Auth (primary path) ───────────────────────────────────
+    // 1. Look up the employee profile in database by email (personal, professional or zoho)
+    const { data: emp } = await supabase
+      .from("employees")
+      .select("id, name, email, zoho_email, zoho_user_id, personal_email, status, is_active, role, employee_id, department, designation")
+      .or(`email.ilike.${cleanEmail},personal_email.ilike.${cleanEmail},zoho_email.ilike.${cleanEmail}`)
+      .maybeSingle();
+
+    if (!emp) {
+      return NextResponse.json({ error: "You are not authorized in this company." }, { status: 403 });
+    }
+
+    if (emp.status === "disabled" || emp.is_active === false) {
+      return NextResponse.json({ error: "Account has been deactivated. Please contact your administrator." }, { status: 403 });
+    }
+
+    // 2. Fetch onboarding status
+    const { data: onboarding } = await supabase
+      .from("user_onboarding")
+      .select("status")
+      .eq("user_id", emp.id)
+      .maybeSingle();
+
+    const onboardingCompleted = onboarding?.status === "completed";
+    const isPersonalEmail = cleanEmail === emp.personal_email?.toLowerCase();
+
+    // 3. If they enter their personal email and onboarding is completed, block them!
+    if (isPersonalEmail && onboardingCompleted && emp.status !== "disabled") {
+      return NextResponse.json({ error: "Please login with your company mail ID." }, { status: 403 });
+    }
+
+    // 3b. If they enter their professional email but onboarding is not completed, block them!
+    const isProfessionalEmail = cleanEmail === emp.email?.toLowerCase() || (emp.zoho_email && cleanEmail === emp.zoho_email?.toLowerCase());
+    const hasDistinctPersonalEmail = emp.personal_email && emp.personal_email.toLowerCase() !== emp.email?.toLowerCase();
+    if (isProfessionalEmail && hasDistinctPersonalEmail && !onboardingCompleted) {
+      return NextResponse.json({ error: "First time login with personal mail and complete onboarding, after login with professional mail." }, { status: 403 });
+    }
+
+    // 4. Authenticate against Supabase Auth using their professional email (which is the registered login identity)
     const anonClient = getAnonClient();
-    const { data: authData, error: authError } = await anonClient.auth.signInWithPassword({
-      email,
+    let { data: authData, error: authError } = await anonClient.auth.signInWithPassword({
+      email: emp.email, // Always authenticate using the professional email registered in Supabase Auth
       password,
     });
 
-    if (authData?.user && !authError) {
-      // Auth succeeded — fetch employee profile
-      const { data: emp } = await supabase
-        .from("employees")
-        .select("id, name, email, zoho_email, role, employee_id, department, designation, status")
-        .eq("id", authData.user.id)
-        .maybeSingle();
-
-      if (emp) {
-        if (emp.status === "disabled") {
-          return NextResponse.json({ error: "Account has been disabled. Please contact your administrator." }, { status: 403 });
-        }
-
-        const session = await getSession();
-        session.userId = emp.id;
-        session.email  = emp.email;
-        session.role   = emp.role as any;
-        await session.save();
-
-        await supabase.from("audit_logs").insert({
-          user_id:     emp.id,
-          action:      "login_success",
-          target_type: "login",
-          metadata:    { email, method: "supabase_auth" },
-        });
-
-        return NextResponse.json({
-          user: {
-            id:          emp.id,
-            name:        emp.name,
-            email:       emp.email,
-            zoho_email:  emp.zoho_email,
-            role:        emp.role,
-            employeeId:  emp.employee_id,
-            department:  emp.department,
-            designation: emp.designation,
-          },
-        });
+    // Fallback: if it fails, try signing in with their personal email (for legacy users)
+    if ((authError || !authData.user) && emp.personal_email && emp.personal_email !== emp.email) {
+      const retry = await anonClient.auth.signInWithPassword({
+        email: emp.personal_email,
+        password,
+      });
+      if (retry.data?.user && !retry.error) {
+        authData = retry.data;
+        authError = null;
       }
     }
 
-    // ── 2. Try zoho_email login (user enters firstname.lastname@namaah.in) ────
-    // Look up the employee by zoho_email, then sign in with their personal_email
-    if (authError) {
-      const { data: empByZoho } = await supabase
-        .from("employees")
-        .select("id, name, email, zoho_email, personal_email, role, employee_id, department, designation, status")
-        .eq("zoho_email", email)
-        .maybeSingle();
+    if (authData?.user && !authError) {
+      const session = await getSession();
+      session.userId = emp.id;
+      session.email  = emp.email;
+      session.role   = emp.role as any;
+      await session.save();
 
-      if (empByZoho?.personal_email || empByZoho?.email) {
-        const loginEmail = empByZoho.personal_email || empByZoho.email;
-        const { data: retryAuth, error: retryError } = await anonClient.auth.signInWithPassword({
-          email:    loginEmail,
-          password,
-        });
+      const isProfessionalEmail = cleanEmail === emp.email?.toLowerCase() || (emp.zoho_email && cleanEmail === emp.zoho_email?.toLowerCase());
+      const identityType = isProfessionalEmail ? "professional_zoho_mail" : "personal_mail";
+      const logDetails = isProfessionalEmail 
+        ? `User signed in using official company Zoho mail ID: ${cleanEmail}` 
+        : `User signed in using personal mail ID: ${cleanEmail}`;
 
-        if (retryAuth?.user && !retryError) {
-          if (empByZoho.status === "disabled") {
-            return NextResponse.json({ error: "Account has been disabled." }, { status: 403 });
-          }
+      await supabase.from("audit_logs").insert({
+        actor_id:    emp.id,
+        user_id:     emp.id,
+        action:      isProfessionalEmail ? "login_success_professional" : "login_success_personal",
+        table_name:  "employees",
+        record_id:   emp.id,
+        target_type: "login",
+        new_values:  { email, method: "supabase_auth", identity_type: identityType, details: logDetails },
+      });
 
-          const session = await getSession();
-          session.userId = empByZoho.id;
-          session.email  = empByZoho.email;
-          session.role   = empByZoho.role as any;
-          await session.save();
-
+      // Trigger Zoho Mailbox activation in real-time if a Zoho mailbox is provisioned
+      if (emp.zoho_user_id) {
+        try {
+          await activateZohoMailbox(emp.zoho_user_id);
+          console.log(`[Zoho Login Activation] Successfully triggered mailbox activation on login for user: ${emp.name}`);
+          
+          // Log the activation action specifically for audit purposes
           await supabase.from("audit_logs").insert({
-            user_id:     empByZoho.id,
-            action:      "login_success",
-            target_type: "login",
-            metadata:    { email, method: "zoho_email_alias" },
+            actor_id:    emp.id,
+            user_id:     emp.id,
+            action:      "zoho_mailbox_activated_on_login",
+            table_name:  "employees",
+            record_id:   emp.id,
+            target_type: "mailbox",
+            new_values:  { zoho_user_id: emp.zoho_user_id, email: emp.zoho_email, reason: "Login activation trigger" },
           });
-
-          return NextResponse.json({
-            user: {
-              id:          empByZoho.id,
-              name:        empByZoho.name,
-              email:       empByZoho.email,
-              zoho_email:  empByZoho.zoho_email,
-              role:        empByZoho.role,
-              employeeId:  empByZoho.employee_id,
-              department:  empByZoho.department,
-              designation: empByZoho.designation,
-            },
-          });
+        } catch (activateErr: any) {
+          console.error(`[Zoho Login Activation Error] Failed to activate Zoho mailbox:`, activateErr.message);
         }
       }
+
+      return NextResponse.json({
+        user: {
+          id:          emp.id,
+          name:        emp.name,
+          email:       emp.email,
+          zoho_email:  emp.zoho_email,
+          role:        emp.role,
+          employeeId:  emp.employee_id,
+          department:  emp.department,
+          designation: emp.designation,
+        },
+      });
     }
 
     // ── 3. Dev fallback — demo credentials (remove in production) ────────────
@@ -160,8 +178,10 @@ export async function POST(req: NextRequest) {
     try {
       await supabase.from("audit_logs").insert({
         action:      "login_failed",
+        table_name:  "employees",
+        record_id:   "unknown",
         target_type: "login",
-        metadata:    { email },
+        new_values:  { email },
       });
     } catch (_) {}
 

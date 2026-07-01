@@ -6,8 +6,8 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useApi } from "@/hooks/useApi";
 import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/ButtonLegacy";
+import { Badge } from "@/components/ui/BadgeLegacy";
 import { formatCurrency, cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import {
@@ -26,6 +26,8 @@ import {
   Target,
   Trophy,
   Zap,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 
 interface Employee {
@@ -39,6 +41,9 @@ interface Employee {
   commission_enabled?: boolean;
   monthly_sales_target?: number;
   salary_slab_id?: string;
+  zoho_email?: string | null;
+  zoho_account_id?: string | null;
+  zoho_activated_at?: string | null;
 }
 
 interface KpiScore {
@@ -357,7 +362,7 @@ function SalesTracker({
               </p>
 
               {/* Threshold */}
-              <p style={{ fontSize: "9px", color: "#64748b", marginTop: "3px", fontFamily: "monospace" }}>
+              <p style={{ fontSize: "9px", color: "#64748b", marginTop: "3px" }}>
                 {cp.min_target > 0 ? `≥ ₹${cp.min_target.toLocaleString("en-IN")}` : "Base tier"}
               </p>
 
@@ -398,7 +403,7 @@ function SalesTracker({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <span style={{ fontSize: "10px", color: "#64748b" }}>Est. earnings:</span>
-          <span style={{ fontSize: "14px", fontWeight: 900, color: "#10b981", fontFamily: "monospace", letterSpacing: "-0.02em" }}>
+          <span style={{ fontSize: "14px", fontWeight: 900, color: "#10b981", letterSpacing: "-0.02em" }}>
             ₹{Math.round(estimatedCommission).toLocaleString("en-IN")}
           </span>
         </div>
@@ -415,6 +420,17 @@ function SalesTracker({
   );
 }
 
+const ROLE_LABEL: Record<string, string> = {
+  employee: "Employee",
+  hr: "HR",
+  accounts: "Accounts",
+  admin: "Admin",
+  intern: "Intern",
+  dept_lead: "Department Lead",
+  team_lead: "Team Lead",
+  sales: "Sales",
+};
+
 // ── Main Profile Page ─────────────────────────────────────
 export default function EmployeeProfile() {
   const { user } = useAuth();
@@ -428,6 +444,35 @@ export default function EmployeeProfile() {
   const [usingFallback, setUsingFallback] = useState(false);
   const [salesRecord, setSalesRecord] = useState<SalesRecord | null>(null);
   const [salarySlabs, setSalarySlabs] = useState<SalarySlab[]>([]);
+  const [activatingZoho, setActivatingZoho] = useState(false);
+
+  // Clicking the "Not Activated" badge launches the one-time Zoho SAML hand-off.
+  // Refresh np_session first (so the SAML route resolves THIS user), then full-page
+  // navigate. Zoho verifies → /auth/zoho-activated confirms + redirects to dashboard,
+  // and the badge flips to green on return.
+  const handleActivateZoho = useCallback(async () => {
+    if (activatingZoho || !user) return;
+    setActivatingZoho(true);
+    try {
+      const { data: sb } = await supabase.auth.getSession();
+      if (sb?.session?.access_token) {
+        await fetch("/api/auth/save-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            access_token: sb.session.access_token,
+            refresh_token: sb.session.refresh_token,
+            employee_id: user.id,
+            role: user.role,
+            email: user.email,
+          }),
+        }).catch(() => {});
+      }
+      window.location.href = `/api/auth/saml/sso?RelayState=${encodeURIComponent("/auth/zoho-activated")}`;
+    } catch {
+      setActivatingZoho(false);
+    }
+  }, [activatingZoho, user]);
 
   const loadProfile = useCallback(async () => {
     if (!user) return;
@@ -570,6 +615,37 @@ export default function EmployeeProfile() {
                         {employee.employment_type.replace(/_/g, " ")}
                       </span>
                     )}
+                    {/* Zoho mailbox activation status */}
+                    {employee.zoho_email && (
+                      employee.zoho_activated_at ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
+                          <CheckCircle2 size={11} /> Zoho Activated
+                        </span>
+                      ) : employee.zoho_account_id ? (
+                        <button
+                          type="button"
+                          onClick={handleActivateZoho}
+                          disabled={activatingZoho}
+                          title="Click to activate your Zoho mailbox"
+                          className="group inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 cursor-pointer transition-all hover:bg-amber-500 hover:text-white hover:shadow-sm hover:shadow-amber-500/30 active:scale-95 disabled:opacity-60 disabled:cursor-wait"
+                        >
+                          {activatingZoho ? (
+                            <><Loader2 size={11} className="animate-spin" /> Activating…</>
+                          ) : (
+                            <>
+                              <Clock size={11} className="group-hover:hidden" />
+                              <Zap size={11} className="hidden group-hover:inline" />
+                              <span className="group-hover:hidden">Zoho Not Activated</span>
+                              <span className="hidden group-hover:inline">Activate Now →</span>
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold text-red-500">
+                          <AlertTriangle size={11} /> Zoho Setup Failed
+                        </span>
+                      )
+                    )}
                   </div>
                 </div>
               </div>
@@ -604,7 +680,7 @@ export default function EmployeeProfile() {
                   </div>
                   <div>
                     <p className="text-xs text-theme-muted">Employee ID</p>
-                    <p className="text-sm font-mono font-bold text-theme-primary mt-0.5">{employee.employee_id}</p>
+                    <p className="text-sm tabular-nums font-bold text-theme-primary mt-0.5">{employee.employee_id}</p>
                   </div>
                   <div className="pt-2 border-t border-theme-border">
                     <a href={`mailto:${employee.email}`}>
@@ -630,6 +706,12 @@ export default function EmployeeProfile() {
                   <div>
                     <p className="text-xs text-theme-muted">Designation</p>
                     <p className="text-sm font-semibold text-theme-fg mt-0.5">{employee.designation || "Not specified"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-theme-muted">Matrix Role</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5">
+                      {employee.commission_enabled ? "Sales" : (ROLE_LABEL[employee.role] || employee.role || "Not specified")}
+                    </p>
                   </div>
                   <div className="pt-2 border-t border-theme-border">
                     <p className="text-xs text-theme-muted">Salary Structure</p>

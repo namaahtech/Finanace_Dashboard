@@ -2,11 +2,49 @@
 
 import { useEffect, useState, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Card, CardContent } from "@/components/ui/card";
 import { useApi } from "@/hooks/useApi";
 import { formatDate, cn } from "@/lib/utils";
-import { useToast } from "@/components/ui/Toast";
+import { toast } from "sonner";
 import {
   Users, UserPlus, Search, X, CreditCard, Building, UserCheck, UserX,
   ShieldCheck, FileText, Zap, CalendarDays, MoreVertical, Trash2, Edit2,
@@ -14,7 +52,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { usePermission } from "@/hooks/usePermission";
-import { DatePicker } from "@/components/ui/DatePicker";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -55,23 +94,39 @@ interface User {
   behavioral_weight?: number;
   enable_salary_linkage?: boolean;
   zoho_email?: string | null;
+  personal_email?: string | null;
   commission_enabled?: boolean;
   monthly_sales_target?: number | null;
   salary_slab_id?: string | null;
 }
 
-const ROLE_BADGE: Record<string, "default" | "info" | "success" | "purple" | "warning" | "danger" | "indigo"> = {
-  employee: "default", team_lead: "success", dept_lead: "purple", admin: "purple", intern: "indigo", sales: "warning",
+const ROLE_BADGE: Record<string, string> = {
+  employee: "bg-muted text-muted-foreground border-transparent",
+  hr:       "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-transparent",
+  accounts: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent",
+  admin:    "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-transparent",
+  intern:   "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-transparent",
+  dept_lead: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-transparent",
+  team_lead: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent",
 };
+const COMMISSION_BADGE = "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-transparent";
 const ROLE_LABEL: Record<string, string> = {
-  employee: "Employee", team_lead: "Team Lead", dept_lead: "Department Lead", admin: "Admin", intern: "Intern", sales: "Sales",
+  employee: "Employee",
+  hr: "HR",
+  accounts: "Accounts",
+  admin: "Admin",
+  intern: "Intern",
+  dept_lead: "Department Lead",
+  team_lead: "Team Lead",
 };
 
 function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
-// ── Custom Simple Dropdown ───────────────────────────────
+// ── Custom Simple Dropdown — shadcn-backed wrapper ───────
+// (shadcn Select forbids empty-string values, so we map "" <-> a sentinel internally)
+const EMPTY_SENTINEL = "__none__";
 function CustomSelect({ value, options, onChange, placeholder, icon, label }: {
   value: string;
   options: { label: string; value: string }[];
@@ -80,92 +135,43 @@ function CustomSelect({ value, options, onChange, placeholder, icon, label }: {
   icon?: React.ReactNode;
   label?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const selected = options.find(o => o.value === value);
-
   return (
-    <div className="space-y-2" ref={ref}>
-      {label && <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-theme-muted">{icon}{label}</label>}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="flex h-[46px] w-full items-center justify-between rounded-2xl border border-theme-border bg-theme-page px-4 text-sm font-bold text-theme-fg outline-none focus:border-theme-strong transition-all overflow-hidden"
-        >
-          <span className="flex items-center gap-2 truncate pr-2">
-            {!label && icon}
-            {selected ? selected.label : <span className="text-theme-muted font-normal">{placeholder}</span>}
-          </span>
-          <ChevronDown size={14} className={cn("flex-shrink-0 text-theme-muted transition-transform", open && "rotate-180")} />
-        </button>
-
-        {open && (
-          <div className="absolute top-full z-[8000] mt-1.5 w-full max-h-48 overflow-y-auto rounded-2xl border border-theme-border bg-theme-surface shadow-[0_10px_40px_rgba(0,0,0,0.3)] p-1.5 animate-in slide-in-from-top-1 duration-200">
-            {options.length > 0 ? options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => { onChange(opt.value); setOpen(false); }}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-all",
-                  value === opt.value ? "bg-theme-primary text-theme-surface" : "text-theme-fg hover:bg-theme-raised"
-                )}
-              >
-                <span className="truncate uppercase tracking-tight">{opt.label}</span>
-                {value === opt.value && <Check size={12} className="flex-shrink-0" />}
-              </button>
-            )) : (
-              <div className="px-3 py-4 text-center text-[10px] uppercase font-black tracking-widest text-theme-muted opacity-50">No Data Options</div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Inline action button with tooltip ────────────────────
-function ActionBtn({ icon, label, onClick, disabled, hoverColor = "hover:text-theme-fg" }: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  hoverColor?: string;
-}) {
-  return (
-    <div className="relative group/ab flex items-center">
-      <button
-        onClick={onClick}
-        disabled={disabled}
-        className={cn(
-          "p-1.5 rounded-lg text-theme-muted hover:bg-theme-raised transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-          hoverColor,
-        )}
+    <div className="space-y-2">
+      {label && (
+        <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+          {icon}{label}
+        </label>
+      )}
+      <Select
+        value={value === "" ? EMPTY_SENTINEL : (value || undefined)}
+        onValueChange={(v) => onChange(v === EMPTY_SENTINEL ? "" : v)}
       >
-        {icon}
-      </button>
-      {/* Tooltip — appears to the left of the button */}
-      <span className="pointer-events-none absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-theme-fg px-2 py-0.5 text-[10px] font-semibold text-theme-surface opacity-0 transition-opacity group-hover/ab:opacity-100 z-[9999]">
-        {label}
-      </span>
+        <SelectTrigger className="w-full">
+          <span className="flex items-center gap-2 min-w-0 flex-1 text-left">
+            {!label && icon}
+            <SelectValue placeholder={placeholder} />
+          </span>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={EMPTY_SENTINEL}>
+            {placeholder}
+          </SelectItem>
+          {options.map((opt) => (
+            <SelectItem key={opt.value || EMPTY_SENTINEL} value={opt.value || EMPTY_SENTINEL}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
 
 // ── Action Menu ─────────────────────────────────────────
-function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, canDelete, zohoConnected, zohoDomain }: {
+function RowMenu({ user, onRefresh, onEdit, setDeleteConfirm, canEdit, canDelete, zohoConnected, zohoDomain }: {
   user: User;
   onRefresh: () => void;
   onEdit: () => void;
-  isLast?: boolean;
   setDeleteConfirm: (u: User) => void;
   canEdit: boolean;
   canDelete: boolean;
@@ -177,7 +183,6 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
   const [mailBody, setMailBody] = useState("");
   const [acting, setActing] = useState(false);
   const [provisioningMail, setProvisioningMail] = useState(false);
-  const { showToast } = useToast();
 
   async function createZohoMail() {
     setProvisioningMail(true);
@@ -190,15 +195,15 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
       const data = await res.json();
       if (res.ok && data.email_address) {
         if (data.already_exists) {
-          showToast(`Mail already exists: ${data.email_address}`, "info");
+          toast.info(`Mail already exists: ${data.email_address}`);
         } else {
-          showToast(`Zoho Mail created: ${data.email_address}`, "success");
+          toast.success(`Zoho Mail created: ${data.email_address}`);
         }
       } else {
-        showToast(data.error || "Failed to create Zoho Mail.", "error");
+        toast.error(data.error || "Failed to create Zoho Mail.");
       }
     } catch {
-      showToast("Failed to create Zoho Mail. Check connection.", "error");
+      toast.error("Failed to create Zoho Mail. Check connection.");
     } finally {
       setProvisioningMail(false);
     }
@@ -218,112 +223,142 @@ function RowMenu({ user, onRefresh, onEdit, isLast, setDeleteConfirm, canEdit, c
     setActing(true);
     try {
       const res = await axios.post(`/api/users/${user.id}`, { action, ...extra });
-      showToast(res.data.message || res.data.warning || "Done", res.data.warning ? "warning" : "success");
+      (res.data.warning ? toast.warning : toast.success)(res.data.message || res.data.warning || "Done");
       onRefresh();
     } catch (e: any) {
-      showToast(e.response?.data?.error || e.message, "error");
+      toast.error(e.response?.data?.error || e.message);
     } finally {
       setActing(false);
     }
   }
 
-  return (
-    <div className="flex flex-col items-end gap-2">
-      {/* Vertical inline action icons — tooltip appears on hover, no popup */}
-      <div className="flex flex-col items-end gap-0.5">
-        {canEdit && (
-          <ActionBtn icon={<Edit2 size={14} />} label="Edit Employee" onClick={onEdit} disabled={isActing} hoverColor="hover:text-theme-primary" />
-        )}
-        <ActionBtn icon={<RefreshCw size={14} />} label="Resend Login Info" onClick={() => doAction("resend_credentials")} disabled={isActing} hoverColor="hover:text-sky-500" />
-        <ActionBtn icon={<Mail size={14} />} label="Send Custom Mail" onClick={() => setShowCustomMail(true)} disabled={isActing} hoverColor="hover:text-emerald-500" />
-        {zohoConnected && (
-          user.zoho_email
-            ? (
-              <div className="relative group/ab flex items-center">
-                <div className="p-1.5 rounded-lg text-emerald-500 cursor-default">
-                  <Zap size={14} />
-                </div>
-                <span className="pointer-events-none absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-theme-fg px-2 py-0.5 text-[10px] font-semibold text-theme-surface opacity-0 transition-opacity group-hover/ab:opacity-100 z-[9999]">
-                  Mail: {user.zoho_email}
-                </span>
-              </div>
-            )
-            : <ActionBtn
-                icon={provisioningMail ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                label="Create Zoho Mail"
-                onClick={createZohoMail}
-                disabled={isActing}
-                hoverColor="hover:text-blue-500"
-              />
-        )}
-        {canDelete && (
-          <>
-            {user.isActive && (
-              <ActionBtn
-                icon={<LogOut size={14} />}
-                label="Begin Offboarding"
-                disabled={isActing}
-                hoverColor="hover:text-orange-500"
-                onClick={async () => {
-                  if (!confirm(`Start 7-day offboarding for ${user.name}? They will lose access after 7 days.`)) return;
-                  setActing(true);
-                  try {
-                    const res = await fetch(`/api/employees/${user.id}/offboard`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ reason: "Admin initiated offboarding" }),
-                    });
-                    const data = await res.json();
-                    showToast(data.message || "Offboarding started.", res.ok ? "success" : "error");
-                    if (res.ok) onRefresh();
-                  } catch { showToast("Failed to start offboarding.", "error"); }
-                  finally { setActing(false); }
-                }}
-              />
-            )}
-            <ActionBtn icon={<Trash2 size={14} />} label="Delete Account" onClick={() => setDeleteConfirm(user)} disabled={isActing} hoverColor="hover:text-rose-500" />
-          </>
-        )}
-      </div>
+  async function startOffboarding() {
+    if (!confirm(`Start 7-day offboarding for ${user.name}? They will lose access after 7 days.`)) return;
+    setActing(true);
+    try {
+      const res = await fetch(`/api/employees/${user.id}/offboard`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Admin initiated offboarding" }),
+      });
+      const data = await res.json();
+      (res.ok ? toast.success : toast.error)(data.message || "Offboarding started.");
+      if (res.ok) onRefresh();
+    } catch { toast.error("Failed to start offboarding."); }
+    finally { setActing(false); }
+  }
 
-      {showCustomMail && (
-        <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl bg-theme-surface border border-theme-border shadow-2xl p-6 space-y-4 animate-in fade-in duration-200 text-left">
-            <div className="flex items-center justify-between border-b border-theme-border pb-3">
-              <h3 className="text-sm font-bold text-theme-fg">Message: {user.name}</h3>
-              <button onClick={() => setShowCustomMail(false)} className="text-theme-muted hover:text-theme-fg p-1 rounded-lg hover:bg-theme-raised transition-colors"><X size={15} /></button>
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 ml-auto"
+            disabled={isActing}
+            aria-label="Open actions menu"
+          >
+            {isActing
+              ? <Loader2 size={14} className="animate-spin" />
+              : <MoreVertical size={14} />}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Account
+          </DropdownMenuLabel>
+          {canEdit && (
+            <DropdownMenuItem onClick={onEdit}>
+              <Edit2 className="text-muted-foreground" />
+              Edit Employee
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem asChild>
+            <a href={`/admin/users/${user.id}/permissions`}>
+              <ShieldCheck className="text-muted-foreground" />
+              Manage Permissions
+            </a>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => doAction("resend_credentials")}>
+            <RefreshCw className="text-muted-foreground" />
+            Resend Login Info
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setShowCustomMail(true)}>
+            <Mail className="text-muted-foreground" />
+            Send Custom Mail
+          </DropdownMenuItem>
+
+          {zohoConnected && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Mailbox
+              </DropdownMenuLabel>
+              {user.zoho_email ? (
+                <DropdownMenuItem disabled className="opacity-100 cursor-default">
+                  <Zap className="text-emerald-500" />
+                  <span className="truncate">{user.zoho_email}</span>
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={createZohoMail} disabled={provisioningMail}>
+                  {provisioningMail
+                    ? <Loader2 className="animate-spin text-muted-foreground" />
+                    : <Zap className="text-muted-foreground" />}
+                  Create Zoho Mail
+                </DropdownMenuItem>
+              )}
+            </>
+          )}
+
+          {canDelete && (
+            <>
+              <DropdownMenuSeparator />
+              {user.isActive && (
+                <DropdownMenuItem onClick={startOffboarding} className="text-orange-600 dark:text-orange-400 focus:text-orange-600 dark:focus:text-orange-400">
+                  <LogOut />
+                  Begin Offboarding
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => setDeleteConfirm(user)} className="text-destructive focus:text-destructive">
+                <Trash2 />
+                Delete Account
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={showCustomMail} onOpenChange={setShowCustomMail}>
+        <DialogContent className="sm:max-w-md text-left">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">Message: {user.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Subject</Label>
+              <Input value={mailSubject} onChange={(e) => setMailSubject(e.target.value)} placeholder="Enter subject..." />
             </div>
-            <div className="space-y-3 pt-2">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Subject</label>
-                <input value={mailSubject} onChange={(e) => setMailSubject(e.target.value)}
-                  placeholder="Enter subject..."
-                  className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-theme-muted">Message</label>
-                <textarea value={mailBody} onChange={(e) => setMailBody(e.target.value)}
-                  rows={4} placeholder="Type message..."
-                  className="w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm resize-none" />
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end pt-3 border-t border-theme-border">
-              <Button variant="secondary" size="sm" onClick={() => setShowCustomMail(false)} className="font-semibold px-4">Cancel</Button>
-              <Button variant="primary" size="sm" onClick={() => {
-                doAction("send_custom", { subject: mailSubject, message: mailBody });
-                setShowCustomMail(false);
-              }} className="font-semibold px-6">Send Mail</Button>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Message</Label>
+              <Textarea value={mailBody} onChange={(e) => setMailBody(e.target.value)} rows={4} placeholder="Type message..." className="resize-none" />
             </div>
           </div>
-        </div>
-      )}
-    </div>
+          <DialogFooter className="!flex-row !justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowCustomMail(false)}>Cancel</Button>
+            <Button size="sm" onClick={() => {
+              doAction("send_custom", { subject: mailSubject, message: mailBody });
+              setShowCustomMail(false);
+            }}>Send Mail</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
 // ── Main Dashboard ───────────────────────────────────────
 export default function AdminUsersPage() {
-  const { showToast } = useToast();
   const { request } = useApi();
   const { user, loading: authLoading } = useAuth();
   const { canCreate, canEdit, canDelete, canExport } = usePermission("employees");
@@ -336,6 +371,7 @@ export default function AdminUsersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "active" | "inactive">("all");
   const [deleteConfirm, setDeleteConfirm] = useState<User | null>(null);
+  const [togglingStatusId, setTogglingStatusId] = useState<string | null>(null);
   const [orgTeams, setOrgTeams] = useState<TeamNode[]>([]);
   const [departments, setDepartments] = useState<{id: string, name: string}[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -357,11 +393,14 @@ export default function AdminUsersPage() {
   const [zohoEmailPreview, setZohoEmailPreview] = useState("");
   const [assignableRoles, setAssignableRoles] = useState<string[]>([]);
   const [salarySlabs, setSalarySlabs] = useState<SalarySlab[]>([]);
+  // "Add from onboarding" — pick a signed/completed candidate to auto-fill
+  const [fromOnboarding, setFromOnboarding] = useState(false);
+  const [obCandidates, setObCandidates] = useState<{ id: string; name: string; email: string; phone: string; address: string; role: string }[]>([]);
 
   async function load(q?: string) {
     setLoading(true);
     try {
-      const url = `/api/users?${q ? `search=${q}` : ""}`;
+      const url = `/api/users?_t=${Date.now()}${q ? `&search=${encodeURIComponent(q)}` : ""}`;
       const res = await request<{ users: User[]; total: number }>({ url });
       setUsers(res.users ?? []);
       setTotal(res.total ?? 0);
@@ -409,17 +448,100 @@ export default function AdminUsersPage() {
     }
   }, [authLoading, user]);
 
-  // Update Zoho email preview when name changes
+  // ── Real-time status sync: listen to is_active changes on the employees table ──
   useEffect(() => {
-    if (form.name && zohoConnected) {
-      const parts = form.name.trim().toLowerCase().split(" ");
-      const preview = parts.length >= 2
-        ? `${parts[0]}.${parts[parts.length - 1]}@${zohoDomain}`
-        : `${parts[0]}@${zohoDomain}`;
-      setZohoEmailPreview(preview);
-    } else {
-      setZohoEmailPreview("");
+    if (!user) return;
+
+    const channel = supabase
+      .channel("admin_users_status_sync")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "employees" },
+        (payload) => {
+          const updated = payload.new;
+          // Only apply partial update if we care about status-related changes
+          if (
+            "is_active" in updated ||
+            "deactivated_by" in updated ||
+            "deactivated_at" in updated
+          ) {
+            setUsers((prevUsers) =>
+              prevUsers.map((u) => {
+                if (u.id === updated.id) {
+                  return {
+                    ...u,
+                    isActive: updated.is_active,
+                    is_active: updated.is_active,
+                    deactivated_by: updated.deactivated_by ?? null,
+                    deactivated_at: updated.deactivated_at ?? null,
+                  } as any;
+                }
+                return u;
+              })
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // Personal email live validation (DNS MX check)
+  const [emailCheckState, setEmailCheckState] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
+  const [emailCheckMsg, setEmailCheckMsg] = useState("");
+  const [emailSuggestion, setEmailSuggestion] = useState("");
+  useEffect(() => {
+    if (editingId) return; // don't re-validate when editing
+    const val = form.email?.trim();
+    if (!val || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+      setEmailCheckState("idle"); setEmailCheckMsg(""); setEmailSuggestion(""); return;
     }
+    setEmailCheckState("checking"); setEmailSuggestion("");
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/auth/verify-email?email=${encodeURIComponent(val)}`);
+        const data = await res.json();
+        if (data.valid) {
+          setEmailCheckState("valid"); setEmailCheckMsg("Email domain verified");
+        } else {
+          setEmailCheckState("invalid");
+          setEmailCheckMsg(data.reason || "Could not verify this email.");
+          setEmailSuggestion(data.suggestion || "");
+        }
+      } catch {
+        setEmailCheckState("idle");
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [form.email, editingId]);
+
+  // Update Zoho email preview when name changes — checks DB for duplicates
+  const [emailPreviewLoading, setEmailPreviewLoading] = useState(false);
+  const [emailIsDuplicate, setEmailIsDuplicate] = useState(false);
+  useEffect(() => {
+    if (!form.name || !zohoConnected) { setZohoEmailPreview(""); return; }
+    setEmailPreviewLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/preview-email?name=${encodeURIComponent(form.name)}`);
+        const data = await res.json();
+        setZohoEmailPreview(data.email || "");
+        setEmailIsDuplicate(!!data.isDuplicate);
+      } catch {
+        // fallback: compute locally
+        const parts = form.name.trim().toLowerCase().split(" ");
+        setZohoEmailPreview(parts.length >= 2
+          ? `${parts[0]}.${parts[parts.length - 1]}@${zohoDomain}`
+          : `${parts[0]}@${zohoDomain}`);
+        setEmailIsDuplicate(false);
+      } finally {
+        setEmailPreviewLoading(false);
+      }
+    }, 450);
+    return () => clearTimeout(t);
   }, [form.name, zohoConnected, zohoDomain]);
 
   // Re-fetch assignable roles if admin updates permissions while this user is active
@@ -456,8 +578,17 @@ export default function AdminUsersPage() {
     }
   }, [showForm, editingId]);
 
+  async function loadOnboardingCandidates() {
+    try {
+      const res = await fetch("/api/onboarding/signed");
+      if (res.ok) { const j = await res.json(); setObCandidates(j.candidates ?? []); }
+    } catch { /* ignore */ }
+  }
+
   function handleAdd() {
     setEditingId(null);
+    setFromOnboarding(false);
+    loadOnboardingCandidates();
     setForm({
       name: "", email: "", role: "employee", employeeId: "",
       department: "", designation: "", matrix_role: "", shift_id: "", team_id: "",
@@ -480,7 +611,7 @@ export default function AdminUsersPage() {
     const deptNode = orgTeams.find(t => t.name === user.department && t.type === 'department');
     setForm({
       name: user.name,
-      email: user.email,
+      email: user.personal_email || user.email,
       role: user.commission_enabled ? "sales" : user.role,
       employeeId: user.employeeId,
       department: deptNode ? deptNode.id : user.department,
@@ -516,18 +647,20 @@ export default function AdminUsersPage() {
       // Validate KPI weights sum to 100
       const totalWeight = form.kpi_weight + form.kra_weight + form.behavioral_weight;
       if (totalWeight !== 100) {
-        showToast(`KPI weights must sum to 100 (currently ${totalWeight})`, "error");
+        toast.error(`KPI weights must sum to 100 (currently ${totalWeight})`);
         setSubmitting(false);
         return;
       }
 
       const isSales = form.role === "sales";
-      const VALID_ROLES = ["admin", "dept_lead", "team_lead", "employee", "intern"];
+      const VALID_ROLES = ["admin", "hr", "accounts", "employee", "intern", "dept_lead", "team_lead"];
       const safeRole = isSales ? "employee" : (VALID_ROLES.includes(form.role) ? form.role : "employee");
+      const matrixRoleLabel = isSales ? "Sales" : (ROLE_LABEL[form.role] || form.role);
 
       const payload = {
         ...form,
         role: safeRole,
+        matrix_role: matrixRoleLabel,
         department: deptNode ? deptNode.name : form.department,
         shift_id: form.shift_id || null,
         team_id: form.team_id || null,
@@ -543,11 +676,12 @@ export default function AdminUsersPage() {
         commission_enabled: isSales,
         monthly_sales_target: isSales && form.monthly_sales_target ? parseFloat(form.monthly_sales_target) : null,
         salary_slab_id: isSales && form.linkSlab ? form.salary_slab_id || null : null,
+        create_zoho_mail: form.create_zoho_mail && zohoConnected,
       };
 
       if (editingId) {
         await axios.patch(`/api/users/${editingId}`, payload);
-        showToast("Employee protocol re-indexed successfully.", "success");
+        toast.success("Employee protocol re-indexed successfully.");
       } else {
         const newEmployee = await request<{ id?: string }>({ url: "/api/users", method: "POST", data: payload });
 
@@ -565,15 +699,15 @@ export default function AdminUsersPage() {
             });
             const zohoData = await zohoRes.json();
             if (zohoRes.ok) {
-              showToast(`Zoho Mail created: ${zohoData.email_address}`, "success");
+              toast.success(`Zoho Mail created: ${zohoData.email_address}`);
             } else {
-              showToast(`Employee added — Zoho mail creation failed: ${zohoData.error || "retry in Mail Config"}`, "warning");
+              toast.warning(`Employee added — Zoho mail creation failed: ${zohoData.error || "retry in Mail Config"}`);
             }
           } catch {
-            showToast(`Employee added — Zoho mail provisioning failed. Retry in Mail Config.`, "warning");
+            toast.warning(`Employee added — Zoho mail provisioning failed. Retry in Mail Config.`);
           }
         } else {
-          showToast(`Secure onboarding initialized for ${form.email}`, "success");
+          toast.success(`Secure onboarding initialized for ${form.email}`);
         }
       }
       setShowForm(false);
@@ -581,9 +715,9 @@ export default function AdminUsersPage() {
     } catch (err: any) {
       const msg = err.response?.data?.error || err.message;
       if (msg.includes("updated_at") || msg.includes("500")) {
-        showToast("Configuration Error: Database triggers are misconfigured. Please run the SQL patch in your Supabase dashboard.", "error");
+        toast.error("Configuration Error: Database triggers are misconfigured. Please run the SQL patch in your Supabase dashboard.");
       } else {
-        showToast(msg, "error");
+        toast.error(msg);
       }
     } finally {
       setSubmitting(false);
@@ -595,7 +729,7 @@ export default function AdminUsersPage() {
     setSubmitting(true);
     try {
       await axios.delete(`/api/users/${deleteConfirm.id}`);
-      showToast(`Account for "${deleteConfirm.name}" has been decommissioned.`, "success");
+      toast.success(`Account for "${deleteConfirm.name}" has been decommissioned.`);
       setDeleteConfirm(null);
       await load();
     } catch (err: any) {
@@ -603,15 +737,15 @@ export default function AdminUsersPage() {
       
       // Plain English linkage detection
       if (errorMsg.includes("attendance_logs")) {
-        showToast("Cannot Delete: Employee has Attendance records. You must clear their logs first.", "error");
+        toast.error("Cannot Delete: Employee has Attendance records. You must clear their logs first.");
       } else if (errorMsg.includes("project_members")) {
-        showToast("Cannot Delete: Employee is still assigned to a Project. Remove them from the project team first.", "error");
+        toast.error("Cannot Delete: Employee is still assigned to a Project. Remove them from the project team first.");
       } else if (errorMsg.includes("projects_team_lead_id_fkey")) {
-        showToast("Cannot Delete: Employee is a Project Lead. Assign a new Lead to their projects first.", "error");
+        toast.error("Cannot Delete: Employee is a Project Lead. Assign a new Lead to their projects first.");
       } else if (errorMsg.includes("updated_at") || errorMsg.includes("42703")) {
-        showToast("System Error: Database script mismatch. Please verify the SQL patch was run in Supabase.", "error");
+        toast.error("System Error: Database script mismatch. Please verify the SQL patch was run in Supabase.");
       } else {
-        showToast("Security Block: " + errorMsg, "error");
+        toast.error("Security Block: " + errorMsg);
       }
     } finally {
       setSubmitting(false);
@@ -619,12 +753,76 @@ export default function AdminUsersPage() {
   }
 
   async function toggleActive(userId: string, current: boolean) {
+    // Block self-deactivation
+    if (userId === user?.id && current) {
+      toast.error("You cannot deactivate your own account.", { duration: 5000 });
+      return;
+    }
+
+    // Client-side pre-check for quick feedback:
+    if (!current) {
+      const targetUser = users.find(u => u.id === userId);
+      if (
+        targetUser && 
+        (targetUser as any).deactivated_by && 
+        (targetUser as any).deactivated_by !== user?.id && 
+        user?.role !== "admin"
+      ) {
+        const dec = (targetUser as any).deactivator || { name: "another administrator", role: "admin", employee_id: "System" };
+        const roleLabel = ROLE_LABEL[dec.role] || dec.role || "Admin";
+        toast.error(
+          `Reactivation Denied: Suspended by ${dec.name} (${roleLabel}, ID: ${dec.employee_id || "System"}). Only they or a Super Admin are authorized to reactivate this account.`,
+          { duration: 8000 }
+        );
+        return;
+      }
+    }
+
+    setTogglingStatusId(userId);
+
     try {
-      await axios.patch(`/api/users/${userId}`, { isActive: !current });
-      showToast(`Account is now ${!current ? "Active" : "Inactive"}`, "success");
+      await axios.patch(`/api/users/${userId}`, { 
+        isActive: !current,
+        deactivatedBy: user?.id
+      });
+
+      // Optimistically update local state immediately
+      setUsers((prevUsers) =>
+        prevUsers.map((u) => {
+          if (u.id === userId) {
+            return {
+              ...u,
+              isActive: !current,
+              is_active: !current,
+              deactivated_by: !current ? null : user?.id,
+              deactivated_at: !current ? null : new Date().toISOString(),
+              deactivator: !current ? null : {
+                name: user?.name,
+                email: user?.email,
+                employee_id: user?.employee_id,
+                role: user?.role
+              }
+            } as any;
+          }
+          return u;
+        })
+      );
+
+      toast.success(`Account is now ${!current ? "Active" : "Inactive"}`);
       await load();
     } catch (e: any) {
-      showToast("Error updating status.", "error");
+      if (e.response?.status === 403 && e.response?.data?.error === "UNAUTHORIZED_REACTIVATION") {
+        const dec = e.response.data.deactivator;
+        const roleLabel = ROLE_LABEL[dec.role] || dec.role || "Admin";
+        toast.error(
+          `Reactivation Denied: Suspended by ${dec.name} (${roleLabel}, ID: ${dec.employee_id || "System"}). Only they are authorized to reactivate this account.`,
+          { duration: 8000 }
+        );
+      } else {
+        toast.error(e.response?.data?.error || "Error updating status.");
+      }
+    } finally {
+      setTogglingStatusId(null);
     }
   }
 
@@ -654,7 +852,7 @@ export default function AdminUsersPage() {
       subtitle="Architect your workforce and manage enterprise system access."
       actions={
         canCreate ? (
-          <Button variant="primary" size="sm" onClick={handleAdd}>
+          <Button variant="default" size="sm" onClick={handleAdd}>
             <UserPlus size={14} className="mr-1.5" /> Add Employee
           </Button>
         ) : null
@@ -680,133 +878,312 @@ export default function AdminUsersPage() {
           ))}
         </div>
 
-        <div className="page-card p-0 shadow-xl border-theme-border/50 overflow-hidden">
-          <div className="flex flex-col gap-4 border-b border-theme-border/50 px-8 py-6 sm:flex-row sm:items-center sm:justify-between bg-theme-raised/5">
-            <div className="flex rounded-2xl border border-theme-border bg-theme-raised p-1 gap-1">
-              {([
-                { id: "all",      label: "All Records", count: users.length },
-                { id: "active",   label: "Active",      count: activeCount },
-                { id: "inactive", label: "Inactive",    count: inactiveCount },
-              ] as { id: "all" | "active" | "inactive"; label: string; count: number }[]).map((t) => (
-                <button key={t.id} onClick={() => setActiveTab(t.id)}
-                  className={cn("rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
-                    activeTab === t.id ? "bg-theme-surface text-theme-fg shadow-sm" : "text-theme-muted hover:text-theme-fg"
-                  )}>
-                  {t.label} <span className="ml-1 opacity-40">({t.count})</span>
-                </button>
-              ))}
-            </div>
+        <Card className="overflow-hidden p-0 gap-0">
+          {/* Toolbar */}
+          <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "all" | "active" | "inactive")}>
+              <TabsList>
+                <TabsTrigger value="all" className="gap-2 data-[state=active]:font-semibold">
+                  All
+                  <span className={cn(
+                    "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
+                    activeTab === "all" ? "bg-primary text-primary-foreground" : "bg-muted-foreground/15 text-muted-foreground"
+                  )}>{users.length}</span>
+                </TabsTrigger>
+                <TabsTrigger value="active" className="gap-2 data-[state=active]:font-semibold">
+                  Active
+                  <span className={cn(
+                    "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
+                    activeTab === "active" ? "bg-emerald-500 text-white" : "bg-muted-foreground/15 text-muted-foreground"
+                  )}>{activeCount}</span>
+                </TabsTrigger>
+                <TabsTrigger value="inactive" className="gap-2 data-[state=active]:font-semibold">
+                  Inactive
+                  <span className={cn(
+                    "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
+                    activeTab === "inactive" ? "bg-rose-500 text-white" : "bg-muted-foreground/15 text-muted-foreground"
+                  )}>{inactiveCount}</span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
 
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-theme-muted" size={14} />
-              <input type="text" placeholder="Search personnel..." value={search}
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
+              <Input
+                type="text"
+                placeholder="Search personnel..."
+                value={search}
                 onChange={(e) => { setSearch(e.target.value); load(e.target.value); }}
-                className="h-10 w-72 rounded-lg border border-theme-border bg-theme-page pl-10 pr-4 text-xs text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                className="w-full sm:w-72 pl-9"
+              />
             </div>
           </div>
 
-          {!loading && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-theme-border bg-theme-page text-left text-xs font-semibold text-theme-muted">
-                    <th className="px-5 py-3">Personnel</th>
-                    <th className="px-5 py-3">Corporate ID</th>
-                    <th className="px-5 py-3">Org Entity / Hierarchy</th>
-                    <th className="px-5 py-3">Commencement</th>
-                    <th className="px-5 py-3 text-center">Status</th>
-                    <th className="px-5 py-3 text-right">Action Matrix</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-theme-border/30">
-                  {filteredUsers.map((u, idx) => (
-                    <tr key={u.id} className="group hover:bg-theme-raised/30 transition-all duration-300">
-                      <td className="px-5 py-3">
+          {/* Table */}
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="pl-4">Personnel</TableHead>
+                  <TableHead>Employee ID</TableHead>
+                  <TableHead>Department / Role</TableHead>
+                  <TableHead>Joined</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="pr-4 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="pl-4">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-primary text-theme-surface text-[10px] font-bold shadow-sm">{getInitials(u.name)}</div>
-                          <div>
-                            <p className="text-xs font-semibold text-theme-fg">{u.name}</p>
-                            <p className="text-xs text-theme-muted font-normal">{u.email}</p>
+                          <Skeleton className="h-8 w-8 rounded-full" />
+                          <div className="space-y-1.5">
+                            <Skeleton className="h-3 w-32" />
+                            <Skeleton className="h-2.5 w-44" />
                           </div>
                         </div>
-                      </td>
-                      <td className="px-5 py-3 text-xs text-theme-muted">{u.employeeId}</td>
-                      <td className="px-5 py-3">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-semibold text-theme-fg">{u.department || 'General Nodes'}</span>
-                          {u.team_id && (
-                            <span className="text-[10px] text-theme-muted font-bold mt-0.5 flex items-center gap-1">
-                               <ChevronRight size={10} className="text-theme-primary/50" />
-                               {orgTeams.find(t => t.id === u.team_id)?.name || 'Unknown Unit'}
-                            </span>
+                      </TableCell>
+                      <TableCell><Skeleton className="h-3 w-20" /></TableCell>
+                      <TableCell>
+                        <Skeleton className="h-3 w-28 mb-2" />
+                        <Skeleton className="h-4 w-16" />
+                      </TableCell>
+                      <TableCell><Skeleton className="h-3 w-20" /></TableCell>
+                      <TableCell className="text-center"><Skeleton className="h-5 w-16 mx-auto" /></TableCell>
+                      <TableCell className="pr-4 text-right"><Skeleton className="h-7 w-7 ml-auto rounded-md" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : filteredUsers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-32 text-center text-sm text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <Users size={20} className="text-muted-foreground/60" />
+                        <span>No employees found</span>
+                        {search && <span className="text-xs">Try a different search term</span>}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredUsers.map((u) => {
+                    const isActive = u.isActive ?? (u as any).is_active;
+                    return (
+                      <TableRow key={u.id}>
+                        <TableCell className="pl-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-8 w-8">
+                              <AvatarFallback className="bg-primary text-primary-foreground text-[10px] font-semibold">
+                                {getInitials(u.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">{u.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs font-mono text-muted-foreground">{u.employeeId}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="font-medium text-foreground">{u.department || "Unassigned"}</span>
+                              {u.team_id && (
+                                <>
+                                  <ChevronRight size={10} className="text-muted-foreground" />
+                                  <span className="text-muted-foreground">
+                                    {orgTeams.find(t => t.id === u.team_id)?.name || "—"}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge className={cn("text-[10px] px-1.5 py-0", u.commission_enabled ? COMMISSION_BADGE : (ROLE_BADGE[u.role] ?? ROLE_BADGE.employee))}>
+                                {u.commission_enabled ? ROLE_LABEL["sales"] : (ROLE_LABEL[u.role] ?? u.role)}
+                              </Badge>
+                              {u.commission_enabled && u.monthly_sales_target && (
+                                <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 font-normal">
+                                  <TrendingUp size={9} /> ₹{Number(u.monthly_sales_target).toLocaleString("en-IN")}
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 font-normal text-muted-foreground">
+                                <Coffee size={9} /> {u.monthly_leave_quota} L/M
+                              </Badge>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-foreground">{formatDate(u.joiningDate)}</span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {u.id === user?.id ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center cursor-not-allowed">
+                                  <Badge
+                                    variant={isActive ? "default" : "secondary"}
+                                    className={cn(
+                                      "opacity-50 pointer-events-none",
+                                      isActive && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent",
+                                    )}
+                                  >
+                                    {isActive ? "Active" : "Inactive"}
+                                  </Badge>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[200px] text-center">
+                                You cannot deactivate your own account
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <button
+                              onClick={() => toggleActive(u.id, isActive)}
+                              disabled={togglingStatusId !== null}
+                              className="inline-flex items-center disabled:opacity-80 disabled:cursor-not-allowed"
+                              aria-label="Toggle active state"
+                            >
+                              <Badge
+                                variant={isActive ? "default" : "secondary"}
+                                className={cn(
+                                  "cursor-pointer transition-colors flex items-center gap-1",
+                                  isActive && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent hover:bg-emerald-500/25",
+                                  !isActive && "hover:bg-muted-foreground/20"
+                                )}
+                              >
+                                {togglingStatusId === u.id && <Loader2 size={10} className="animate-spin" />}
+                                {isActive ? "Active" : "Inactive"}
+                              </Badge>
+                            </button>
                           )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <Badge variant={u.commission_enabled ? "warning" : (ROLE_BADGE[u.role] ?? "default")} className="text-[10px] px-2 py-0.5 transition-all group-hover:bg-theme-primary group-hover:text-white">
-                            {u.commission_enabled ? ROLE_LABEL["sales"] : (ROLE_LABEL[u.role] ?? u.role)}
-                          </Badge>
-                          {u.commission_enabled && u.monthly_sales_target && (
-                            <span className="flex items-center gap-1 text-[9px] font-black text-orange-600 px-2 py-0.5 border border-orange-200 rounded-lg bg-orange-50">
-                              <TrendingUp size={9} /> ₹{Number(u.monthly_sales_target).toLocaleString("en-IN")} tgt
-                            </span>
-                          )}
-                          <span className="flex items-center gap-1 text-[9px] font-black text-theme-muted px-2 py-0.5 border border-theme-border rounded-lg bg-theme-page">
-                             <Coffee size={10} /> {u.monthly_leave_quota} L/M
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 text-xs text-theme-fg">{formatDate(u.joiningDate)}</td>
-                      <td className="px-5 py-3 text-center">
-                        <button onClick={() => toggleActive(u.id, u.isActive ?? (u as any).is_active)}
-                          className={cn("rounded-md px-2 py-0.5 text-xs font-semibold transition-all",
-                            (u.isActive || (u as any).is_active) ? "bg-emerald-500/10 text-emerald-600" : "bg-theme-raised text-theme-muted"
-                          )}>
-                          {(u.isActive || (u as any).is_active) ? "Active" : "Inactive"}
-                        </button>
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <RowMenu user={u} onRefresh={() => load(search || undefined)} onEdit={() => handleEdit(u)} isLast={idx >= filteredUsers.length - 2} setDeleteConfirm={setDeleteConfirm} canEdit={canEdit} canDelete={canDelete} zohoConnected={zohoConnected} zohoDomain={zohoDomain} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        </TableCell>
+                        <TableCell className="pr-4 text-right">
+                          <RowMenu user={u} onRefresh={() => load(search || undefined)} onEdit={() => handleEdit(u)} setDeleteConfirm={setDeleteConfirm} canEdit={canEdit} canDelete={canDelete} zohoConnected={zohoConnected} zohoDomain={zohoDomain} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+
+          {/* Footer / pagination spot */}
+          {!loading && filteredUsers.length > 0 && (
+            <div className="flex items-center justify-between border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+              <span>Showing <span className="font-medium text-foreground">{filteredUsers.length}</span> of {users.length} employees</span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live
+              </span>
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-          <div className="w-full max-w-2xl rounded-2xl bg-theme-surface shadow-2xl border border-theme-border relative animate-in zoom-in-95 duration-200 overflow-hidden">
-            <div className="flex items-center justify-between border-b border-theme-border bg-theme-surface px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-primary text-theme-surface shadow-sm">
-                  {editingId ? <Edit2 size={16} /> : <UserPlus size={16} />}
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-theme-fg">{editingId ? "Edit Personnel" : "Add Personnel"}</h3>
-                  <p className="text-xs text-theme-muted mt-0.5">Human Capital Records System</p>
-                </div>
-              </div>
-              <button onClick={() => setShowForm(false)} className="rounded-lg p-2 text-theme-muted hover:bg-theme-raised transition-all">
-                <X size={18} />
-              </button>
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="sm:max-w-[860px] !grid-rows-[auto_1fr_auto] !grid p-0 overflow-hidden gap-0 max-h-[calc(100vh-6rem)] sm:max-h-[80vh]">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0 border-b border-border px-6 py-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground flex-shrink-0">
+              {editingId ? <Edit2 size={16} /> : <UserPlus size={16} />}
             </div>
-
-            <div className="p-6">
-              <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto px-1 pr-3 custom-scrollbar">
+            <div className="flex-1 text-left">
+              <DialogTitle className="text-sm font-semibold">{editingId ? "Edit Personnel" : "Add Personnel"}</DialogTitle>
+              <DialogDescription className="text-xs">Human Capital Records System</DialogDescription>
+            </div>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} id="employee-form" className="min-h-0 overflow-y-auto px-6 py-5">
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Full Legal Name</label>
-                    <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">
+                      Full Legal Name
+                      {fromOnboarding && <span className="text-theme-primary font-medium">(through onboarding)</span>}
+                      {!editingId && (
+                        <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium text-theme-muted cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="h-3 w-3 accent-current"
+                            checked={fromOnboarding}
+                            onChange={(e) => { setFromOnboarding(e.target.checked); if (e.target.checked) loadOnboardingCandidates(); }}
+                          />
+                          From onboarding
+                        </span>
+                      )}
+                    </label>
+                    {fromOnboarding && !editingId ? (
+                      <Select
+                        value={obCandidates.find((c) => c.email === form.email && c.name === form.name)?.id || ""}
+                        onValueChange={(id) => {
+                          const c = obCandidates.find((x) => x.id === id);
+                          if (c) setForm((f) => ({ ...f, name: c.name, email: c.email, designation: c.role || f.designation }));
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={obCandidates.length ? "Select a signed candidate…" : "No signed onboardings yet"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {obCandidates.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name} — {c.email}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Operational Inbox</label>
-                    <input required type="email" value={form.email} disabled={!!editingId} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm disabled:opacity-50" />
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">
+                      Personal Email
+                      {fromOnboarding && !editingId && obCandidates.some((c) => c.email === form.email && c.name === form.name) && (
+                        <span className="text-theme-primary font-medium">(from onboarding)</span>
+                      )}
+                      {emailCheckState === "checking" && (
+                        <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-theme-muted">
+                          <span className="h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent" />
+                          Verifying…
+                        </span>
+                      )}
+                      {emailCheckState === "valid" && (
+                        <span className="ml-auto text-[10px] font-black text-emerald-600">✓ Verified</span>
+                      )}
+                    </label>
+                    <Input
+                      required
+                      type="email"
+                      value={form.email}
+                      disabled={!!editingId}
+                      readOnly={fromOnboarding && !editingId && obCandidates.some((c) => c.email === form.email && c.name === form.name)}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      className={
+                        emailCheckState === "invalid" ? "border-red-400 focus:border-red-500" :
+                        emailCheckState === "valid"   ? "border-emerald-400 focus:border-emerald-500" : ""
+                      }
+                    />
+                    {emailCheckState === "invalid" && (
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-semibold text-red-500 flex items-center gap-1">
+                          ⚠ {emailCheckMsg}
+                        </p>
+                        {emailSuggestion && (
+                          <button
+                            type="button"
+                            onClick={() => { setForm({ ...form, email: emailSuggestion }); setEmailSuggestion(""); }}
+                            className="text-[11px] font-black text-theme-primary underline underline-offset-2"
+                          >
+                            Use {emailSuggestion} instead
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {editingId && (
+                    <div className="space-y-2 sm:col-span-2">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Professional Email (Generated by Zoho)</label>
+                      <Input disabled value={users.find(u => u.id === editingId)?.zoho_email || users.find(u => u.id === editingId)?.email || ""} className="bg-theme-raised/50" />
+                    </div>
+                  )}
                   
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Architecture node (Dept)</label>
@@ -828,7 +1205,8 @@ export default function AdminUsersPage() {
                       placeholder="Global/No Team"
                       value={form.team_id} 
                       onChange={(v) => {
-                         setForm({...form, team_id: v, shift_id: ""});
+                         const nextRole = v && form.role === "dept_lead" ? "employee" : form.role;
+                         setForm({...form, team_id: v, shift_id: "", role: nextRole});
                       }} 
                       options={form.department ? orgTeams.filter(t => t.type === 'team' && t.parent_id === form.department).map(t => ({ label: t.name, value: t.id })) : []}
                     />
@@ -836,19 +1214,11 @@ export default function AdminUsersPage() {
 
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Professional Designation</label>
-                    <input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })}
-                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                    <Input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Matrix Role (Hierarchy Position)</label>
-                    <input value={form.matrix_role} onChange={(e) => setForm({ ...form, matrix_role: e.target.value })}
-                      placeholder="e.g. Lead Frontend Architect"
-                      className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Access Level</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Matrix Role</label>
                     <CustomSelect
                       icon={<ShieldCheck size={14} className="text-theme-primary" />}
                       placeholder="Select Role"
@@ -863,7 +1233,11 @@ export default function AdminUsersPage() {
                       options={[
                         ...Object.entries(ROLE_LABEL)
                           .filter(([v]) => {
-                            const validRoles = ["admin","dept_lead","team_lead","employee","intern"];
+                            // Hide dept_lead if a team is selected
+                            if (v === "dept_lead" && form.team_id) {
+                              return false;
+                            }
+                            const validRoles = ["admin", "hr", "accounts", "employee", "intern", "dept_lead", "team_lead"];
                             const allowed = assignableRoles.filter(r => validRoles.includes(r));
                             return (allowed.length === 0 || allowed.includes(v)) && v !== "sales";
                           })
@@ -888,7 +1262,7 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600">Leave Entitlement</label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600">Leave Entitlement <span className="text-[10px] font-semibold text-emerald-500/70">(Sick Leave · Paid)</span></label>
                     <CustomSelect 
                       icon={<Coffee size={14} className="text-emerald-500" />}
                       placeholder="Select Quota"
@@ -942,12 +1316,12 @@ export default function AdminUsersPage() {
                       {/* Monthly Sales Target */}
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-orange-700">Monthly Sales Target (₹)</label>
-                        <input
+                        <Input
                           type="number" min="0" step="100"
                           value={form.monthly_sales_target}
                           onChange={(e) => setForm({ ...form, monthly_sales_target: e.target.value })}
                           placeholder="e.g. 100000"
-                          className="h-10 w-full rounded-lg border border-orange-200 bg-white px-3 text-sm text-theme-fg outline-none focus:border-orange-400 transition-all shadow-sm"
+                          className="border-orange-200 bg-white focus-visible:border-orange-400"
                         />
                         <p className="text-[10px] text-orange-600/70">Target monthly sales amount assigned to this employee.</p>
                       </div>
@@ -1023,16 +1397,12 @@ export default function AdminUsersPage() {
                     <>
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Minimum Stipend (₹)</label>
-                        <input type="number" required value={form.salary_min || ""} onChange={(e) => setForm({ ...form, salary_min: e.target.value })}
-                          placeholder="e.g., 10000"
-                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                        <Input type="number" required value={form.salary_min || ""} onChange={(e) => setForm({ ...form, salary_min: e.target.value })} placeholder="e.g., 10000" />
                         <p className="text-[10px] text-theme-muted">Base amount when KPI linkage is disabled</p>
                       </div>
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Maximum Stipend (₹)</label>
-                        <input type="number" required value={form.salary_max || ""} onChange={(e) => setForm({ ...form, salary_max: e.target.value })}
-                          placeholder="e.g., 15000"
-                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                        <Input type="number" required value={form.salary_max || ""} onChange={(e) => setForm({ ...form, salary_max: e.target.value })} placeholder="e.g., 15000" />
                         <p className="text-[10px] text-theme-muted">Maximum range (performance-based when linked to KPI)</p>
                       </div>
 
@@ -1059,9 +1429,7 @@ export default function AdminUsersPage() {
                   {form.salary_structure === "fixed_monthly" && (
                     <div className="sm:col-span-2 space-y-2">
                       <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Monthly Base Salary (₹)</label>
-                      <input type="number" required value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })}
-                        placeholder="e.g., 50000"
-                        className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      <Input type="number" required value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })} placeholder="e.g., 50000" />
                       <p className="text-[10px] text-theme-muted">Fixed monthly salary amount</p>
                     </div>
                   )}
@@ -1070,9 +1438,7 @@ export default function AdminUsersPage() {
                   {form.salary_structure === "hourly" && (
                     <div className="sm:col-span-2 space-y-2">
                       <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Hourly Rate (₹/hour)</label>
-                      <input type="number" required step="0.01" value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })}
-                        placeholder="e.g., 500"
-                        className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      <Input type="number" required step="0.01" value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })} placeholder="e.g., 500" />
                       <p className="text-[10px] text-theme-muted">Rate per hour (Salary = Rate × Hours Worked)</p>
                     </div>
                   )}
@@ -1081,9 +1447,7 @@ export default function AdminUsersPage() {
                   {form.salary_structure === "daily" && (
                     <div className="sm:col-span-2 space-y-2">
                       <label className="flex items-center gap-2 text-xs font-semibold text-theme-muted">Daily Rate (₹/day)</label>
-                      <input type="number" required step="0.01" value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })}
-                        placeholder="e.g., 2000"
-                        className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                      <Input type="number" required step="0.01" value={form.base_salary} onChange={(e) => setForm({ ...form, base_salary: e.target.value })} placeholder="e.g., 2000" />
                       <p className="text-[10px] text-theme-muted">Rate per day (Salary = Rate × Days Worked)</p>
                     </div>
                   )}
@@ -1094,21 +1458,18 @@ export default function AdminUsersPage() {
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-blue-600">KPI Weight (%)</label>
-                        <input type="number" min="0" max="100" step="1" value={form.kpi_weight ?? 40}
-                          onChange={(e) => setForm({ ...form, kpi_weight: parseFloat(e.target.value) || 0 })}
-                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                        <Input type="number" min="0" max="100" step="1" value={form.kpi_weight ?? 40}
+                          onChange={(e) => setForm({ ...form, kpi_weight: parseFloat(e.target.value) || 0 })} />
                       </div>
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-emerald-600">KRA Weight (%)</label>
-                        <input type="number" min="0" max="100" step="1" value={form.kra_weight ?? 40}
-                          onChange={(e) => setForm({ ...form, kra_weight: parseFloat(e.target.value) || 0 })}
-                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                        <Input type="number" min="0" max="100" step="1" value={form.kra_weight ?? 40}
+                          onChange={(e) => setForm({ ...form, kra_weight: parseFloat(e.target.value) || 0 })} />
                       </div>
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-xs font-semibold text-amber-600">Behavioral Weight (%)</label>
-                        <input type="number" min="0" max="100" step="1" value={form.behavioral_weight ?? 20}
-                          onChange={(e) => setForm({ ...form, behavioral_weight: parseFloat(e.target.value) || 0 })}
-                          className="h-10 w-full rounded-lg border border-theme-border bg-theme-page px-3 text-sm text-theme-fg outline-none focus:border-theme-primary transition-all shadow-sm" />
+                        <Input type="number" min="0" max="100" step="1" value={form.behavioral_weight ?? 20}
+                          onChange={(e) => setForm({ ...form, behavioral_weight: parseFloat(e.target.value) || 0 })} />
                       </div>
                     </div>
                     <p className="text-[10px] text-theme-muted mt-2">⚠️ Weights must sum to 100%</p>
@@ -1143,8 +1504,24 @@ export default function AdminUsersPage() {
                                 </span>
                               )}
                             </div>
-                            {zohoConnected && form.create_zoho_mail && zohoEmailPreview && (
-                              <p className="text-[11px] text-blue-500 font-mono mt-0.5">{zohoEmailPreview}</p>
+                            {zohoConnected && form.create_zoho_mail && (
+                              <div className="mt-0.5">
+                                {emailPreviewLoading ? (
+                                  <p className="text-[11px] text-theme-muted flex items-center gap-1">
+                                    <span className="h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent inline-block" />
+                                    Checking availability…
+                                  </p>
+                                ) : zohoEmailPreview ? (
+                                  <div className="space-y-0.5">
+                                    <p className="text-[11px] text-blue-500 tabular-nums font-semibold">{zohoEmailPreview}</p>
+                                    {emailIsDuplicate && (
+                                      <p className="text-[10px] text-amber-500 font-semibold">
+                                        ⚠ Name already exists — suffix added to avoid conflict
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </div>
                             )}
                             {!zohoConnected && (
                               <p className="text-[10px] text-theme-muted mt-0.5">
@@ -1158,17 +1535,37 @@ export default function AdminUsersPage() {
                   )}
                 </div>
 
-                <div className="bg-theme-surface flex justify-end gap-3 border-t border-theme-border pt-4 mt-6">
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setShowForm(false)} className="px-6">Cancel</Button>
-                  <Button type="submit" size="sm" loading={submitting} className="px-6">
-                    {editingId ? "Save Changes" : "Create Profile"}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+          </form>
+          <DialogFooter className="!mx-0 !mb-0 !rounded-none flex-row items-center sm:justify-end gap-3 border-t border-border bg-background px-6 py-5">
+            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+            {(() => {
+              const canCreate = !editingId
+                ? (
+                    form.name?.trim().length > 0 &&
+                    emailCheckState === "valid" &&
+                    (!!form.department || !!form.team_id)
+                  )
+                : true;
+              const hint = !editingId && !canCreate
+                ? !form.name?.trim() ? "Enter full legal name"
+                  : emailCheckState !== "valid" ? "Verify personal email first"
+                  : "Select at least a Department or Team"
+                : undefined;
+              return (
+                <Button
+                  type="submit"
+                  form="employee-form"
+                  disabled={submitting || !canCreate}
+                  title={hint}
+                >
+                  {submitting && <Loader2 className="animate-spin" />}
+                  {editingId ? "Save Changes" : "Create Profile"}
+                </Button>
+              );
+            })()}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* DELETE CONFIRMATION TOAST (PILL DESIGN) */}
       {deleteConfirm && (
@@ -1185,10 +1582,11 @@ export default function AdminUsersPage() {
               </div>
               
               <div className="flex items-center gap-3 ml-auto">
-                 <Button onClick={() => setDeleteConfirm(null)} disabled={submitting} variant="secondary" size="sm" className="px-4">
+                 <Button onClick={() => setDeleteConfirm(null)} disabled={submitting} variant="outline" size="sm" className="px-4">
                    Cancel
                  </Button>
-                 <Button onClick={handleDelete} disabled={submitting} variant="primary" size="sm" className="bg-rose-600 hover:bg-rose-700 text-white px-5 border-rose-600">
+                 <Button onClick={handleDelete} disabled={submitting} variant="destructive" size="sm" className="px-5">
+                   {submitting && <Loader2 className="animate-spin" />}
                    {submitting ? "Deleting..." : "Delete"}
                  </Button>
               </div>

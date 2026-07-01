@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActiveToken, zohoPost } from "@/lib/zoho-mail";
 import nodemailer from "nodemailer";
+import { generateTempPassword } from "@/lib/zoho-provisioning";
 
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseAdmin();
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
   // Check if already provisioned
   const { data: emp } = await supabase
     .from("employees")
-    .select("zoho_email, email, name")
+    .select("zoho_email, personal_email, name")
     .eq("id", employee_id)
     .maybeSingle();
 
@@ -39,30 +40,48 @@ export async function POST(req: NextRequest) {
   const token = await getActiveToken();
   let zohoAccountId: string | null = null;
   let zohoApiSuccess = false;
-  const tempPassword = `Namaah@1234`;
+  const tempPassword = generateTempPassword();
 
   if (token) {
     const { data: config } = await supabase
       .from("zoho_config")
-      .select("zoid")
+      .select("id, zoid")
       .limit(1)
       .maybeSingle();
 
-    if (config?.zoid) {
+    let zoid = config?.zoid;
+    if (!zoid && process.env.ZOHO_ORG_ID) {
+      zoid = process.env.ZOHO_ORG_ID;
+      if (config?.id) {
+        await supabase
+          .from("zoho_config")
+          .update({ zoid, org_id: zoid })
+          .eq("id", config.id);
+      }
+    }
+
+    if (zoid) {
       try {
-        const zohoRes = await zohoPost(token, `/organization/${config.zoid}/accounts`, {
+        const zohoRes = await zohoPost(token, `/organization/${zoid}/accounts`, {
           primaryEmailAddress: emailAddress,
           displayName:         name,
           password:            tempPassword,
           role:                "member",
         });
         zohoAccountId  = zohoRes?.data?.mailboxId || zohoRes?.data?.accountId || null;
-        zohoApiSuccess = true;
+        if (zohoAccountId) {
+          zohoApiSuccess = true;
+        } else {
+          const errMsg = zohoRes?.status?.description || zohoRes?.message || "Zoho Admin Console did not return an account/mailbox ID.";
+          return NextResponse.json({ error: `Zoho Mail account creation failed: ${errMsg}` }, { status: 400 });
+        }
       } catch (e: any) {
         console.error("[Zoho] account create error:", e.message);
+        return NextResponse.json({ error: `Zoho Mail API error: ${e.message}` }, { status: 500 });
       }
     } else {
       console.warn("[Zoho] org ID (zoid) not set in zoho_config — skipping API call.");
+      return NextResponse.json({ error: "Zoho Org ID (zoid) is not configured in database or environment." }, { status: 400 });
     }
   }
 
@@ -87,7 +106,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Send professional email notification to employee's personal Gmail
-  const personalEmail = emp?.email;
+  const personalEmail = emp?.personal_email;
   if (personalEmail) {
     try {
       const { data: smtpConfig } = await supabase
@@ -110,7 +129,7 @@ export async function POST(req: NextRequest) {
           to:      personalEmail,
           subject: `Your Professional Email is Ready — ${emailAddress}`,
           html: `
-<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#ffffff;">
+<div style="font-family:'Inter',Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#ffffff;">
   <div style="background:#0f172a;color:#ffffff;padding:32px 20px;text-align:center;">
     <h1 style="margin:0;letter-spacing:4px;font-size:24px;font-weight:800;text-transform:uppercase;">${company}</h1>
     <p style="margin-top:8px;opacity:0.8;font-size:14px;">Professional Identity Management</p>
@@ -140,12 +159,12 @@ export async function POST(req: NextRequest) {
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:16px;border-radius:8px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#166534;font-weight:600;">
-        ✓ Both your professional email (<b>${emailAddress}</b>) and personal email work with the same password.<br/>
-        Please change your password after first login.
+        ✓ Your professional email account (<b>${emailAddress}</b>) is active.<br/>
+        Please change your password in both Zoho and the portal after your first login.
       </p>
     </div>
 
-    <p style="font-size:13px;color:#64748b;">Use <b>${emailAddress}</b> for all professional communication. Your personal email also works to log in to the Namaah Nexus portal.</p>
+    <p style="font-size:13px;color:#64748b;">Use <b>${emailAddress}</b> for all professional communication. Please note that you can ONLY log in to the Namaah Nexus portal using your professional email (<b>${emailAddress}</b>). Logging in with your personal email is not supported.</p>
 
     <div style="margin-top:32px;border-top:1px solid #f1f5f9;padding-top:24px;">
       <p style="margin:0;font-weight:700;color:#0f172a;">Identity Management System</p>

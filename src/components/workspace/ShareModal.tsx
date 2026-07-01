@@ -7,6 +7,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import axios from "axios";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Employee {
   id: string;
@@ -234,13 +241,15 @@ export function ShareModal({ itemId, itemType, itemTitle, currentUserId, onClose
                   })}
                 </div>
                 <div className="flex gap-2">
-                  <select
+                  <Select
                     value={selected[0]?.permission || "view"}
-                    onChange={(e) => selected.forEach(s => setPermission(s.id, e.target.value))}
-                    className="flex-1 rounded-xl border border-theme-border bg-theme-surface px-3 py-2 text-[10px] font-bold text-theme-fg outline-none focus:border-theme-primary"
+                    onValueChange={(v) => selected.forEach(s => setPermission(s.id, v))}
                   >
-                    {PERMISSIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                  </select>
+                    <SelectTrigger className="flex-1 text-[10px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PERMISSIONS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                   <button
                     onClick={handleShare}
                     disabled={saving}
