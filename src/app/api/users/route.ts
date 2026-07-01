@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import nodemailer from "nodemailer";
 import { provisionZohoMailbox, generateTempPassword } from "@/lib/zoho-provisioning";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: Request) {
   try {
@@ -114,6 +116,21 @@ export async function POST(req: Request) {
       // Revert if insertion failed
       await supabase.auth.admin.deleteUser(user.id);
       return NextResponse.json({ error: "Database Reference Matrix Failed: " + dbError.message }, { status: 500 });
+    }
+
+    {
+      const actor = await getActor();
+      await logAudit({
+        actorId: actor?.userId ?? null,
+        action: "user.create", section: "Users",
+        summary: `Created employee ${name} (${role}) — ${professionalEmail}`,
+        targetType: "employee", targetId: user.id,
+        changes: {
+          role: { from: null, to: role },
+          email: { from: null, to: professionalEmail },
+          department: { from: null, to: department ?? null },
+        },
+      });
     }
 
     // ── Zoho Mail Auto-Provisioning Gate ──────────────────────────────────────

@@ -75,6 +75,14 @@ function formatHMS(seconds: number) {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
+function postPresenceStatus(status: string) {
+  fetch("/api/presence", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  }).catch(() => {});
+}
+
 export function GlobalAttendanceWidget() {
   const { user, loading: authLoading } = useAuth();
 
@@ -223,6 +231,7 @@ export function GlobalAttendanceWidget() {
       if (error) throw error;
       clearPauseState(user.id);
       setPauseState(emptyPause);
+      postPresenceStatus("available");
       if (checkInStatus === "late") {
         toast.warning("Checked in — marked as Late");
       } else {
@@ -274,6 +283,7 @@ export function GlobalAttendanceWidget() {
       if (error) throw error;
       clearPauseState(user.id);
       setPauseState(emptyPause);
+      postPresenceStatus("offline");
       toast.success("Checked out successfully");
       await fetchSession();
     } catch {
@@ -291,6 +301,7 @@ export function GlobalAttendanceWidget() {
     };
     savePauseState(user.id, next);
     setPauseState(next);
+    postPresenceStatus("break");
     toast.info("Attendance paused");
   };
 
@@ -303,6 +314,7 @@ export function GlobalAttendanceWidget() {
     };
     savePauseState(user.id, next);
     setPauseState(next);
+    postPresenceStatus("available");
     toast.success("Attendance resumed");
   };
 

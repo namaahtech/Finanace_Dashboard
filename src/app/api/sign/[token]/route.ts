@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { loadSettings, resolveSchema } from "@/lib/onboarding/server";
 import { buildTemplateData } from "@/lib/onboarding/templateData";
 import { generateAndStorePdfs } from "@/lib/onboarding/pdf";
+import { logAudit } from "@/lib/audit";
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -96,6 +97,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     .from("onboarding_packets")
     .update({ signature, status: "signed", signed_at: signature.signed_at })
     .eq("id", packet.id);
+
+  await logAudit({
+    actorId: null, actorName: packet.candidate_name, actorRole: "candidate",
+    action: "esign.signed", section: "E-Sign",
+    summary: `${packet.candidate_name} e-signed their offer letter & NDA`,
+    targetType: "onboarding_packet", targetId: packet.id, ip: ip || null,
+  });
 
   // Regenerate counter-signed Offer + NDA PDFs (best-effort; signing succeeds regardless).
   try {

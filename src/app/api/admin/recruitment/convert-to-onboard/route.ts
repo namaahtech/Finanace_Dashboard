@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 // Mark a candidate (who finished uploading documents) as ready for onboarding —
 // this surfaces them in the onboarding "From Interview" picker.
@@ -11,7 +13,7 @@ export async function POST(req: Request) {
     const supabase = getSupabaseAdmin();
     const { data: r } = await supabase
       .from("candidate_document_requests")
-      .select("id, status")
+      .select("id, status, candidate_name")
       .eq("id", request_id)
       .maybeSingle();
 
@@ -25,6 +27,14 @@ export async function POST(req: Request) {
       .update({ converted_to_onboard: true, converted_at: new Date().toISOString() })
       .eq("id", request_id);
     if (error) throw error;
+
+    const actor = await getActor();
+    await logAudit({
+      actorId: actor?.userId ?? null,
+      action: "recruitment.convert_to_onboard", section: "Recruitment",
+      summary: `Marked ${r.candidate_name || "a candidate"} ready for onboarding`,
+      targetType: "candidate_document_request", targetId: request_id,
+    });
 
     return NextResponse.json({ success: true });
   } catch (e: any) {

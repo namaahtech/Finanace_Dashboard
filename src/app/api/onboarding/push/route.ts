@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActor } from "@/lib/onboarding/server";
 import { defaultConfig, DEFAULT_SCHEMA } from "@/lib/onboarding/schema";
 import { loadSettings, resolveSchema } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 // POST /api/onboarding/push  { application_id }
 // Creates a draft onboarding packet for an accepted candidate (interview handoff).
@@ -55,5 +56,12 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    actorId: actor.userId, action: "onboarding.create", section: "Onboarding",
+    summary: `Started onboarding for ${app.applicant_name} (${app.applicant_email})`,
+    targetType: "onboarding_packet", targetId: created.id,
+  });
+
   return NextResponse.json({ id: created.id, reused: false });
 }

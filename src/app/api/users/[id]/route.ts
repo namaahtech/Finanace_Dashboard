@@ -4,6 +4,8 @@ import nodemailer from "nodemailer";
 import { getActiveToken } from "@/lib/zoho-mail";
 import { ZOHO_API } from "@/lib/zoho-auth";
 import { generateTempPassword, updateZohoPassword } from "@/lib/zoho-provisioning";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -136,6 +138,13 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (body.enable_salary_linkage !== undefined) updates.enable_salary_linkage = Boolean(body.enable_salary_linkage);
   if (body.joiningDate !== undefined) updates.joining_date = body.joiningDate;
 
+  // Snapshot the fields we may change, so the master log can show "from → to".
+  const { data: before } = await supabase
+    .from("employees")
+    .select("name, role, department, designation, is_active, base_salary, employee_id, enable_salary_linkage")
+    .eq("id", id)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from("employees")
     .update(updates)
@@ -144,6 +153,28 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  {
+    const changes: Record<string, { from: any; to: any }> = {};
+    for (const k of Object.keys(updates)) {
+      if (k === "deactivated_at") continue; // noisy timestamp
+      const fromV = (before as any)?.[k];
+      const toV = (updates as any)[k];
+      if (fromV !== toV) changes[k] = { from: fromV ?? null, to: toV ?? null };
+    }
+    const toggled = "is_active" in updates;
+    const action = toggled ? (updates.is_active ? "user.activate" : "user.deactivate") : "user.update";
+    const summary = toggled
+      ? `${updates.is_active ? "Reactivated" : "Deactivated"} employee ${data.name}`
+      : `Edited ${data.name}'s profile`;
+    const actor = await getActor();
+    await logAudit({
+      actorId: actor?.userId ?? body.deactivatedBy ?? body.updatedBy ?? null,
+      action, section: "Users", summary,
+      targetType: "employee", targetId: id, changes,
+    });
+  }
+
   return NextResponse.json({ user: data });
 }
 
@@ -243,10 +274,10 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
   console.log(`[DELETE] Decommissioning employee: ${id}`);
 
   try {
-    // 1. Grab Zoho identifiers before the row is gone.
+    // 1. Grab Zoho identifiers + identity before the row is gone.
     const { data: emp } = await supabase
       .from("employees")
-      .select("zoho_account_id, zoho_email, email")
+      .select("zoho_account_id, zoho_email, email, name, employee_id, role")
       .eq("id", id)
       .maybeSingle();
 
@@ -268,6 +299,16 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
     // 4. Delete the Zoho mailbox — time-bounded (max 5s) and non-fatal so the user is
     //    removed from our system fast regardless of Zoho latency.
     await withTimeout(deleteZohoMailbox(supabase, emp?.zoho_email, emp?.zoho_account_id), 6000);
+
+    {
+      const actor = await getActor();
+      await logAudit({
+        actorId: actor?.userId ?? null,
+        action: "user.delete", section: "Users",
+        summary: `Deleted employee ${emp?.name || "(unknown)"}${emp?.employee_id ? ` [${emp.employee_id}]` : ""}${emp?.role ? ` — ${emp.role}` : ""} from the entire system`,
+        targetType: "employee", targetId: id,
+      });
+    }
 
     console.log(`[DELETE] Fully decommissioned: ${id} (auth removed: ${!authErr})`);
     return NextResponse.json({
@@ -393,6 +434,12 @@ export async function POST(req: NextRequest, { params }: Ctx) {
           </div>
         `);
       }
+      await logAudit({
+        actorId: (await getActor())?.userId ?? null,
+        action: "user.resend_credentials", section: "Users",
+        summary: `Reset & resent login credentials for ${emp.name}`,
+        targetType: "employee", targetId: id,
+      });
       return NextResponse.json({ success: true, message: "Credentials resent successfully." });
     } catch (e: any) {
       return NextResponse.json({ warning: "Account updated but email failed: " + e.message });
@@ -404,6 +451,12 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/reset-password`,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await logAudit({
+      actorId: (await getActor())?.userId ?? null,
+      action: "user.reset_password", section: "Users",
+      summary: `Sent an official password-reset link to ${emp.name}`,
+      targetType: "employee", targetId: id,
+    });
     return NextResponse.json({ success: true, message: "Official password reset link sent." });
   }
 
@@ -419,6 +472,12 @@ export async function POST(req: NextRequest, { params }: Ctx) {
           </div>
         </div>
       `);
+      await logAudit({
+        actorId: (await getActor())?.userId ?? null,
+        action: "user.send_custom_mail", section: "Users",
+        summary: `Sent a custom email to ${emp.name}${subject ? ` — "${subject}"` : ""}`,
+        targetType: "employee", targetId: id,
+      });
       return NextResponse.json({ success: true, message: "Custom email delivered." });
     } catch (e: any) {
       return NextResponse.json({ error: e.message }, { status: 500 });

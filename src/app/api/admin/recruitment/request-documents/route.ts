@@ -3,6 +3,8 @@ import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getMailContext, sendRecruitmentMail, requestDocsHtml } from "@/lib/recruitment-mail";
 import { baseUrlFrom } from "@/lib/base-url";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 const DOCS = ["face_photo", "aadhaar", "pan"];
 
@@ -49,6 +51,14 @@ export async function POST(req: Request) {
       to: app.applicant_email,
       subject: `Document Submission — ${ctx.companyName}`,
       html: requestDocsHtml(app.applicant_name, ctx.companyName, link, DOCS),
+    });
+
+    const actor = await getActor();
+    await logAudit({
+      actorId: actor?.userId ?? created_by ?? null,
+      action: "recruitment.request_documents", section: "Recruitment",
+      summary: `Requested documents from ${app.applicant_name} (${app.applicant_email})`,
+      targetType: "candidate_document_request", targetId: reqRow.id,
     });
 
     return NextResponse.json({ success: true, request_id: reqRow.id });

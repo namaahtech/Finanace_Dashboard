@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActor, loadSettings, resolveSchema } from "@/lib/onboarding/server";
 import { defaultConfig, DEFAULT_SCHEMA } from "@/lib/onboarding/schema";
+import { logAudit } from "@/lib/audit";
 
 // POST /api/onboarding/manual
 //   { candidate_name, candidate_email, candidate_phone?, candidate_address? }
@@ -42,5 +43,12 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    actorId: actor.userId, action: "onboarding.create_manual", section: "Onboarding",
+    summary: `Created a manual onboarding for ${name} (${email})`,
+    targetType: "onboarding_packet", targetId: created.id,
+  });
+
   return NextResponse.json({ id: created.id });
 }

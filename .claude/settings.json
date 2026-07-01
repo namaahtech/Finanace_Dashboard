@@ -55,7 +55,12 @@
       "Bash(rm -f \"/d/Finanace_Dashboard/src/lib/photo-validate.ts\" \"/d/Finanace_Dashboard/src/app/api/documents/[token]/validate/route.ts\")",
       "Bash(rmdir \"/d/Finanace_Dashboard/src/app/api/documents/[token]/validate\")",
       "Bash(awk '{print $5, $9}')",
-      "Bash(echo \"commit exit: $?\")"
+      "Bash(echo \"commit exit: $?\")",
+      "Bash(node \"C:/Users/devu1/AppData/Local/Temp/claude/d--Finanace-Dashboard/51e1e376-e3e8-4cc7-b38c-e897e9a8170b/scratchpad/gen-diary-pdf.js\")",
+      "Bash(node -e \"console.log\\('pptxgenjs', require\\('/d/Finanace_Dashboard/node_modules/pptxgenjs/package.json'\\).version\\)\")",
+      "Bash(node \"C:/Users/devu1/AppData/Local/Temp/claude/d--Finanace-Dashboard/51e1e376-e3e8-4cc7-b38c-e897e9a8170b/scratchpad/gen-deck-pptx.js\")",
+      "Read(//c/Users/devu1/Downloads/**)",
+      "PowerShell(cd \"d:\\\\Finanace_Dashboard\"; $env:NODE_ENV=\"development\"; npx next dev --turbopack 2>&1 | Select-Object -First 5)"
     ]
   }
 }

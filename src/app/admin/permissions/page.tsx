@@ -192,6 +192,10 @@ const SECTIONS = [
     items: [
       { key: "analytics",           label: "Analytics & Reports",          desc: "Company-level charts, revenue trends" },
       { key: "permissions_control", label: "Permissions & Access Control", desc: "Manage role defaults + per-employee overrides" },
+      { key: "workspace_monitor",   label: "Workspace Monitor",            desc: "/admin/workspace-monitor — live presence: who is working right now, status & activity feed" },
+      { key: "master_log",          label: "Master Log Sheet",             desc: "/admin/master-log — immutable who-did-what audit trail across the whole workspace" },
+      { key: "sessions",            label: "Sessions",                     desc: "/admin/sessions — active sessions + login history, with force sign-out" },
+      { key: "security_audit",      label: "Security & Audit",             desc: "/admin/security — sensitive events: logins, credential/permission/role changes, account lifecycle" },
       { key: "audit_log",           label: "Audit Log",                    desc: "/admin/audit — system event history" },
       { key: "feature_report",      label: "Feature Status Report",        desc: "Internal completion tracker" },
       { key: "system_config",       label: "System Settings",              desc: "SMTP, company profile, feature toggles" },

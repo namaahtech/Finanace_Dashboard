@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getMailContext, sendRecruitmentMail, reminderDocsHtml } from "@/lib/recruitment-mail";
 import { baseUrlFrom } from "@/lib/base-url";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 // Send a reminder email for a pending document request, with an optional custom note.
 export async function POST(req: Request) {
@@ -33,6 +35,14 @@ export async function POST(req: Request) {
       .from("candidate_document_requests")
       .update({ last_reminded_at: new Date().toISOString(), reminder_count: (r.reminder_count || 0) + 1 })
       .eq("id", r.id);
+
+    const actor = await getActor();
+    await logAudit({
+      actorId: actor?.userId ?? null,
+      action: "recruitment.remind_documents", section: "Recruitment",
+      summary: `Sent a document reminder to ${r.candidate_name} (${r.candidate_email})`,
+      targetType: "candidate_document_request", targetId: r.id,
+    });
 
     return NextResponse.json({ success: true });
   } catch (e: any) {

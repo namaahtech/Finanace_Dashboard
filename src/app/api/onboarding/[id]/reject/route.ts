@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActor, isAdmin } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -34,6 +35,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     })
     .eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    actorId: actor.userId, action: "onboarding.reject", section: "Onboarding",
+    summary: `Requested changes on ${packet.candidate_name}'s onboarding`,
+    targetType: "onboarding_packet", targetId: id,
+    changes: { status: { from: packet.status, to: "changes_requested" } },
+  });
 
   if (packet.created_by) {
     await supabase.from("system_notifications").insert({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActor, isAdmin, canEditSchema, loadSettings, resolveSchema } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -53,7 +54,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const supabase = getSupabaseAdmin();
   const { data: packet } = await supabase
     .from("onboarding_packets")
-    .select("id, status, created_by")
+    .select("id, status, created_by, candidate_name, candidate_email, candidate_phone, candidate_address")
     .eq("id", id)
     .maybeSingle();
   if (!packet) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -76,6 +77,18 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
   const { error } = await supabase.from("onboarding_packets").update(patch).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const changes: Record<string, { from: any; to: any }> = {};
+  for (const k of Object.keys(patch)) {
+    if (k === "config") changes[k] = { from: "(previous configuration)", to: "(updated)" };
+    else changes[k] = { from: (packet as any)[k] ?? null, to: patch[k] ?? null };
+  }
+  await logAudit({
+    actorId: actor.userId, action: "onboarding.edit", section: "Onboarding",
+    summary: `Edited ${packet.candidate_name || "candidate"}'s onboarding details`,
+    targetType: "onboarding_packet", targetId: id, changes,
+  });
+
   return NextResponse.json({ ok: true });
 }
 
@@ -88,7 +101,7 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   const supabase = getSupabaseAdmin();
   const { data: packet } = await supabase
     .from("onboarding_packets")
-    .select("id, status, created_by")
+    .select("id, status, created_by, candidate_name")
     .eq("id", id)
     .maybeSingle();
   if (!packet) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -102,5 +115,12 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
 
   const { error } = await supabase.from("onboarding_packets").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    actorId: actor.userId, action: "onboarding.delete", section: "Onboarding",
+    summary: `Deleted ${packet.candidate_name || "a candidate"}'s onboarding (${packet.status})`,
+    targetType: "onboarding_packet", targetId: id,
+  });
+
   return NextResponse.json({ ok: true });
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActor, isAdmin } from "@/lib/onboarding/server";
 import { dispatchOnboarding } from "@/lib/onboarding/dispatch";
+import { logAudit } from "@/lib/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -35,6 +36,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
   try {
     const result = await dispatchOnboarding(id, { req });
+    await logAudit({
+      actorId: actor.userId, action: "onboarding.approve", section: "Onboarding",
+      summary: `Approved and sent the onboarding offer to ${packet.candidate_email}`,
+      targetType: "onboarding_packet", targetId: id, changes: { status: { from: packet.status, to: "sent" } },
+    });
     return NextResponse.json({ status: "sent", ...result });
   } catch (e: any) {
     // Approved but delivery failed — admin can retry via the send endpoint.

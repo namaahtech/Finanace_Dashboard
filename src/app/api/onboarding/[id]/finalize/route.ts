@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActor, isAdmin } from "@/lib/onboarding/server";
 import { dispatchOnboarding } from "@/lib/onboarding/dispatch";
+import { logAudit } from "@/lib/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -35,6 +36,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
   try {
     const result = await dispatchOnboarding(id, { final: true, req });
+    await logAudit({
+      actorId: actor.userId, action: "onboarding.finalize", section: "Onboarding",
+      summary: `Accepted the signed offer and emailed the counter-signed documents`,
+      targetType: "onboarding_packet", targetId: id, changes: { status: { from: "signed", to: "completed" } },
+    });
     return NextResponse.json({ status: "completed", ...result });
   } catch (e: any) {
     return NextResponse.json({ error: e.message || "Failed to send signed documents" }, { status: 502 });

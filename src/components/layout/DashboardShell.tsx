@@ -2,7 +2,7 @@
 
 import { useAuth, getDashboardForRole, type Role } from "./AuthProvider";
 import { Sidebar } from "./Sidebar";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { GlobalAttendanceWidget } from "./GlobalAttendanceWidget";
@@ -24,6 +24,7 @@ interface DashboardShellProps {
 export function DashboardShell({ children, title, subtitle, actions, moduleKey }: DashboardShellProps) {
   const { user, permissions, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   // 1. One-time Zoho SAML activation for already-logged-in users whose Zoho
   //    "Last Sign In" hasn't been seeded yet (covers returning sessions where the
@@ -86,6 +87,25 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
       fetch(`/api/mail/inbox?sync=true&employee_id=${user.id}`).catch(() => {});
     }
   }, [user]);
+
+  // Presence heartbeat — marks the user active + their EXACT current screen for
+  // Workspace Monitor / Sessions. Fires immediately on every route change (so the
+  // live "current screen" updates instantly, no refresh needed) and every 30s as a
+  // keep-alive. Sending the current pathname resolves to a friendly screen name.
+  useEffect(() => {
+    if (!user) return;
+    const ping = () =>
+      fetch("/api/presence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: pathname || (typeof window !== "undefined" ? window.location.pathname : null) }),
+      }).catch(() => {});
+    ping();
+    const t = setInterval(ping, 30000);
+    const onVis = () => { if (document.visibilityState === "visible") ping(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
+  }, [user, pathname]);
 
   // Redirect away when not authenticated
   useEffect(() => {

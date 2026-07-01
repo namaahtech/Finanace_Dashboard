@@ -11,7 +11,8 @@ import {
   Shield, RefreshCw, Mail, Ticket,
   Network, Briefcase, BarChart3, ClipboardList, Folder, User,
   BookOpen, Table2, Presentation, StickyNote, LayoutTemplate, Award, GraduationCap,
-  Inbox, PenLine, Send, Paperclip, Layers, KeyRound, FileSignature,
+  Inbox, PenLine, Send, Paperclip, Layers, KeyRound, FileSignature, ScrollText,
+  MonitorSmartphone, MonitorPlay, ShieldAlert,
 } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { useTheme } from "next-themes";
@@ -169,11 +170,15 @@ const MASTER_NAV: NavSection[] = [
   {
     title: "System",
     items: [
-      { href: "/admin/analytics",   label: "Analytics",     icon: BarChart3,    moduleKey: "analytics" },
-      { href: "/admin/permissions", label: "Permissions",   icon: Shield,       moduleKey: "permissions_control" },
-      { href: "/admin/audit",       label: "Audit Log",     icon: ClipboardList,moduleKey: "audit_log" },
-      { href: "/admin/report",      label: "Feature Report",icon: ClipboardList,moduleKey: "feature_report" },
-      { href: "/admin/config",      label: "System Config", icon: Settings,     moduleKey: "system_config" },
+      { href: "/admin/workspace-monitor", label: "Workspace Monitor", icon: MonitorPlay,      moduleKey: "workspace_monitor" },
+      { href: "/admin/master-log",        label: "Master Log Sheet",  icon: ScrollText,       moduleKey: "master_log" },
+      { href: "/admin/sessions",          label: "Sessions",          icon: MonitorSmartphone,moduleKey: "sessions" },
+      { href: "/admin/security",          label: "Security & Audit",  icon: ShieldAlert,      moduleKey: "security_audit" },
+      { href: "/admin/permissions",       label: "Permissions",       icon: Shield,           moduleKey: "permissions_control" },
+      { href: "/admin/analytics",         label: "Analytics",         icon: BarChart3,        moduleKey: "analytics" },
+      { href: "/admin/audit",             label: "Audit Log",         icon: ClipboardList,    moduleKey: "audit_log" },
+      { href: "/admin/report",            label: "Feature Report",    icon: ClipboardList,    moduleKey: "feature_report" },
+      { href: "/admin/config",            label: "System Config",     icon: Settings,         moduleKey: "system_config" },
     ],
   },
 ];

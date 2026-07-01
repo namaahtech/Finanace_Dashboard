@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 type PermNode = {
   can_view: boolean;
@@ -105,6 +107,14 @@ export async function POST(req: NextRequest) {
       .upsert(rows, { onConflict: "role,module_key" });
 
     if (error) throw error;
+
+    const actor = await getActor();
+    await logAudit({
+      actorId: actor?.userId ?? updatedBy ?? null,
+      action: "permissions.role_update", section: "Permissions",
+      summary: `Updated module permissions for the "${role}" role`,
+      targetType: "role", targetId: role,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {

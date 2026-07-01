@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 // GET /api/permissions/employee?employee_id=<uuid>
 // Returns the raw override rows (NULL = inherit) for an employee, keyed by module_key.
@@ -123,6 +125,14 @@ export async function POST(req: NextRequest) {
         .in("module_key", toDelete);
       if (error) throw error;
     }
+
+    const actor = await getActor();
+    await logAudit({
+      actorId: actor?.userId ?? updatedBy ?? null,
+      action: "permissions.employee_override", section: "Permissions",
+      summary: `Updated per-employee permission overrides (${toUpsert.length} set, ${toDelete.length} cleared)`,
+      targetType: "employee", targetId: employee_id,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
