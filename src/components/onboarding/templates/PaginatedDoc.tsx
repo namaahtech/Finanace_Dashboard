@@ -4,16 +4,47 @@ import React, { useLayoutEffect, useRef, useState } from "react";
 import { HEADER_MM, FOOTER_MM } from "./brand";
 import { LetterheadHeader, LetterheadFooter } from "./docStyles";
 
-const PX_PER_MM = 96 / 25.4; // 3.7795 — CSS px per mm at 96dpi
-// Usable content height per page = A4 height − header − footer − body vertical padding (5mm × 2).
-const USABLE_PX = (297 - HEADER_MM - FOOTER_MM - 10) * PX_PER_MM;
+const PX_PER_MM = 96 / 25.4;
+
+// Height reserved at the bottom of each page body for the per-page sig strip.
+const SIG_STRIP_MM = 6;
+
+// Usable content height per page = A4 − header − sig strip − footer − body vertical padding (5mm × 2).
+const USABLE_PX = (297 - HEADER_MM - SIG_STRIP_MM - FOOTER_MM - 10) * PX_PER_MM;
+
+interface SigData {
+  image_base64?: string | null;
+  typed_name?: string | null;
+}
+
+function PageSigStrip({ sig, name, page, total }: { sig?: SigData | null; name?: string; page: number; total: number }) {
+  return (
+    <div className="od-pagesig">
+      <span className="od-pagesig-lbl">Candidate:</span>
+      <span className="od-pagesig-sig">
+        {sig?.image_base64 && <img src={sig.image_base64} alt="candidate signature" />}
+      </span>
+      <span className="od-pagesig-name">{sig?.typed_name || name || "—"}</span>
+      <span className="od-pagesig-pg">Page {page} of {total}</span>
+    </div>
+  );
+}
 
 /**
  * Splits a flat list of flowable block nodes into discrete A4 pages, each carrying
- * the NAMAAH letterhead header (top) and footer (bottom) — mirroring the Word doc.
+ * the NAMAAH letterhead header (top), a compact per-page candidate signature strip,
+ * and the letterhead footer (bottom) — mirroring the Word doc layout.
  * Whole-block pagination: a block never splits across pages.
  */
-export function PaginatedDoc({ blocks }: { blocks: React.ReactNode[] }) {
+export function PaginatedDoc({
+  blocks,
+  signature,
+  candidateName,
+}: {
+  blocks: React.ReactNode[];
+  signature?: SigData | null;
+  candidateName?: string;
+}) {
   const measureRef = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState<number[][]>([[...blocks.keys()]]);
 
@@ -29,7 +60,7 @@ export function PaginatedDoc({ blocks }: { blocks: React.ReactNode[] }) {
 
     for (let i = 0; i < children.length; i++) {
       const c = children[i];
-      const forceBreak = c.classList.contains("od-break-before"); // admin-set "start on new page"
+      const forceBreak = c.classList.contains("od-break-before");
       const bottom = c.offsetTop + c.offsetHeight;
       if (current.length && (forceBreak || bottom - pageTop > USABLE_PX)) {
         result.push(current);
@@ -53,6 +84,7 @@ export function PaginatedDoc({ blocks }: { blocks: React.ReactNode[] }) {
         <div className="od-page" key={p}>
           <LetterheadHeader />
           <div className="od-page-body">{idxs.map((i) => blocks[i])}</div>
+          <PageSigStrip sig={signature} name={candidateName} page={p + 1} total={pages.length} />
           <LetterheadFooter />
         </div>
       ))}

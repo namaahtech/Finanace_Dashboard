@@ -31,11 +31,26 @@ export async function POST(req: NextRequest) {
     .from("onboarding_packets")
     .select("id, status")
     .eq("application_id", application_id)
-    .not("status", "in", '("completed")')
     .order("created_at", { ascending: false })
     .maybeSingle();
 
   if (existing) return NextResponse.json({ id: existing.id, reused: true });
+
+  // Block if any onboarding already exists for this email (unique email + one process per candidate).
+  if (app.applicant_email) {
+    const { data: dupe } = await supabase
+      .from("onboarding_packets")
+      .select("id, status, candidate_name")
+      .eq("candidate_email", app.applicant_email)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (dupe) {
+      return NextResponse.json({
+        error: `An onboarding for ${app.applicant_email} already exists (${dupe.candidate_name} — ${dupe.status}). Each candidate can only have one onboarding.`,
+      }, { status: 409 });
+    }
+  }
 
   const settings = await loadSettings();
   const schema = resolveSchema(settings) ?? DEFAULT_SCHEMA;

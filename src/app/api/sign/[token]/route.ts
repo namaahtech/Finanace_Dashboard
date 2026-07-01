@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { loadSettings, resolveSchema } from "@/lib/onboarding/server";
 import { buildTemplateData } from "@/lib/onboarding/templateData";
-import { generateAndStorePdfs } from "@/lib/onboarding/pdf";
+import { dispatchOnboarding } from "@/lib/onboarding/dispatch";
 import { logAudit } from "@/lib/audit";
 
 type Ctx = { params: Promise<{ token: string }> };
@@ -105,30 +105,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     targetType: "onboarding_packet", targetId: packet.id, ip: ip || null,
   });
 
-  // Regenerate counter-signed Offer + NDA PDFs (best-effort; signing succeeds regardless).
+  // Regenerate all 3 signed PDFs + email them to the candidate (best-effort; signing succeeds regardless).
   try {
-    const settings = await loadSettings();
-    const schema = resolveSchema(settings);
-    const signatory = {
-      name: settings?.signatory_name ?? "Rahul Bharath",
-      designation: settings?.signatory_designation ?? "Founder, Executive Chairman & Managing Director",
-      companyName: settings?.company_name ?? "Namaah Private Limited",
-    };
-    const data = buildTemplateData({
-      candidate: packet,
-      config: packet.config,
-      schema,
-      signatory,
-      signature,
-      offerDateISO: packet.sent_at || packet.approved_at || null,
-    });
-    const paths = await generateAndStorePdfs(packet.id, data, ["offer", "nda"]);
-    await supabase
-      .from("onboarding_packets")
-      .update({ offer_pdf_url: paths.offer ?? packet.offer_pdf_url, nda_pdf_url: paths.nda ?? packet.nda_pdf_url })
-      .eq("id", packet.id);
+    await dispatchOnboarding(packet.id, { final: true });
   } catch (e: any) {
-    console.error("[sign] counter-signed PDF regeneration failed:", e.message);
+    console.error("[sign] post-sign final dispatch (signed PDF email) failed:", e.message);
   }
 
   // Notify the creator + admins.

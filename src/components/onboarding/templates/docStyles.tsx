@@ -81,6 +81,25 @@ export const DOC_CSS = `
 .od-sigmeta b { color: #111; }
 .od-ack { margin-top: 14pt; padding-top: 10pt; border-top: 1px dashed #bbb; }
 .od-callout { font-size: 10pt; color: #444; background: #f4f4f5; border-left: 3px solid #bbb; padding: 6pt 8pt; margin: 8pt 0; text-align: justify; }
+
+/* ── Per-page candidate signature strip (sits between page body and letterhead footer) ── */
+.od-pagesig {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 7pt;
+  padding: 2.5pt 8.5mm;
+  border-top: 0.75px solid #d8d8d8;
+  font-size: 8pt; color: #666;
+  font-family: 'Bahnschrift','DIN Next','Segoe UI',system-ui,sans-serif;
+}
+.od-pagesig-lbl { white-space: nowrap; color: #888; flex-shrink: 0; }
+.od-pagesig-sig {
+  display: inline-flex; align-items: flex-end;
+  width: 96pt; height: 18pt;
+  border-bottom: 0.75px solid #555; flex-shrink: 0;
+}
+.od-pagesig-sig img { max-height: 17pt; max-width: 94pt; }
+.od-pagesig-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.od-pagesig-pg { white-space: nowrap; color: #bbb; margin-left: auto; flex-shrink: 0; }
 `;
 
 /** Inject the document stylesheet once into the preview/sign-page DOM. */

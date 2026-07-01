@@ -6,7 +6,6 @@ import { ArrowLeft, Save, Loader2, RotateCcw, Building2, FileText, FileSignature
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SchemaEditor } from "@/components/onboarding/SchemaEditor";
@@ -127,17 +126,25 @@ export function OnboardingSettingsPanel({ onBack }: { onBack: () => void }) {
             <ShieldCheck size={14} className="text-primary" /> Approval Workflow
           </h3>
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="flex-1">
               <p className="text-sm font-medium text-foreground">Require admin approval for non-admin onboardings</p>
-              <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 When ON, onboardings created by non-admin roles must be approved by an admin before the offer is e-mailed for e-signature.
                 When OFF, anyone with onboarding access can send directly. <strong>Admins always send directly.</strong>
               </p>
             </div>
-            <Switch
-              checked={settings.require_approval}
-              onCheckedChange={(v) => setSettings({ ...settings, require_approval: v })}
-            />
+            <button
+              type="button"
+              onClick={() => setSettings({ ...settings, require_approval: !settings.require_approval })}
+              className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${settings.require_approval ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
+              role="switch"
+              aria-checked={settings.require_approval}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ${settings.require_approval ? "translate-x-7" : "translate-x-0.5"}`} />
+              <span className={`absolute text-[9px] font-bold tracking-wide transition-opacity ${settings.require_approval ? "left-1.5 text-white" : "right-1 text-zinc-500"}`}>
+                {settings.require_approval ? "ON" : "OFF"}
+              </span>
+            </button>
           </div>
         </CardContent>
       </Card>

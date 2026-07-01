@@ -172,8 +172,8 @@ export function buildNdaBlocks(data: TemplateData): React.ReactNode[] {
 }
 
 export function buildHandbookBlocks(data: TemplateData): React.ReactNode[] {
-  const { candidate, signatory } = data;
-  const body = sliceBlocks(HANDBOOK_BLOCKS, "CHAPTER 1");
+  const { candidate, signatory, signature } = data;
+  const body = sliceBlocks(HANDBOOK_BLOCKS, "CHAPTER 1", "INTERN HANDBOOK ACKNOWLEDGEMENT");
 
   return [
     <h1 className="od-title" key="title">INTERNSHIP HANDBOOK</h1>,
@@ -182,5 +182,26 @@ export function buildHandbookBlocks(data: TemplateData): React.ReactNode[] {
       Prepared for: <b>{candidate.name}</b>{candidate.email ? ` (${candidate.email})` : ""}. This Handbook forms an integral part of your internship engagement and should be read together with your Internship Offer Letter and the Non-Disclosure Agreement.
     </div>,
     ...renderBlocks(body, "hb", { breakSections: true, skipFirstSectionBreak: true }),
+    // Acknowledgement + signature (mirrors the format used in Offer Letter and NDA)
+    <h2 className="od-section" key="ack-title">INTERN HANDBOOK ACKNOWLEDGEMENT</h2>,
+    <p className="od-p" key="ack1">I acknowledge that I have received, read, understood, and agree to comply with the provisions contained in this Internship Handbook and any future updates communicated by the Company. I further acknowledge that failure to comply with applicable Company policies, procedures, compliance requirements, or Handbook provisions may result in appropriate corrective, disciplinary, administrative, or internship-related action.</p>,
+    <p className="od-p" key="ack2">I further acknowledge that this Handbook shall be read together with the Internship Offer Letter, Non-Disclosure Agreement (NDA), Company policies, standard operating procedures (SOPs), guidelines, and other applicable Company documents, all of which may collectively govern my internship with the Company.</p>,
+    <div className="od-sigwrap" key="sig" style={{ marginTop: "32pt" }}>
+      <div className="od-sigcol">
+        <div className="od-sigcaps">INTERN DETAILS</div>
+        <div className="od-sigmeta" style={{ marginBottom: "4pt" }}>Signature:</div>
+        <div className="od-sigline">{signature?.image_base64 && <img src={signature.image_base64} alt="signature" />}</div>
+        <div className="od-sigmeta"><b>Name:</b> {signature?.typed_name || candidate.name}</div>
+        <div className="od-sigmeta"><b>Date:</b> {signature?.signed_at ? fmtDate(signature.signed_at) : "______________"}</div>
+      </div>
+      <div className="od-sigcol">
+        <div className="od-sigcaps">FOR {(signatory.companyName || "").toUpperCase()}</div>
+        <div className="od-sigmeta" style={{ marginBottom: "4pt" }}>Authorized Signatory:</div>
+        <div className="od-sigline" />
+        <div className="od-sigmeta"><b>Name:</b> {signatory.name}</div>
+        <div className="od-sigmeta"><b>Designation:</b> {signatory.designation}</div>
+        <div className="od-sigmeta"><b>Date:</b> {data.offerDate}</div>
+      </div>
+    </div>,
   ];
 }

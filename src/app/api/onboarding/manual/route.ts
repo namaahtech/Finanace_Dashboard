@@ -24,6 +24,21 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin();
+
+  // Block if any onboarding already exists for this email (unique email + one process per candidate).
+  const { data: dupe } = await supabase
+    .from("onboarding_packets")
+    .select("id, status, candidate_name")
+    .eq("candidate_email", email)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (dupe) {
+    return NextResponse.json({
+      error: `An onboarding for ${email} already exists (${dupe.candidate_name} — ${dupe.status}). Each candidate can only have one onboarding.`,
+    }, { status: 409 });
+  }
+
   const settings = await loadSettings();
   const schema = resolveSchema(settings) ?? DEFAULT_SCHEMA;
 
