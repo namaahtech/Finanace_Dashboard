@@ -124,7 +124,8 @@ const SECTIONS = [
     items: [
       { key: "attendance",      label: "Attendance Tracker",      desc: "View, manage, override attendance records" },
       { key: "kpi_kra",         label: "KPI / KRA Performance",   desc: "Score cards, auto-calculation, history" },
-      { key: "payroll",         label: "Payroll Engine",          desc: "Monthly payroll, payslip generation" },
+      { key: "payroll",            label: "Payroll Engine",            desc: "Monthly payroll, payslip generation" },
+      { key: "payroll_internship", label: "Internship Stipend",        desc: "Intern roster + monthly stipend cycles + payment tracking" },
       { key: "incentives",      label: "Incentives",              desc: "Performance-based incentive management" },
       { key: "claims",          label: "Claims & Expenses",       desc: "Approve/reject employee expense claims" },
       { key: "reimbursements",  label: "Reimbursements",          desc: "Process and approve reimbursement requests" },

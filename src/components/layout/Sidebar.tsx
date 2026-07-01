@@ -105,6 +105,7 @@ const MASTER_NAV: NavSection[] = [
       { href: "/admin/incentives",     label: "Incentives",      icon: Wallet,        moduleKey: "incentives" },
       { href: "/admin/kpi",            label: "KPI / KRA",       icon: TrendingUp,    moduleKey: "kpi_kra" },
       { href: "/admin/payroll",        label: "Payroll",         icon: IndianRupee,   moduleKey: "payroll" },
+      { href: "/admin/payroll/internship", label: "Internship Stipend", icon: IndianRupee, moduleKey: "payroll_internship" },
       { href: "/admin/payslips",       label: "Payslips",        icon: FileText,      moduleKey: "payslips_management" },
       { href: "/admin/support",        label: "Support Center",  icon: Ticket,        moduleKey: "support_admin" },
     ],
