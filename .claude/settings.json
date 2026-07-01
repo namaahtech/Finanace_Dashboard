@@ -60,7 +60,15 @@
       "Bash(node -e \"console.log\\('pptxgenjs', require\\('/d/Finanace_Dashboard/node_modules/pptxgenjs/package.json'\\).version\\)\")",
       "Bash(node \"C:/Users/devu1/AppData/Local/Temp/claude/d--Finanace-Dashboard/51e1e376-e3e8-4cc7-b38c-e897e9a8170b/scratchpad/gen-deck-pptx.js\")",
       "Read(//c/Users/devu1/Downloads/**)",
-      "PowerShell(cd \"d:\\\\Finanace_Dashboard\"; $env:NODE_ENV=\"development\"; npx next dev --turbopack 2>&1 | Select-Object -First 5)"
+      "PowerShell(cd \"d:\\\\Finanace_Dashboard\"; $env:NODE_ENV=\"development\"; npx next dev --turbopack 2>&1 | Select-Object -First 5)",
+      "PowerShell(git add src/app/api/onboarding/manual/route.ts src/app/api/onboarding/push/route.ts src/app/api/sign/[token]/route.ts src/components/onboarding/SettingsPanel.tsx src/components/onboarding/templates/HandbookTemplate.tsx src/components/onboarding/templates/NdaTemplate.tsx src/components/onboarding/templates/OfferLetterTemplate.tsx src/components/onboarding/templates/PaginatedDoc.tsx src/components/onboarding/templates/blocks.tsx src/components/onboarding/templates/docStyles.tsx src/lib/onboarding/pdf.tsx)",
+      "PowerShell(git push origin preview)",
+      "PowerShell(git checkout main)",
+      "PowerShell(git pull origin main)",
+      "PowerShell(git push origin main)",
+      "PowerShell(git checkout preview)",
+      "PowerShell(git add .claude/settings.json)",
+      "PowerShell(git commit -m \"chore: update .claude/settings.json project permissions\")"
     ]
   }
 }
