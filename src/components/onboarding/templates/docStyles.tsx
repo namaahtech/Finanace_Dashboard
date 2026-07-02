@@ -72,7 +72,7 @@ export const DOC_CSS = `
 .od-note { margin: 2pt 0 4pt 18pt; font-size: 10pt; color: #333; text-align: justify; white-space: pre-wrap; }
 .od-muted { color: #777; }
 .od-spacer { height: 8pt; }
-.od-sigwrap { margin-top: 24pt; display: flex; justify-content: space-between; gap: 40pt; page-break-inside: avoid; }
+.od-sigwrap { margin-top: 24pt; display: flex; justify-content: space-between; align-items: flex-start; gap: 40pt; page-break-inside: avoid; }
 .od-sigcol { flex: 1; }
 .od-sigcaps { font-weight: 700; font-size: 10.5pt; color: #1a1a1a; margin-bottom: 4pt; }
 .od-sigline { border-bottom: 1px solid #333; height: 34pt; margin-bottom: 3pt; display: flex; align-items: flex-end; }

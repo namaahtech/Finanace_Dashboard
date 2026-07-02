@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Loader2, CheckCircle2, ShieldCheck, AlertTriangle, PenTool, FileSignature, Mail, Lock, Camera, ScanFace, RefreshCw, RotateCcw, Check, X } from "lucide-react";
+import { Loader2, CheckCircle2, ShieldCheck, AlertTriangle, PenTool, FileSignature, Mail, Lock, Camera, ScanFace, RefreshCw, RotateCcw, Check, X, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ export default function SignPage() {
   const [candidateName, setCandidateName] = useState("");
 
   const [sigImage, setSigImage] = useState<string | null>(null);
+  const [sigEdge, setSigEdge] = useState(false);
   const [typedName, setTypedName] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -53,6 +54,14 @@ export default function SignPage() {
   const [faceFails, setFaceFails] = useState(0);
   const [camAttempt, setCamAttempt] = useState(0);
   const [hasMultiCam, setHasMultiCam] = useState(false);
+
+  // ── Session security ────────────────────────────────────────────────────────
+  // After OTP verification: 30-second window to complete face capture.
+  // Tab switch at any post-OTP step resets back to OTP gate.
+  const sessionTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionActiveRef = useRef(false);
+  const [sessionSecsLeft, setSessionSecsLeft] = useState(0);
+  const [sessionMsg,      setSessionMsg]      = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -136,7 +145,9 @@ export default function SignPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Verification failed.");
+      setSessionMsg(null);
       setStep("face");
+      startCountdown();
     } catch (e: any) {
       setOtpErr(e.message || "Verification failed.");
     } finally {
@@ -235,6 +246,32 @@ export default function SignPage() {
     return () => { active = false; stopStream(); };
   }, [step, facing, camAttempt]);
 
+  // Tab-switch guard: switching away from the page after OTP forces re-verification.
+  useEffect(() => {
+    if (step === "gate") return;
+    function onHide() {
+      if (!document.hidden) return;
+      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+      sessionTimerRef.current = null;
+      sessionActiveRef.current = false;
+      setSessionSecsLeft(0);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      setFaceResult(null); setFaceFails(0); setRefMissing(false);
+      setOtp(""); setOtpSent(false); setSecondsLeft(0);
+      setSigImage(null); setAgreed(false);
+      setStep("gate");
+      setSessionMsg("You left this tab — please verify your email again to continue signing.");
+    }
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cleanup countdown on unmount.
+  useEffect(() => () => {
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+  }, []);
+
   async function captureVerify() {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
@@ -262,6 +299,7 @@ export default function SignPage() {
       setFaceResult(verdict);
       setFaceStatus("ready");
       if (verdict.pass) {
+        stopCountdown();
         setTimeout(() => { stopStream(); setStep("sign"); }, 900);
       } else {
         setFaceFails((n) => n + 1);
@@ -273,6 +311,7 @@ export default function SignPage() {
   }
 
   function restartFromOtp() {
+    stopCountdown();
     stopStream();
     setFaceResult(null);
     setFaceFails(0);
@@ -280,6 +319,41 @@ export default function SignPage() {
     setOtp("");
     setOtpSent(false);
     setStep("gate");
+  }
+
+  function stopCountdown() {
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    sessionTimerRef.current = null;
+    sessionActiveRef.current = false;
+    setSessionSecsLeft(0);
+  }
+
+  function startCountdown() {
+    stopCountdown();
+    sessionActiveRef.current = true;
+    setSessionSecsLeft(30);
+    sessionTimerRef.current = setInterval(() => {
+      setSessionSecsLeft((prev) => {
+        const next = prev - 1;
+        if (next <= 0 && sessionActiveRef.current) {
+          sessionActiveRef.current = false;
+          // Defer state resets outside the setState callback
+          setTimeout(() => {
+            if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+            sessionTimerRef.current = null;
+            streamRef.current?.getTracks().forEach((t) => t.stop());
+            streamRef.current = null;
+            setFaceResult(null); setFaceFails(0); setRefMissing(false);
+            setOtp(""); setOtpSent(false); setSecondsLeft(0);
+            setSigImage(null); setAgreed(false);
+            setStep("gate");
+            setSessionMsg("Session timed out — please verify your email again to continue.");
+          }, 0);
+          return 0;
+        }
+        return Math.max(0, next);
+      });
+    }, 1000);
   }
 
   // ── Loading / terminal states ────────────────────────────────────────────
@@ -346,6 +420,13 @@ export default function SignPage() {
         <main className="flex-1 flex items-center justify-center px-4 py-10">
           <Card className="w-full max-w-md">
             <CardContent className="p-6 space-y-5">
+              {sessionMsg && (
+                <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2.5 text-xs text-rose-600 dark:text-rose-400">
+                  <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                  <span>{sessionMsg}</span>
+                </div>
+              )}
+
               <div className="flex flex-col items-center text-center gap-2">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><ShieldCheck size={22} /></div>
                 <h1 className="text-lg font-bold text-foreground">Verify it&apos;s you</h1>
@@ -426,12 +507,41 @@ export default function SignPage() {
                 <p className="text-sm text-muted-foreground">Look into the camera and capture a photo — we&apos;ll match it to your profile photo on file.</p>
               </div>
 
+              {/* Session countdown */}
+              {sessionSecsLeft > 0 && (
+                <div className={cn(
+                  "rounded-lg border px-3 py-2.5 text-xs",
+                  sessionSecsLeft <= 10
+                    ? "border-rose-500/40 bg-rose-500/5 text-rose-600 dark:text-rose-400"
+                    : "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400",
+                )}>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Clock size={12} />
+                      {sessionSecsLeft <= 10 ? "Session expiring soon!" : "Session time remaining"}
+                    </span>
+                    <span className={cn("font-mono font-bold tabular-nums text-sm", sessionSecsLeft <= 10 && "animate-pulse")}>
+                      0:{String(sessionSecsLeft).padStart(2, "0")}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn("h-full rounded-full transition-all duration-1000", sessionSecsLeft <= 10 ? "bg-rose-500" : "bg-amber-500")}
+                      style={{ width: `${(sessionSecsLeft / 30) * 100}%` }}
+                    />
+                  </div>
+                  {sessionSecsLeft <= 10 && (
+                    <p className="mt-1.5 text-[11px] opacity-80">You&apos;ll be redirected back to email verification when this reaches zero.</p>
+                  )}
+                </div>
+              )}
+
               {refMissing ? (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-400">
                     No profile photo is on file for you, so face matching is skipped. You can continue to sign.
                   </div>
-                  <Button className="w-full" onClick={() => { stopStream(); setStep("sign"); }}>Continue</Button>
+                  <Button className="w-full" onClick={() => { stopCountdown(); stopStream(); setStep("sign"); }}>Continue</Button>
                 </div>
               ) : (
                 <>
@@ -563,7 +673,7 @@ export default function SignPage() {
               <h2 className="text-sm font-semibold text-foreground">Your Signature</h2>
             </div>
 
-            <SignaturePad onChange={setSigImage} />
+            <SignaturePad onChange={setSigImage} onBorderViolation={setSigEdge} />
 
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Full legal name</Label>
@@ -583,7 +693,7 @@ export default function SignPage() {
               <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
                 <ShieldCheck size={13} /> Secured · your IP &amp; timestamp are recorded for verification
               </p>
-              <Button onClick={submit} disabled={submitting} className="sm:min-w-[180px]">
+              <Button onClick={submit} disabled={submitting || sigEdge} className="sm:min-w-[180px]" title={sigEdge ? "Fix the signature first — it is touching the edge" : undefined}>
                 {submitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
                 Accept &amp; Sign Offer
               </Button>

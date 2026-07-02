@@ -141,6 +141,12 @@ export async function getZohoToken(): Promise<string | null> {
       }).eq("id", config.id);
       return refreshed.access_token;
     }
+    // Refresh failed — expired/revoked refresh token, or bad client credentials.
+    // Log it and flip is_connected=false so the UI shows "Zoho not connected"
+    // instead of silently provisioning mailboxes with a null account id. The
+    // OAuth callback re-sets is_connected=true on the next reconnect.
+    console.error("[Zoho] token refresh failed:", JSON.stringify(refreshed));
+    await supabase.from("zoho_config").update({ is_connected: false }).eq("id", config.id);
     return null;
   }
 

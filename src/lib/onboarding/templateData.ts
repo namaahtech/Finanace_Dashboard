@@ -21,7 +21,7 @@ export function buildTemplateData(opts: {
   candidate: CandidateInput;
   config: OnboardingConfig;
   schema: ConfigCategory[];
-  signatory: { name: string; designation: string; companyName: string };
+  signatory: { name: string; designation: string; companyName: string; signatureUrl?: string | null; sealUrl?: string | null };
   signature?: OnboardingSignature | null;
   offerDateISO?: string | null; // when the offer was issued/sent; defaults to today
 }): TemplateData {

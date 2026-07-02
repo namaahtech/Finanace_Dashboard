@@ -11,9 +11,9 @@ export function onboardingFinalEmailHtml(opts: {
   return `
 <div style="background:#f4f5f7;padding:32px 0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;color:#1f2937;">
   <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb;">
-    <div style="background:linear-gradient(135deg,#16a34a,#0ea5e9);padding:28px 32px;">
-      <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">${opts.companyName}</p>
-      <p style="margin:4px 0 0;color:#e0f2fe;font-size:13px;">Onboarding Complete</p>
+    <div style="border-top:4px solid #111827;padding:24px 32px 20px;background:#ffffff;">
+      <p style="margin:0;color:#111827;font-size:18px;font-weight:700;letter-spacing:.2px;">${opts.companyName}</p>
+      <p style="margin:4px 0 0;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:.06em;">Onboarding Complete</p>
     </div>
     <div style="padding:32px;">
       <p style="margin:0 0 16px;font-size:15px;">Dear ${firstName},</p>
@@ -52,9 +52,9 @@ export function onboardingEmailHtml(opts: {
   return `
 <div style="background:#f4f5f7;padding:32px 0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;color:#1f2937;">
   <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb;">
-    <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:28px 32px;">
-      <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;letter-spacing:.3px;">${opts.companyName}</p>
-      <p style="margin:4px 0 0;color:#e0e7ff;font-size:13px;">Internship Onboarding</p>
+    <div style="border-top:4px solid #111827;padding:24px 32px 20px;background:#ffffff;">
+      <p style="margin:0;color:#111827;font-size:18px;font-weight:700;letter-spacing:.2px;">${opts.companyName}</p>
+      <p style="margin:4px 0 0;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:.06em;">Internship Onboarding</p>
     </div>
     <div style="padding:32px;">
       <p style="margin:0 0 16px;font-size:15px;">Dear ${firstName},</p>

@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Loader2, RotateCcw, Building2, FileText, FileSignature, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Save, Loader2, RotateCcw, Building2, FileText, FileSignature, ShieldCheck, Stamp, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SchemaEditor } from "@/components/onboarding/SchemaEditor";
+import { AssetUploadModal } from "@/components/onboarding/AssetUploadModal";
 import type { ConfigCategory } from "@/lib/onboarding/types";
 
 interface SettingsState {
@@ -16,12 +17,85 @@ interface SettingsState {
   signatory_designation: string;
   company_name: string;
   require_approval: boolean;
+  signatory_signature_url: string | null;
+  company_seal_url: string | null;
+}
+
+interface AssetUploadProps {
+  label: string;
+  hint: string;
+  currentUrl: string | null;
+  assetType: "signature" | "seal";
+  onUploaded: (url: string | null) => void;
+  onOpenModal: (type: "signature" | "seal") => void;
+}
+
+function AssetUpload({ label, hint, currentUrl, assetType, onUploaded, onOpenModal }: AssetUploadProps) {
+  const [removing, setRemoving] = useState(false);
+
+  async function handleRemove() {
+    setRemoving(true);
+    try {
+      const res = await fetch(`/api/onboarding/settings/assets?type=${assetType}`, { method: "DELETE" });
+      if (!res.ok) { const j = await res.json(); throw new Error(j.error); }
+      onUploaded(null);
+      toast.success(`${label} removed`);
+    } catch (err: any) {
+      toast.error(err.message || "Remove failed");
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <p className="text-[11px] text-muted-foreground -mt-1">{hint}</p>
+      <div className="flex items-center gap-3">
+        {/* Preview box */}
+        <div className="h-16 w-24 rounded-md border border-dashed border-border flex items-center justify-center bg-muted/30 shrink-0 overflow-hidden">
+          {currentUrl
+            ? <img src={currentUrl} alt={label} className="max-h-14 max-w-[88px] object-contain" />
+            : <span className="text-[10px] text-muted-foreground text-center leading-tight px-1">No image</span>}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenModal(assetType)}
+            className="text-xs h-7"
+          >
+            <Upload size={12} />
+            {currentUrl ? "Replace" : "Upload"}
+          </Button>
+          {currentUrl && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={removing}
+              onClick={handleRemove}
+              className="text-xs h-7 text-destructive hover:text-destructive"
+            >
+              {removing ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
+              Remove
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function OnboardingSettingsPanel({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [settings, setSettings] = useState<SettingsState>({ signatory_name: "", signatory_designation: "", company_name: "", require_approval: true });
+  const [openModal, setOpenModal] = useState<"signature" | "seal" | null>(null);
+  const [settings, setSettings] = useState<SettingsState>({
+    signatory_name: "", signatory_designation: "", company_name: "",
+    require_approval: true, signatory_signature_url: null, company_seal_url: null,
+  });
   const [schema, setSchema] = useState<ConfigCategory[]>([]);
   const [defaultSchema, setDefaultSchema] = useState<ConfigCategory[]>([]);
 
@@ -119,6 +193,36 @@ export function OnboardingSettingsPanel({ onBack }: { onBack: () => void }) {
         </CardContent>
       </Card>
 
+      {/* Seal & Signature */}
+      <Card>
+        <CardContent className="p-5 space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-foreground flex items-center gap-2">
+            <Stamp size={14} className="text-primary" /> Seal &amp; Signature
+          </h3>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Uploaded images appear automatically in the company signatory column of every Offer Letter, NDA, and Handbook — in both the preview and generated PDFs. Accepted formats: PNG, JPEG, PDF.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-5">
+            <AssetUpload
+              label="Authorized Signatory Signature"
+              hint="Scan or photo of the owner/CEO handwritten signature"
+              currentUrl={settings.signatory_signature_url}
+              assetType="signature"
+              onUploaded={(url) => setSettings((s) => ({ ...s, signatory_signature_url: url }))}
+              onOpenModal={setOpenModal}
+            />
+            <AssetUpload
+              label="Company Seal / Stamp"
+              hint="Official company rubber stamp or digital seal"
+              currentUrl={settings.company_seal_url}
+              assetType="seal"
+              onUploaded={(url) => setSettings((s) => ({ ...s, company_seal_url: url }))}
+              onOpenModal={setOpenModal}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Approval workflow */}
       <Card>
         <CardContent className="p-5 space-y-3">
@@ -178,6 +282,20 @@ export function OnboardingSettingsPanel({ onBack }: { onBack: () => void }) {
           </p>
         </CardContent>
       </Card>
+
+      {/* Asset upload modal */}
+      {openModal && (
+        <AssetUploadModal
+          label={openModal === "signature" ? "Authorized Signatory Signature" : "Company Seal / Stamp"}
+          assetType={openModal}
+          onClose={() => setOpenModal(null)}
+          onUploaded={(url) => {
+            if (openModal === "signature") setSettings((s) => ({ ...s, signatory_signature_url: url }));
+            else setSettings((s) => ({ ...s, company_seal_url: url }));
+            setOpenModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }

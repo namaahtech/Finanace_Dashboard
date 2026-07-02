@@ -14,16 +14,24 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabaseAdmin();
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Look up the employee by any email (personal, professional, zoho)
-    const { data: emp, error: dbErr } = await supabase
+    // 1. Look up the employee by any email (personal, professional, zoho).
+    // Use array form — .maybeSingle() errors when multiple rows match (e.g. shared personal email).
+    // Priority: exact match on the login (professional) email first, then personal, then zoho.
+    const { data: rows, error: dbErr } = await supabase
       .from("employees")
       .select("id, name, email, zoho_email, zoho_user_id, personal_email, status, is_active, role, employee_id, department, designation, must_change_password")
       .or(`email.ilike.${cleanEmail},personal_email.ilike.${cleanEmail},zoho_email.ilike.${cleanEmail}`)
-      .maybeSingle();
+      .limit(10);
 
     if (dbErr) {
       return NextResponse.json({ error: "Database lookup failed: " + dbErr.message }, { status: 500 });
     }
+
+    const emp =
+      rows?.find(r => r.email?.toLowerCase() === cleanEmail) ??
+      rows?.find(r => r.personal_email?.toLowerCase() === cleanEmail) ??
+      rows?.find(r => r.zoho_email?.toLowerCase() === cleanEmail) ??
+      null;
 
     if (!emp) {
       return NextResponse.json({ error: "You are not authorized in this company." }, { status: 403 });

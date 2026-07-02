@@ -97,6 +97,8 @@ export interface OnboardingSettings {
   company_details: Record<string, string>;
   template_versions: Record<string, string>;
   require_approval: boolean;
+  signatory_signature_url: string | null;
+  company_seal_url: string | null;
   updated_by: string | null;
   updated_at: string;
 }
@@ -116,6 +118,8 @@ export interface TemplateData {
     name: string;
     designation: string;
     companyName: string;
+    signatureUrl?: string | null;
+    sealUrl?: string | null;
   };
   signature?: OnboardingSignature | null;  // present once signed (embeds into PDF)
 }

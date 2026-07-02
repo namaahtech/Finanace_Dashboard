@@ -98,6 +98,7 @@ interface User {
   commission_enabled?: boolean;
   monthly_sales_target?: number | null;
   salary_slab_id?: string | null;
+  source?: "direct" | "onboarding" | null;
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -389,6 +390,7 @@ export default function AdminUsersPage() {
     linkSlab: false,
   });
   const [zohoConnected, setZohoConnected] = useState(false);
+  const [zohoStatusLoading, setZohoStatusLoading] = useState(true);
   const [zohoDomain, setZohoDomain] = useState("mail.namaah.io");
   const [zohoEmailPreview, setZohoEmailPreview] = useState("");
   const [assignableRoles, setAssignableRoles] = useState<string[]>([]);
@@ -425,9 +427,10 @@ export default function AdminUsersPage() {
       load();
       loadOrg();
       // Check if Zoho Mail is connected
+      setZohoStatusLoading(true);
       fetch("/api/mail/auth/connect").then(r => r.json()).then(d => {
         setZohoConnected(d.config?.is_connected === true);
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => setZohoStatusLoading(false));
       // Fetch active provisioning domain
       fetch("/api/mail/config/domain").then(r => r.json()).then(d => {
         if (d.current_domain) setZohoDomain(d.current_domain);
@@ -489,7 +492,7 @@ export default function AdminUsersPage() {
     };
   }, [user]);
 
-  // Personal email live validation (DNS MX check)
+  // Personal email live validation: DNS check + system duplicate check
   const [emailCheckState, setEmailCheckState] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
   const [emailCheckMsg, setEmailCheckMsg] = useState("");
   const [emailSuggestion, setEmailSuggestion] = useState("");
@@ -502,14 +505,24 @@ export default function AdminUsersPage() {
     setEmailCheckState("checking"); setEmailSuggestion("");
     const t = setTimeout(async () => {
       try {
+        // 1. DNS MX check
         const res = await fetch(`/api/auth/verify-email?email=${encodeURIComponent(val)}`);
         const data = await res.json();
-        if (data.valid) {
-          setEmailCheckState("valid"); setEmailCheckMsg("Email domain verified");
-        } else {
+        if (!data.valid) {
           setEmailCheckState("invalid");
           setEmailCheckMsg(data.reason || "Could not verify this email.");
           setEmailSuggestion(data.suggestion || "");
+          return;
+        }
+        // 2. System-wide duplicate check (employees + onboarding + candidates)
+        const sysRes = await fetch(`/api/auth/check-email-system?email=${encodeURIComponent(val)}`);
+        const sysData = await sysRes.json();
+        if (sysData.exists) {
+          setEmailCheckState("invalid");
+          setEmailCheckMsg(sysData.message);
+        } else {
+          setEmailCheckState("valid");
+          setEmailCheckMsg("Email domain verified");
         }
       } catch {
         setEmailCheckState("idle");
@@ -676,36 +689,20 @@ export default function AdminUsersPage() {
         commission_enabled: isSales,
         monthly_sales_target: isSales && form.monthly_sales_target ? parseFloat(form.monthly_sales_target) : null,
         salary_slab_id: isSales && form.linkSlab ? form.salary_slab_id || null : null,
-        create_zoho_mail: form.create_zoho_mail && zohoConnected,
+        create_zoho_mail: form.create_zoho_mail,
       };
 
       if (editingId) {
         await axios.patch(`/api/users/${editingId}`, payload);
         toast.success("Employee protocol re-indexed successfully.");
       } else {
-        const newEmployee = await request<{ id?: string }>({ url: "/api/users", method: "POST", data: payload });
+        const newEmployee = await request<{ id?: string; zoho_warning?: string }>({ url: "/api/users", method: "POST", data: payload });
 
-        // Auto-provision Zoho Mail if enabled and Zoho is connected
-        if (form.create_zoho_mail && zohoConnected && !editingId && newEmployee?.id) {
-          try {
-            const zohoRes = await fetch("/api/mail/accounts/create-employee", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                employee_id: newEmployee.id,
-                name: form.name,
-                domain: zohoDomain,
-              }),
-            });
-            const zohoData = await zohoRes.json();
-            if (zohoRes.ok) {
-              toast.success(`Zoho Mail created: ${zohoData.email_address}`);
-            } else {
-              toast.warning(`Employee added — Zoho mail creation failed: ${zohoData.error || "retry in Mail Config"}`);
-            }
-          } catch {
-            toast.warning(`Employee added — Zoho mail provisioning failed. Retry in Mail Config.`);
-          }
+        // The server (/api/users) owns Zoho provisioning and re-checks the live
+        // token. Surface its warning if the mailbox couldn't be created; otherwise
+        // confirm success. No redundant second call — it was a no-op that hid failures.
+        if (newEmployee?.zoho_warning) {
+          toast.warning(newEmployee.zoho_warning);
         } else {
           toast.success(`Secure onboarding initialized for ${form.email}`);
         }
@@ -1011,6 +1008,15 @@ export default function AdminUsersPage() {
                               <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 font-normal text-muted-foreground">
                                 <Coffee size={9} /> {u.monthly_leave_quota} L/M
                               </Badge>
+                              {(u as any).source === "onboarding" ? (
+                                <Badge className="gap-1 text-[10px] px-1.5 py-0 bg-violet-500/15 text-violet-700 dark:text-violet-400 border-transparent font-medium">
+                                  <FileText size={8} /> Via Onboarding
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 font-normal text-muted-foreground">
+                                  <UserPlus size={8} /> Direct Add
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </TableCell>
@@ -1483,12 +1489,12 @@ export default function AdminUsersPage() {
                   {/* Zoho Mail Auto-Provisioning — only for new employees */}
                   {!editingId && (
                     <div className="sm:col-span-2 border-t border-theme-border pt-4 mt-2">
-                      <div className={`p-4 rounded-xl border transition-all ${form.create_zoho_mail && zohoConnected ? "bg-blue-500/5 border-blue-500/20" : "bg-theme-raised border-theme-border"}`}>
+                      <div className={`p-4 rounded-xl border transition-all ${form.create_zoho_mail ? "bg-blue-500/5 border-blue-500/20" : "bg-theme-raised border-theme-border"}`}>
                         <label className="flex items-center gap-3 cursor-pointer">
                           <input
                             type="checkbox"
-                            checked={form.create_zoho_mail && zohoConnected}
-                            disabled={!zohoConnected}
+                            checked={form.create_zoho_mail}
+                            disabled={zohoStatusLoading}
                             onChange={(e) => setForm({ ...form, create_zoho_mail: e.target.checked })}
                             className="w-4 h-4 rounded border-theme-border accent-blue-500"
                           />
@@ -1498,7 +1504,7 @@ export default function AdminUsersPage() {
                                 <Mail size={12} className="text-blue-500" />
                                 Auto-create Zoho Mail Account
                               </span>
-                              {!zohoConnected && (
+                              {!zohoStatusLoading && !zohoConnected && (
                                 <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500">
                                   ZOHO NOT CONNECTED
                                 </span>
@@ -1523,9 +1529,9 @@ export default function AdminUsersPage() {
                                 ) : null}
                               </div>
                             )}
-                            {!zohoConnected && (
+                            {!zohoStatusLoading && !zohoConnected && (
                               <p className="text-[10px] text-theme-muted mt-0.5">
-                                Connect Zoho Mail in <span className="text-theme-primary">Comms → Mail Config</span> to enable auto-provisioning.
+                                Zoho isn&apos;t connected — the employee will be created and you can run setup later from their profile. Reconnect in <span className="text-theme-primary">Comms → Mail Config</span>.
                               </p>
                             )}
                           </div>

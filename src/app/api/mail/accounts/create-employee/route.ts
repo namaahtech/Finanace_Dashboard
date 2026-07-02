@@ -23,21 +23,40 @@ export async function POST(req: NextRequest) {
     const { data: orgCfg } = await supabase.from("zoho_config").select("org_domain").maybeSingle();
     if (orgCfg?.org_domain) mailDomain = orgCfg.org_domain;
   }
-  const emailAddress = `${localPart}@${mailDomain}`;
+  let emailAddress = `${localPart}@${mailDomain}`;
 
-  // Check if already provisioned
+  // Check if already provisioned. Only treat as done when the mailbox truly
+  // exists in Zoho (zoho_account_id present). A row with zoho_email set but
+  // zoho_account_id null is a half-provisioned employee ("Zoho Setup Failed")
+  // that must be RE-provisioned — so we fall through in that case.
   const { data: emp } = await supabase
     .from("employees")
-    .select("zoho_email, personal_email, name")
+    .select("zoho_email, zoho_account_id, personal_email, name")
     .eq("id", employee_id)
     .maybeSingle();
 
-  if (emp?.zoho_email) {
+  if (emp?.zoho_email && emp?.zoho_account_id) {
     return NextResponse.json({ email_address: emp.zoho_email, already_exists: true });
   }
 
+  // Reuse the address already assigned to this employee so the mailbox and the
+  // SAML assertion (signed for zoho_email) stay on the same address across retries.
+  if (emp?.zoho_email) emailAddress = emp.zoho_email;
+
   // Try to create via Zoho Mail Admin API
   const token = await getActiveToken();
+
+  // No live token → provisioning cannot succeed. Fail loudly with an actionable
+  // 400 instead of silently returning 200 with no mailbox created (which would
+  // report a false "Zoho Mail created" success and cement the half-provisioned
+  // state). Mirrors /api/employees/[id]/provision-zoho.
+  if (!token) {
+    return NextResponse.json(
+      { error: "Zoho is not connected on the server. Reconnect in Admin → Mail Config and retry." },
+      { status: 400 }
+    );
+  }
+
   let zohoAccountId: string | null = null;
   let zohoApiSuccess = false;
   const tempPassword = generateTempPassword();
@@ -85,12 +104,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Save zoho_email on employee record regardless of API result
+  // Save zoho_email on employee record regardless of API result.
+  // When mailbox creation succeeded, also promote zoho_email → email so the
+  // canonical professional email is consistent everywhere (profile, login, session).
   await supabase
     .from("employees")
     .update({
       zoho_email:      emailAddress,
       zoho_account_id: zohoAccountId ?? undefined,
+      ...(zohoApiSuccess && zohoAccountId ? { email: emailAddress } : {}),
     })
     .eq("id", employee_id);
 
@@ -103,6 +125,13 @@ export async function POST(req: NextRequest) {
       display_name:    name,
       access_type:     "owner",
     });
+
+    // Sync Supabase Auth identity email so login works with the real address.
+    await supabase.auth.admin
+      .updateUserById(employee_id, { email: emailAddress })
+      .catch((e: any) =>
+        console.warn("[create-employee] Auth email sync failed (non-fatal):", e.message),
+      );
   }
 
   // Send professional email notification to employee's personal Gmail

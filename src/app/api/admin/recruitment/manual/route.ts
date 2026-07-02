@@ -22,6 +22,41 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Candidate name and email are required" }, { status: 400 });
     }
 
+    // Email uniqueness guard:
+    // Block only on ACTIVE employees and ACTIVE (non-completed/rejected) onboarding packets.
+    // Historical records in candidate_document_requests/applications are NOT blocking —
+    // once an employee is deleted, their email becomes free to reuse.
+    const supabase = getSupabaseAdmin();
+    const [{ data: inEmployees }, { data: inOnboarding }] = await Promise.all([
+      supabase
+        .from("employees")
+        .select("name")
+        .or(`email.ilike.${email},personal_email.ilike.${email},zoho_email.ilike.${email}`)
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("onboarding_packets")
+        .select("candidate_name, status")
+        .ilike("candidate_email", email)
+        .not("status", "in", '("completed","rejected")')
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (inEmployees) {
+      return NextResponse.json(
+        { error: `An employee named "${inEmployees.name}" already exists with the email "${email}". Cannot create a duplicate candidate.` },
+        { status: 409 }
+      );
+    }
+
+    if (inOnboarding) {
+      return NextResponse.json(
+        { error: `"${inOnboarding.candidate_name}" has an active onboarding in progress (${inOnboarding.status}). Complete or cancel it before re-adding this candidate.` },
+        { status: 409 }
+      );
+    }
+
     const ctx = await getMailContext();
 
     // 1) Greeting email (accept or reject) — same as the automated ATS flow.
@@ -37,7 +72,6 @@ export async function POST(req: Request) {
     // 2) Optional second email: secure document-upload link.
     let docRequestSent = false;
     if (requestDocuments) {
-      const supabase = getSupabaseAdmin();
       const token = crypto.randomBytes(24).toString("hex");
       const expires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 21).toISOString();
 

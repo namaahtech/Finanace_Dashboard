@@ -9,7 +9,7 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft, Save, Send, CheckCircle2, RotateCcw, Loader2, Download,
-  Clock, AlertCircle, FileText, ShieldCheck, PenTool, Mail, Pencil, RefreshCw, ExternalLink, Lock,
+  Clock, AlertCircle, FileText, ShieldCheck, PenTool, Mail, Pencil, RefreshCw, ExternalLink, Lock, Globe, Monitor, Smartphone, UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import { AddPersonnelDialog } from "@/components/users/AddPersonnelDialog";
 import { ConfigForm } from "@/components/onboarding/ConfigForm";
 import { SchemaEditor } from "@/components/onboarding/SchemaEditor";
 import { DocumentPreview } from "@/components/onboarding/DocumentPreview";
@@ -40,6 +41,24 @@ interface FormState {
   candidate_phone: string;
   candidate_address: string;
   config: OnboardingConfig;
+}
+
+function parseUA(ua: string): { os: string; browser: string; mobile: boolean } {
+  const mobile = /iPhone|iPad|iPod|Android|Mobile/i.test(ua);
+  let os = "Unknown OS";
+  if (/iPhone|iPad|iPod/i.test(ua)) os = /iPad/i.test(ua) ? "iPad" : "iPhone";
+  else if (/Android/i.test(ua)) os = "Android";
+  else if (/Windows NT 1[01]/i.test(ua)) os = "Windows 10/11";
+  else if (/Windows/i.test(ua)) os = "Windows";
+  else if (/Mac OS X/i.test(ua)) os = "macOS";
+  else if (/Linux/i.test(ua)) os = "Linux";
+  let browser = "Unknown Browser";
+  if (/Edg\//i.test(ua)) browser = "Edge";
+  else if (/OPR\/|Opera/i.test(ua)) browser = "Opera";
+  else if (/Chrome\//i.test(ua)) browser = "Chrome";
+  else if (/Firefox\//i.test(ua)) browser = "Firefox";
+  else if (/Safari\//i.test(ua)) browser = "Safari";
+  return { os, browser, mobile };
 }
 
 export default function OnboardingBuilderPage() {
@@ -71,6 +90,9 @@ export default function OnboardingBuilderPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
+
+  // Add Employee from completed onboarding
+  const [addEmpOpen, setAddEmpOpen] = useState(false);
   const formRef = useRef<FormState | null>(null);
 
   const status = packet?.status as OnboardingStatus | undefined;
@@ -247,6 +269,8 @@ export default function OnboardingBuilderPage() {
     load(true);
   };
 
+  const openAddEmployee = () => setAddEmpOpen(true);
+
   // Preview reflects ONLY previewForm — frozen until the user clicks "Update Preview".
   const templateData = useMemo(
     () =>
@@ -371,7 +395,55 @@ export default function OnboardingBuilderPage() {
                     </div>
                   </div>
                 ))}
+                {isAdmin && status === "completed" && (
+                  <Button variant="outline" size="sm" onClick={openAddEmployee} className="ml-auto">
+                    <UserPlus size={13} /> Add Employee
+                  </Button>
+                )}
               </div>
+              {packet.signature && (packet.signature.ip || packet.signature.user_agent) && (() => {
+                const parsed = packet.signature.user_agent ? parseUA(packet.signature.user_agent) : null;
+                const DeviceIcon = parsed?.mobile ? Smartphone : Monitor;
+                return (
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 pt-3 border-t border-border">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mr-1">E-Sign Details</span>
+                    {packet.signature.ip && (() => {
+                      const ip = packet.signature.ip;
+                      const isLocal = ip === "::1" || ip === "127.0.0.1" || ip.startsWith("::ffff:127.");
+                      return isLocal ? (
+                        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground" title="Localhost — signed from the same machine as the server (dev/testing only)">
+                          <Globe size={10} className="shrink-0" />
+                          <span className="font-medium text-foreground tabular-nums">{ip}</span>
+                          <span className="text-[10px] text-muted-foreground/60">(localhost)</span>
+                        </span>
+                      ) : (
+                        <a
+                          href={`https://ipinfo.io/${ip}`}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary transition-colors group"
+                          title={`Look up IP ${ip} on ipinfo.io`}
+                        >
+                          <Globe size={10} className="shrink-0" />
+                          <span className="font-medium text-foreground tabular-nums group-hover:underline">{ip}</span>
+                          <ExternalLink size={9} className="opacity-50 group-hover:opacity-100" />
+                        </a>
+                      );
+                    })()}
+                    {parsed && (
+                      <span
+                        className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                        title={packet.signature.user_agent}
+                      >
+                        <DeviceIcon size={10} className="shrink-0" />
+                        <span className="font-medium text-foreground">{parsed.os}</span>
+                        <span>·</span>
+                        <span>{parsed.browser}</span>
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
               {(packet.offer_pdf_url || packet.nda_pdf_url || packet.handbook_pdf_url) && (
                 <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
                   {[
@@ -533,6 +605,21 @@ export default function OnboardingBuilderPage() {
           )}
         </div>
       </div>
+
+      {/* Add Employee — full Add Personnel dialog pre-filled from onboarding */}
+      <AddPersonnelDialog
+        open={addEmpOpen}
+        onOpenChange={setAddEmpOpen}
+        prefill={{
+          name: packet.candidate_name,
+          email: packet.candidate_email,
+          designation: typeof packet.config?.position === "string" ? packet.config.position : "",
+          role: "intern",
+          employment_type: "internship",
+          salary_structure: "stipend",
+        }}
+        onSuccess={() => toast.success(`${packet.candidate_name} added as an employee`)}
+      />
 
       {/* Request changes dialog */}
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>

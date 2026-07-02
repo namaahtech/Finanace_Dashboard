@@ -30,6 +30,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     name: settings?.signatory_name ?? "Rahul Bharath",
     designation: settings?.signatory_designation ?? "Founder, Executive Chairman & Managing Director",
     companyName: settings?.company_name ?? "Namaah Private Limited",
+    signatureUrl: settings?.signatory_signature_url ?? null,
+    sealUrl: settings?.company_seal_url ?? null,
   };
 
   const alreadySigned = packet.status === "signed" || packet.status === "completed";

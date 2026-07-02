@@ -14,7 +14,9 @@ export async function GET() {
       signatory_name: settings?.signatory_name ?? "Rahul Bharath",
       signatory_designation: settings?.signatory_designation ?? "Founder, Executive Chairman & Managing Director",
       company_name: settings?.company_name ?? "Namaah Private Limited",
-      require_approval: (settings as any)?.require_approval ?? true,
+      require_approval: settings?.require_approval ?? true,
+      signatory_signature_url: settings?.signatory_signature_url ?? null,
+      company_seal_url: settings?.company_seal_url ?? null,
     },
     schema: resolveSchema(settings),
     isCustomSchema: Array.isArray(settings?.config_schema) && (settings?.config_schema as any[]).length > 0,
@@ -30,7 +32,7 @@ export async function PATCH(req: NextRequest) {
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const settingsKeys = ["signatory_name", "signatory_designation", "company_name", "company_details", "template_versions", "require_approval"];
+  const settingsKeys = ["signatory_name", "signatory_designation", "company_name", "company_details", "template_versions", "require_approval", "signatory_signature_url", "company_seal_url"];
   const editsSettings = settingsKeys.some((k) => k in body);
   const editsSchema = "config_schema" in body;
 

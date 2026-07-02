@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import nodemailer from "nodemailer";
 import { provisionZohoMailbox, generateTempPassword } from "@/lib/zoho-provisioning";
+import { getActiveToken } from "@/lib/zoho-mail";
 import { getActor } from "@/lib/onboarding/server";
 import { logAudit } from "@/lib/audit";
 
@@ -10,7 +11,7 @@ export async function POST(req: Request) {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
 
-    const { name, email, role, department, designation, matrix_role, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary, salary_min, salary_max, kpi_weight, kra_weight, behavioral_weight, enable_salary_linkage, commission_enabled, monthly_sales_target, salary_slab_id, create_zoho_mail } = body;
+    const { name, email, role, department, designation, matrix_role, team_id, shift_id, monthly_leave_quota, joining_date, employment_type, salary_structure, base_salary, salary_min, salary_max, kpi_weight, kra_weight, behavioral_weight, enable_salary_linkage, commission_enabled, monthly_sales_target, salary_slab_id, create_zoho_mail, source } = body;
 
     if (!name || !email || !role) {
       return NextResponse.json({ error: "Missing highly critical parameters (Name, Email, Role)" }, { status: 400 });
@@ -118,6 +119,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Database Reference Matrix Failed: " + dbError.message }, { status: 500 });
     }
 
+    // Set source separately — column added by migration 20260702100000; non-fatal if column not yet applied
+    const empSource = source === "onboarding" ? "onboarding" : "direct";
+    try { await supabase.from("employees").update({ source: empSource }).eq("id", user.id); } catch { /* column not yet migrated */ }
+
     {
       const actor = await getActor();
       await logAudit({
@@ -134,26 +139,37 @@ export async function POST(req: Request) {
     }
 
     // ── Zoho Mail Auto-Provisioning Gate ──────────────────────────────────────
-    // Non-fatal: if Zoho fails, the employee is still created. Admin can
-    // provision the Zoho mailbox later from the employee's profile page.
+    // The SERVER is the single source of truth for connectivity: we re-check the
+    // live Zoho token here instead of trusting the client's zohoConnected flag
+    // (which starts false and can race the async connect-status fetch). Provisioning
+    // stays non-fatal — the employee is created either way — but the warning message
+    // distinguishes "not connected" from "Zoho returned no account id" so the admin
+    // knows whether to reconnect or just retry from the profile page.
     let zohoWarning: string | null = null;
     if (create_zoho_mail) {
-      try {
-        const zohoResult = await provisionZohoMailbox({
-          employeeId:  user.id,
-          name,
-          designation: designation || "",
-          department:  department  || "",
-          tempPassword: generatedPassword,
-        });
+      const liveToken = await getActiveToken();
+      if (!liveToken) {
+        zohoWarning = "Employee created, but Zoho is not connected on the server. Reconnect in Admin → Mail Config, then click \"Re-run setup\" on the employee's profile.";
+        console.warn("[Users API] create_zoho_mail requested but no live Zoho token — skipping provisioning.");
+      } else {
+        try {
+          const zohoResult = await provisionZohoMailbox({
+            employeeId:  user.id,
+            name,
+            designation: designation || "",
+            department:  department  || "",
+            tempPassword: generatedPassword,
+          });
 
-        if (!zohoResult?.zoho_account_id) {
-          zohoWarning = "Employee created, but Zoho mailbox could not be provisioned (Zoho not connected on this server). Go to Admin → Mail Config and reconnect Zoho, then retry from the employee profile.";
-          console.warn("[Users API] Zoho provisioning returned no account ID — employee saved without Zoho mailbox.");
+          if (!zohoResult?.zoho_account_id) {
+            const reason = zohoResult?.error ? ` Zoho said: ${zohoResult.error}.` : "";
+            zohoWarning = `Employee created, but the Zoho mailbox could not be created.${reason} Retry with "Re-run setup" on the employee's profile once resolved.`;
+            console.warn("[Users API] Zoho provisioning returned no account ID:", zohoResult?.error || "unknown");
+          }
+        } catch (zohoErr: any) {
+          zohoWarning = `Employee created, but Zoho mailbox provisioning failed: ${zohoErr.message}`;
+          console.warn("[Users API] Zoho provisioning exception:", zohoErr.message);
         }
-      } catch (zohoErr: any) {
-        zohoWarning = `Employee created, but Zoho mailbox provisioning failed: ${zohoErr.message}`;
-        console.warn("[Users API] Zoho provisioning exception:", zohoErr.message);
       }
     }
 
