@@ -60,11 +60,11 @@ export function onboardingEmailHtml(opts: {
       <p style="margin:0 0 16px;font-size:15px;">Dear ${firstName},</p>
       <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#374151;">
         Congratulations! We are pleased to extend an internship offer${roleLine} at <strong>${opts.companyName}</strong>.
-        Please find your <strong>Internship Offer Letter</strong>, <strong>Non-Disclosure Agreement</strong>, and
-        <strong>Internship Handbook</strong> attached to this email as PDF documents.
+        Your <strong>Internship Offer Letter</strong>, <strong>Non-Disclosure Agreement</strong>, and
+        <strong>Internship Handbook</strong> are ready for you to review securely online.
       </p>
       <p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#374151;">
-        To accept your offer, please review the documents and complete your electronic signature using the secure link below.
+        To accept your offer, please open the secure link below to read all three documents and complete your electronic signature. Your fully signed copies will be emailed to you the moment the offer is countersigned.
       </p>
       <div style="text-align:center;margin:0 0 26px;">
         <a href="${opts.signUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 30px;border-radius:10px;">

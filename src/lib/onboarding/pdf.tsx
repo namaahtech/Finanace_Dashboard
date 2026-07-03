@@ -77,11 +77,19 @@ async function addFooterLinks(bytes: Uint8Array): Promise<Buffer> {
   return Buffer.from(await doc.save());
 }
 
-/** Render HTML → A4 PDF buffer with the NAMAAH letterhead + per-page candidate sig strip + clickable footer links on every page. */
-export async function htmlToPdf(html: string, sigData?: { image?: string | null; name: string }): Promise<Buffer> {
-  const browser = await launchBrowser();
+/**
+ * Render one HTML doc → A4 PDF buffer using an ALREADY-OPEN browser. Launching a
+ * headless browser is the expensive step (a serverless Chromium cold-start is
+ * ~1–3s), so callers that produce several PDFs should launch once and reuse it
+ * via this function rather than calling htmlToPdf() per document.
+ */
+async function renderHtmlToPdfBuffer(
+  browser: Awaited<ReturnType<typeof launchBrowser>>,
+  html: string,
+  sigData?: { image?: string | null; name: string }
+): Promise<Buffer> {
+  const page = await browser.newPage();
   try {
-    const page = await browser.newPage();
     await page.setViewport({ width: 794, height: 1123 });
     await page.setContent(html, { waitUntil: "networkidle0" });
 
@@ -158,8 +166,17 @@ export async function htmlToPdf(html: string, sigData?: { image?: string | null;
       printBackground: true,
       preferCSSPageSize: true,
     });
-    await page.close();
     return await addFooterLinks(pdf);
+  } finally {
+    await page.close();
+  }
+}
+
+/** Render HTML → A4 PDF buffer, launching (and closing) a dedicated browser. Use for one-off single-doc renders. */
+export async function htmlToPdf(html: string, sigData?: { image?: string | null; name: string }): Promise<Buffer> {
+  const browser = await launchBrowser();
+  try {
+    return await renderHtmlToPdfBuffer(browser, html, sigData);
   } finally {
     await browser.close();
   }
@@ -181,17 +198,33 @@ export async function generateAndStorePdfs(
   const paths: Partial<Record<DocKind, string>> = {};
   const sigData = { image: data.signature?.image_base64 ?? null, name: data.candidate.name };
 
-  for (const kind of which) {
-    const html = renderDocHtml(kind, data);
-    const buffer = await htmlToPdf(html, sigData);
-    const path = `${packetId}/${kind}-${stamp}.pdf`;
-    const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, {
-      contentType: "application/pdf",
-      upsert: true,
-    });
-    if (error) throw new Error(`Failed to store ${kind} PDF: ${error.message}`);
-    paths[kind] = path;
+  // Launch the headless browser ONCE and render all docs on it — a browser
+  // launch (serverless Chromium cold-start) dwarfs the per-doc render cost, so
+  // this cuts the previous "3 launches" down to a single one. Pages render
+  // sequentially to keep serverless memory bounded.
+  const browser = await launchBrowser();
+  const rendered: { kind: DocKind; path: string; buffer: Buffer }[] = [];
+  try {
+    for (const kind of which) {
+      const html = renderDocHtml(kind, data);
+      const buffer = await renderHtmlToPdfBuffer(browser, html, sigData);
+      rendered.push({ kind, path: `${packetId}/${kind}-${stamp}.pdf`, buffer });
+    }
+  } finally {
+    await browser.close();
   }
+
+  // Upload all PDFs to Storage in parallel — independent network writes.
+  await Promise.all(
+    rendered.map(async ({ kind, path, buffer }) => {
+      const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+      if (error) throw new Error(`Failed to store ${kind} PDF: ${error.message}`);
+      paths[kind] = path;
+    })
+  );
   return paths;
 }
 
