@@ -66,22 +66,28 @@ export default function InternActivityPage() {
 
   useEffect(() => { load(true); }, [load]);
 
-  // Realtime: subscribe to new audit rows for this account; also poll every 12s
-  // as a fallback in case the table isn't in the realtime publication.
+  // Realtime: subscribe to new audit rows (audit_logs is in the supabase_realtime
+  // publication). Refetch on ANY audit insert — cheap, and avoids missing rows if
+  // acctRef isn't populated yet. A 5s poll + refetch-on-focus guarantee freshness
+  // even if realtime is unavailable in an environment.
   useEffect(() => {
     const channel = supabase
       .channel("intern-activity")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "audit_logs" }, (payload) => {
-        const row: any = payload.new;
-        if (acctRef.current && row?.user_id === acctRef.current.id) {
-          load(false);
-          setLive(true);
-        }
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "audit_logs" }, () => {
+        load(false);
       })
-      .subscribe((status) => { if (status === "SUBSCRIBED") setLive(true); });
+      .subscribe((status) => { setLive(status === "SUBSCRIBED"); });
 
-    const poll = setInterval(() => load(false), 12000);
-    return () => { supabase.removeChannel(channel); clearInterval(poll); };
+    const poll = setInterval(() => load(false), 5000);
+    const onFocus = () => load(false);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
   }, [load]);
 
   const statCards = [

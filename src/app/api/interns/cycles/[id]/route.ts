@@ -117,6 +117,29 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
         }
         throw error;
       }
+
+      // Audit the newly-created cycle (drafts saved from the manage grid land here).
+      try {
+        const actor = await getActor();
+        const { data: who } = await supabase.from("interns").select("full_name").eq("id", body.intern_id).maybeSingle();
+        const period = `${MONTHS[Number(body.month)]} ${body.year}`;
+        const extra = Number(body.extra_leave_days ?? 0);
+        const net = Number((data as any).net_amount);
+        const summary = body.payment_status === "paid"
+          ? `Marked ${period} stipend PAID for ${who?.full_name ?? "intern"} (₹${net.toLocaleString("en-IN")})`
+          : extra > 0
+            ? `Set ${extra} extra holiday(s) for ${who?.full_name ?? "intern"} — ${period} (net ₹${net.toLocaleString("en-IN")})`
+            : `Created ${who?.full_name ?? "intern"}'s stipend cycle ${period} (net ₹${net.toLocaleString("en-IN")})`;
+        await logAudit({
+          actorId: actor?.userId ?? null,
+          action: "internship.cycle.update",
+          section: "Internship Payroll",
+          summary,
+          targetType: "intern_stipend_cycle",
+          targetId: (data as any).id,
+        });
+      } catch {}
+
       return NextResponse.json({ cycle: data });
     }
 
