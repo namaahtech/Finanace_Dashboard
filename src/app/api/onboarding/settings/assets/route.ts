@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActor, isAdmin } from "@/lib/onboarding/server";
-import puppeteer from "puppeteer";
+import { launchBrowser } from "@/lib/browser";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "application/pdf"];
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -15,7 +18,7 @@ function imageToDataUrl(buffer: Buffer, mimeType: string): string {
 /** Render the first page of a PDF buffer to a PNG data URL via Puppeteer. */
 async function pdfToDataUrl(buffer: Buffer): Promise<string> {
   const b64 = buffer.toString("base64");
-  const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 600, height: 600, deviceScaleFactor: 2 });
