@@ -25,7 +25,11 @@ const AwardSchema = z.object({
 // GET /api/incentives — employee sees own, admin sees by employeeId
 export const GET = withAuth(async (req, authUser) => {
   const { searchParams } = new URL(req.url);
-  const employeeId = authUser.role === "employee" ? authUser.userId : searchParams.get("employeeId");
+  const isAdmin = authUser.role === "admin";
+  // Admins must pass ?employeeId to pick a target; everyone else defaults to self.
+  const employeeId = isAdmin
+    ? searchParams.get("employeeId")
+    : (searchParams.get("employeeId") || authUser.userId);
 
   if (!employeeId) return apiError("employeeId required", 400);
 

@@ -21,6 +21,59 @@ function fmtDate(v?: string): string {
 
 const Check = () => <span className="od-box">☑</span>;
 
+// Company signatory column — shared across Offer Letter, NDA, Handbook.
+// Layout: seal is displayed large; signature sits on top of it (overlapping),
+// mimicking how a real stamped + signed document looks.
+function CompanySignatoryCol({ signatory, date }: { signatory: { name: string; designation: string; companyName: string; signatureUrl?: string | null; sealUrl?: string | null }; date: string }) {
+  const hasSeal = !!signatory.sealUrl;
+  const hasSign = !!signatory.signatureUrl;
+  // Container is tall enough to show both at full size
+  return (
+    <div className="od-sigcol">
+      <div className="od-sigcaps">FOR {(signatory.companyName || "").toUpperCase()}</div>
+      <div className="od-sigmeta">Authorized Signatory</div>
+      {/* Signature left-aligned (directly under "Authorized Signatory" label).
+          Seal centered under signature via marginLeft auto trick.
+          Negative marginBottom on signature pulls seal up so they visually touch. */}
+      <div style={{ marginTop: "3pt", marginBottom: "4pt" }}>
+        {hasSign && (
+          <img
+            src={signatory.signatureUrl!}
+            alt="signature"
+            style={{
+              display: "block",
+              maxHeight: "44pt",
+              maxWidth: "114pt",
+              objectFit: "contain",
+              objectPosition: "bottom center",
+              position: "relative",
+              zIndex: 1,
+              marginBottom: hasSeal ? "-18pt" : "0",
+            }}
+          />
+        )}
+        {hasSeal && (
+          <img
+            src={signatory.sealUrl!}
+            alt="seal"
+            style={{
+              display: "block",
+              height: "58pt",
+              width: "58pt",
+              objectFit: "contain",
+              opacity: 0.92,
+              marginLeft: hasSign ? "8pt" : "0",
+            }}
+          />
+        )}
+      </div>
+      <div className="od-sigmeta"><b>Name:</b> {signatory.name}</div>
+      <div className="od-sigmeta"><b>Designation:</b> {signatory.designation}</div>
+      <div className="od-sigmeta"><b>Date:</b> {date}</div>
+    </div>
+  );
+}
+
 function val(config: TemplateData["config"], id: string): string {
   const v = config[id];
   return typeof v === "string" ? v : "";
@@ -112,14 +165,7 @@ export function buildOfferLetterBlocks(data: TemplateData): React.ReactNode[] {
     <p className="od-p" key="c4">The sections that follow shall form an integral and binding part of this Internship Offer Letter.</p>,
     ...renderBlocks(staticSections, "ofs", { breakSections: true }),
     <div className="od-sigwrap od-break-before" key="sig">
-      <div className="od-sigcol">
-        <div className="od-sigcaps">FOR {(signatory.companyName || "").toUpperCase()}</div>
-        <div className="od-sigmeta">Authorized Signatory</div>
-        <div className="od-sigline" />
-        <div className="od-sigmeta"><b>Name:</b> {signatory.name}</div>
-        <div className="od-sigmeta"><b>Designation:</b> {signatory.designation}</div>
-        <div className="od-sigmeta"><b>Date:</b> {data.offerDate}</div>
-      </div>
+      <CompanySignatoryCol signatory={signatory} date={data.offerDate} />
       <div className="od-sigcol">
         <div className="od-sigcaps">INTERN ACKNOWLEDGEMENT</div>
         <div className="od-sigline">{signature?.image_base64 && <img src={signature.image_base64} alt="signature" />}</div>
@@ -153,14 +199,7 @@ export function buildNdaBlocks(data: TemplateData): React.ReactNode[] {
     ...renderBlocks(body, "nda"),
     <p className="od-p" key="witness" style={{ marginTop: "12pt", fontWeight: 600 }}>IN WITNESS WHEREOF, the Parties have executed this Agreement on the date first written above.</p>,
     <div className="od-sigwrap" key="sig">
-      <div className="od-sigcol">
-        <div className="od-sigcaps">FOR {(signatory.companyName || "").toUpperCase()}</div>
-        <div className="od-sigmeta">Authorized Signatory</div>
-        <div className="od-sigline" />
-        <div className="od-sigmeta"><b>Name:</b> {signatory.name}</div>
-        <div className="od-sigmeta"><b>Designation:</b> {signatory.designation}</div>
-        <div className="od-sigmeta"><b>Date:</b> {data.offerDate}</div>
-      </div>
+      <CompanySignatoryCol signatory={signatory} date={data.offerDate} />
       <div className="od-sigcol">
         <div className="od-sigcaps">RECEIVING PARTY</div>
         <div className="od-sigline">{signature?.image_base64 && <img src={signature.image_base64} alt="signature" />}</div>
@@ -194,14 +233,7 @@ export function buildHandbookBlocks(data: TemplateData): React.ReactNode[] {
         <div className="od-sigmeta"><b>Name:</b> {signature?.typed_name || candidate.name}</div>
         <div className="od-sigmeta"><b>Date:</b> {signature?.signed_at ? fmtDate(signature.signed_at) : "______________"}</div>
       </div>
-      <div className="od-sigcol">
-        <div className="od-sigcaps">FOR {(signatory.companyName || "").toUpperCase()}</div>
-        <div className="od-sigmeta" style={{ marginBottom: "4pt" }}>Authorized Signatory:</div>
-        <div className="od-sigline" />
-        <div className="od-sigmeta"><b>Name:</b> {signatory.name}</div>
-        <div className="od-sigmeta"><b>Designation:</b> {signatory.designation}</div>
-        <div className="od-sigmeta"><b>Date:</b> {data.offerDate}</div>
-      </div>
+      <CompanySignatoryCol signatory={signatory} date={data.offerDate} />
     </div>,
   ];
 }

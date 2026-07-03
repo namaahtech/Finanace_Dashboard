@@ -138,7 +138,8 @@ WITH CHECK (
 );
 
 -- ─── 5. Helper view: cycle + intern joined for the UI ──────────────────────
-CREATE OR REPLACE VIEW public.intern_stipend_cycles_view AS
+DROP VIEW IF EXISTS public.intern_stipend_cycles_view;
+CREATE VIEW public.intern_stipend_cycles_view AS
 SELECT
   c.id,
   c.intern_id,

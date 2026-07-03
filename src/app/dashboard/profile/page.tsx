@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/ButtonLegacy";
 import { Badge } from "@/components/ui/BadgeLegacy";
 import { formatCurrency, cn } from "@/lib/utils";
 import dayjs from "dayjs";
+import { toast } from "sonner";
 import {
   Mail,
   Briefcase,
@@ -445,6 +446,7 @@ export default function EmployeeProfile() {
   const [salesRecord, setSalesRecord] = useState<SalesRecord | null>(null);
   const [salarySlabs, setSalarySlabs] = useState<SalarySlab[]>([]);
   const [activatingZoho, setActivatingZoho] = useState(false);
+  const [reprovisioningZoho, setReprovisioningZoho] = useState(false);
 
   // Clicking the "Not Activated" badge launches the one-time Zoho SAML hand-off.
   // Refresh np_session first (so the SAML route resolves THIS user), then full-page
@@ -467,6 +469,22 @@ export default function EmployeeProfile() {
             email: user.email,
           }),
         }).catch(() => {});
+      }
+      // Zoho refuses to redirect the SAML sign-in back to a non-public host
+      // (localhost, LAN IPs) and shows "Website Access Blocked". On such hosts the
+      // real Zoho hand-off can't complete, so we finish activation locally and land
+      // on the confirmation page (which auto-redirects to the dashboard). The full
+      // SAML flow still runs on the live domain (nexus.namaah.io) so Zoho records
+      // the actual sign-in / "Last Sign In".
+      const host = window.location.hostname;
+      const isNonPublicHost =
+        host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" ||
+        host.endsWith(".local") ||
+        /^10\./.test(host) || /^192\.168\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+      if (isNonPublicHost) {
+        window.location.href = "/auth/zoho-activated";
+        return;
       }
       window.location.href = `/api/auth/saml/sso?RelayState=${encodeURIComponent("/auth/zoho-activated")}`;
     } catch {
@@ -535,6 +553,29 @@ export default function EmployeeProfile() {
   }, [user, request]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  // Red "Zoho Setup Failed" badge → re-run provisioning. The mailbox was never
+  // created in Zoho (zoho_account_id is null), so this must CREATE it first — it
+  // does NOT do SAML (SAML needs an existing mailbox). On success the profile
+  // reloads and the badge flips to amber "Not Activated", ready for Activate Now.
+  const handleReprovisionZoho = useCallback(async () => {
+    if (reprovisioningZoho || !user) return;
+    setReprovisioningZoho(true);
+    try {
+      const res = await fetch(`/api/employees/${user.id}/provision-zoho`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Could not create the Zoho mailbox.");
+        return;
+      }
+      toast.success("Zoho mailbox created. Click \"Activate Now\" to finish setup.");
+      await loadProfile();
+    } catch {
+      toast.error("Re-provisioning failed. Please try again.");
+    } finally {
+      setReprovisioningZoho(false);
+    }
+  }, [reprovisioningZoho, user, loadProfile]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -641,9 +682,24 @@ export default function EmployeeProfile() {
                           )}
                         </button>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold text-red-500">
-                          <AlertTriangle size={11} /> Zoho Setup Failed
-                        </span>
+                        <button
+                          type="button"
+                          onClick={handleReprovisionZoho}
+                          disabled={reprovisioningZoho}
+                          title="Zoho mailbox was never created. Click to re-run setup."
+                          className="group inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold text-red-500 cursor-pointer transition-all hover:bg-red-500 hover:text-white hover:shadow-sm hover:shadow-red-500/30 active:scale-95 disabled:opacity-60 disabled:cursor-wait"
+                        >
+                          {reprovisioningZoho ? (
+                            <><Loader2 size={11} className="animate-spin" /> Setting up…</>
+                          ) : (
+                            <>
+                              <AlertTriangle size={11} className="group-hover:hidden" />
+                              <Zap size={11} className="hidden group-hover:inline" />
+                              <span className="group-hover:hidden">Zoho Setup Failed</span>
+                              <span className="hidden group-hover:inline">Re-run setup →</span>
+                            </>
+                          )}
+                        </button>
                       )
                     )}
                   </div>
@@ -676,14 +732,16 @@ export default function EmployeeProfile() {
                 <div className="px-5 py-4 space-y-3">
                   <div>
                     <p className="text-xs text-theme-muted">Email Address</p>
-                    <p className="text-sm font-semibold text-theme-fg mt-0.5 break-all">{employee.email}</p>
+                    <p className="text-sm font-semibold text-theme-fg mt-0.5 break-all">
+                      {employee.zoho_email || employee.email}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-theme-muted">Employee ID</p>
                     <p className="text-sm tabular-nums font-bold text-theme-primary mt-0.5">{employee.employee_id}</p>
                   </div>
                   <div className="pt-2 border-t border-theme-border">
-                    <a href={`mailto:${employee.email}`}>
+                    <a href={`mailto:${employee.zoho_email || employee.email}`}>
                       <Button variant="outline" size="sm" className="w-full">
                         <Mail size={12} className="mr-1.5" /> Send Email
                       </Button>

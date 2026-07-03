@@ -42,7 +42,9 @@ export default function MailConfigPage() {
   const [clientSecret, setClientSecret] = useState("");
   const [mailDomain,   setMailDomain]   = useState("mail.namaah.io");
   const [redirectUri,  setRedirectUri]  = useState(
-    typeof window !== "undefined" ? `${window.location.origin}/api/mail/auth/callback` : ""
+    // Always use the canonical public domain from env — not window.location.origin,
+    // which would be localhost when the admin is working on a dev machine.
+    `${process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")}/api/mail/auth/callback`
   );
   const [showSecret, setShowSecret] = useState(false);
 

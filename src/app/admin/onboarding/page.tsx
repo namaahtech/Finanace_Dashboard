@@ -180,6 +180,8 @@ export default function OnboardingHubPage() {
     setPickerMode("interview");
     setManual(emptyManual);
     setPickerLoading(true);
+    // Prefetch the onboarding detail page bundle so navigation is instant once we have the ID.
+    if (packets.length > 0) router.prefetch(`/admin/onboarding/${packets[0].id}`);
     try {
       const [appsRes, convRes] = await Promise.all([
         supabase
@@ -225,6 +227,8 @@ export default function OnboardingHubPage() {
     if (!manual.candidate_name.trim()) return toast.error("Candidate name is required");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(manual.candidate_email.trim())) return toast.error("A valid candidate email is required");
     setCreatingManual(true);
+    setPickerOpen(false); // close immediately
+    const tid = toast.loading(`Creating onboarding for ${manual.candidate_name.trim()}…`);
     try {
       const res = await fetch("/api/onboarding/manual", {
         method: "POST",
@@ -233,10 +237,12 @@ export default function OnboardingHubPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed");
-      setPickerOpen(false);
+      toast.dismiss(tid);
       router.push(`/admin/onboarding/${json.id}`);
     } catch (e: any) {
+      toast.dismiss(tid);
       toast.error(e.message || "Failed to create onboarding");
+      setPickerOpen(true); // re-open on error
     } finally {
       setCreatingManual(false);
     }
@@ -244,6 +250,8 @@ export default function OnboardingHubPage() {
 
   async function startOnboarding(c: EligibleCandidate) {
     setCreatingFor(c.key);
+    setPickerOpen(false); // close immediately — no waiting on the modal
+    const tid = toast.loading(`Creating onboarding for ${c.name}…`);
     try {
       const res =
         c.source === "interview" && c.application_id
@@ -264,10 +272,12 @@ export default function OnboardingHubPage() {
             });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed");
-      setPickerOpen(false);
+      toast.dismiss(tid);
       router.push(`/admin/onboarding/${json.id}`);
     } catch (e: any) {
+      toast.dismiss(tid);
       toast.error(e.message || "Failed to start onboarding");
+      setPickerOpen(true); // re-open so user can retry
     } finally {
       setCreatingFor(null);
     }

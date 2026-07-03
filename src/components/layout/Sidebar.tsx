@@ -532,7 +532,7 @@ export function Sidebar() {
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-medium text-foreground truncate">{user?.name ?? "—"}</p>
             </div>
-            <p className="text-xs text-muted-foreground truncate">{user?.email ?? "—"}</p>
+            <p className="text-xs text-muted-foreground truncate">{user?.zoho_email || user?.email || "—"}</p>
           </div>
           <Badge variant="secondary" className={cn("text-[10px] font-medium border", role.className)}>
             {role.label}

@@ -128,7 +128,7 @@ async function createZohoAccount(
   primaryEmailAddress: string,
   displayName: string,
   password: string,
-): Promise<{ zohoUserId: string | null; zohoAccountId: string | null; finalEmail: string }> {
+): Promise<{ zohoUserId: string | null; zohoAccountId: string | null; finalEmail: string; error?: string }> {
   const base = { displayName, password, role: "member" as const };
 
   const attempt = async (email: string) => {
@@ -152,21 +152,49 @@ async function createZohoAccount(
     json?.status?.code === 409 ||
     res.status === 409;
 
+  // A license/seat-limit error means NO address will work — retrying a suffixed
+  // address is pointless and just burns ~10s. Detect it and bail immediately.
+  const isLicenseLimit = (j: any) => {
+    const blob = JSON.stringify(j || "").toLowerCase();
+    return blob.includes("license") || blob.includes("maximum user") || blob.includes("seat limit");
+  };
+
   const [loc, dm] = primaryEmailAddress.split("@");
   let email = primaryEmailAddress;
   let { res, json } = await attempt(email);
+  let licenseLimited = isLicenseLimit(json);
 
-  // Retry up to 5 times with a fresh suffix until Zoho accepts the address.
-  for (let i = 0; i < 5 && isCollision(res, json); i++) {
+  // Retry with a fresh suffix ONLY on an address collision — and never once we've
+  // seen a license-limit error.
+  for (let i = 0; i < 5 && isCollision(res, json) && !licenseLimited; i++) {
     const suffix = Math.floor(Math.random() * 900) + 100;
     email = `${loc}${suffix}@${dm}`;
     ({ res, json } = await attempt(email));
+    licenseLimited = licenseLimited || isLicenseLimit(json);
+  }
+
+  const resolvedAccountId = json?.data?.accountId || null;
+
+  // When Zoho didn't return an account id, capture the REAL reason instead of
+  // dropping it. This is what surfaces to the admin — "seat/plan limit reached",
+  // "EMAILADDRESS_ALREADY_EXISTS", an OAuth scope error, etc. — instead of a
+  // blind "no account id".
+  let error: string | undefined;
+  if (!resolvedAccountId) {
+    error = licenseLimited
+      ? "Maximum user license limit reached in Zoho — no free mailbox seats. Delete an unused mailbox in the Zoho Admin Console, or upgrade your Zoho plan, then retry."
+      : json?.data?.moreInfo ||
+        json?.data?.errorCode ||
+        json?.status?.description ||
+        json?.message ||
+        `Zoho responded with HTTP ${res.status} and no account id`;
   }
 
   return {
     zohoUserId:    json?.data?.mailboxId || json?.data?.accountId || null,
-    zohoAccountId: json?.data?.accountId || null,
+    zohoAccountId: resolvedAccountId,
     finalEmail:    email,
+    error,
   };
 }
 
@@ -199,6 +227,9 @@ export async function provisionZohoMailbox(params: {
   designation?: string;
   department?:  string;
   tempPassword: string;
+  // On a retry, reuse the address already assigned to the employee so the mailbox
+  // and any SAML assertion stay on the same address instead of rebuilding it.
+  preferredEmail?: string;
 }): Promise<{
   zoho_email:      string;
   zoho_user_id:    string | null;
@@ -221,9 +252,10 @@ export async function provisionZohoMailbox(params: {
     domain = "mail.namaah.io"; // safe fallback — admin should fix via config page
   }
 
-  let zohoEmail      = buildEmail(params.name, domain);
+  let zohoEmail      = params.preferredEmail || buildEmail(params.name, domain);
   let zohoUserId:    string | null = null;
   let zohoAccountId: string | null = null;
+  let provisionError: string | undefined;
 
   // ── Call Zoho Admin API to create the account ────────────────────────────────
   if (token && orgId) {
@@ -234,6 +266,7 @@ export async function provisionZohoMailbox(params: {
       zohoUserId    = result.zohoUserId;
       zohoAccountId = result.zohoAccountId;
       zohoEmail     = result.finalEmail; // may have suffix if collision
+      if (!zohoAccountId) provisionError = result.error;
 
       if (zohoAccountId) {
         await applyDefaultSignature(token, zohoAccountId, {
@@ -244,9 +277,11 @@ export async function provisionZohoMailbox(params: {
       }
     } catch (e: any) {
       console.error("[Zoho provision] API error:", e.message);
+      provisionError = e.message;
     }
   } else {
     console.warn("[Zoho provision] No token or orgId — skipping Zoho API call. Email stored locally only.");
+    provisionError = !token ? "Zoho is not connected (no valid token)." : "Zoho org id is not configured.";
   }
 
   // ── Persist on employee record ───────────────────────────────────────────────
@@ -256,8 +291,21 @@ export async function provisionZohoMailbox(params: {
       zoho_email:      zohoEmail,
       zoho_user_id:    zohoUserId,
       zoho_account_id: zohoAccountId,
+      // When provisioning succeeds, zoho_email becomes the canonical professional
+      // email — sync it back to the primary `email` field so every consumer
+      // (profile display, login lookup, session) sees the real address.
+      ...(zohoAccountId ? { email: zohoEmail } : {}),
     })
     .eq("id", params.employeeId);
+
+  // Sync Supabase Auth so the login identity matches the new zoho_email.
+  if (zohoAccountId) {
+    await supabase.auth.admin
+      .updateUserById(params.employeeId, { email: zohoEmail })
+      .catch((e: any) =>
+        console.warn("[Zoho provision] Auth email sync failed (non-fatal):", e.message),
+      );
+  }
 
   // ── Track in account_access ──────────────────────────────────────────────────
   if (zohoAccountId) {
@@ -285,7 +333,7 @@ export async function provisionZohoMailbox(params: {
     new_values:  { zoho_user_id: zohoUserId, zoho_account_id: zohoAccountId, domain },
   }).then(undefined, () => {});
 
-  return { zoho_email: zohoEmail, zoho_user_id: zohoUserId, zoho_account_id: zohoAccountId };
+  return { zoho_email: zohoEmail, zoho_user_id: zohoUserId, zoho_account_id: zohoAccountId, error: provisionError };
 }
 
 // ── Disable a Zoho mailbox (offboarding) ─────────────────────────────────────
