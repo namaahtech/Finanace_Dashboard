@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import puppeteer from "puppeteer";
+import { launchBrowser } from "@/lib/browser";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   let browser: any = null;
@@ -13,11 +16,8 @@ export async function POST(req: Request) {
     console.log("[PDF Generator] Starting PDF generation for", invoiceNumber);
     const startTime = performance.now();
 
-    // Launch browser
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+    // Launch browser (serverless-safe)
+    browser = await launchBrowser();
 
     const page = await browser.newPage();
 

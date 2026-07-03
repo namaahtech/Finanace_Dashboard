@@ -4,6 +4,9 @@ import { getActor, isAdmin, loadSettings } from "@/lib/onboarding/server";
 import { dispatchOnboarding } from "@/lib/onboarding/dispatch";
 import { logAudit } from "@/lib/audit";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 type Ctx = { params: Promise<{ id: string }> };
 
 // POST /api/onboarding/[id]/direct-send

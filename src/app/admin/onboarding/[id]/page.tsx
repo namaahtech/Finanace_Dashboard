@@ -242,6 +242,11 @@ export default function OnboardingBuilderPage() {
     toast.success("Accepted — final signed documents emailed to the candidate");
     load(true);
   };
+  const onResend = async () => {
+    await action("send", undefined, "resend");
+    toast.success("E-sign email sent to the candidate");
+    load(true);
+  };
 
   const saveSchema = async () => {
     setSavingSchema(true);
@@ -340,6 +345,19 @@ export default function OnboardingBuilderPage() {
           {(isOwner || isAdmin) && status === "signed" && (
             <Button size="sm" onClick={onFinalize} disabled={!!busy}>
               {busy === "finalize" ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Accept &amp; Send Signed Copy
+            </Button>
+          )}
+          {/* Retry / re-send the e-sign email. Shows once approved (incl. when the
+              initial send failed and left sent_at empty) and while awaiting signature. */}
+          {(isOwner || isAdmin) && ["approved", "sent", "viewed"].includes(status ?? "") && (
+            <Button
+              variant={packet.sent_at ? "outline" : "default"}
+              size="sm"
+              onClick={onResend}
+              disabled={!!busy}
+            >
+              {busy === "resend" ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}{" "}
+              {packet.sent_at ? "Re-send E-Sign" : "Send E-Sign (retry)"}
             </Button>
           )}
           {isAdmin && status === "pending_approval" && (

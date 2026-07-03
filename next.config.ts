@@ -2,7 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
-  serverExternalPackages: ["mongoose", "puppeteer", "pdfjs-dist"],
+  // @sparticuz/chromium + puppeteer-core must stay external so the Chromium binary
+  // ships intact to the serverless function (bundling it breaks executablePath()).
+  serverExternalPackages: ["mongoose", "puppeteer", "puppeteer-core", "@sparticuz/chromium", "pdfjs-dist"],
   webpack(config) {
     // pdfjs-dist needs canvas alias to prevent server-side canvas import errors
     config.resolve.alias = { ...config.resolve.alias, canvas: false };

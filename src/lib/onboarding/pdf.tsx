@@ -1,6 +1,6 @@
 import React from "react";
 import { renderToHtml } from "@/lib/onboarding/renderHtml";
-import puppeteer from "puppeteer";
+import { launchBrowser } from "@/lib/browser";
 import { PDFDocument, PDFName, PDFString } from "pdf-lib";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { DOC_CSS } from "@/components/onboarding/templates/docStyles";
@@ -79,10 +79,7 @@ async function addFooterLinks(bytes: Uint8Array): Promise<Buffer> {
 
 /** Render HTML → A4 PDF buffer with the NAMAAH letterhead + per-page candidate sig strip + clickable footer links on every page. */
 export async function htmlToPdf(html: string, sigData?: { image?: string | null; name: string }): Promise<Buffer> {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 794, height: 1123 });
