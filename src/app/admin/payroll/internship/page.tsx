@@ -32,9 +32,9 @@ import {
 import {
   Users, IndianRupee, Loader2, Plus, Pencil, Trash2, CheckCircle2,
   Clock, AlertCircle, Sparkles, Download, FileText, History, ListChecks,
-  Settings, Eye,
+  Settings, Eye, CalendarDays,
 } from "lucide-react";
-import { bufferDays } from "@/lib/internshipMath";
+import { bufferDays, DEFAULT_FREE_HOLIDAYS } from "@/lib/internshipMath";
 import dayjs from "dayjs";
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -136,6 +136,7 @@ export default function InternshipStipendPage() {
   const [cycleForm, setCycleForm] = useState({
     paid_days: "30",
     buffer_paid_days: "0",
+    extra_leave_days: "0",
     deductions: "0",
     payment_status: "pending" as Cycle["payment_status"],
     payment_date: "",
@@ -392,6 +393,7 @@ export default function InternshipStipendPage() {
     setCycleForm({
       paid_days:        String(c.paid_days),
       buffer_paid_days: String(c.buffer_paid_days ?? 0),
+      extra_leave_days: String(c.extra_leave_days ?? 0),
       deductions:       String(c.deductions),
       payment_status:   c.payment_status,
       payment_date:     c.payment_date ?? dayjs().format("YYYY-MM-DD"),
@@ -408,14 +410,18 @@ export default function InternshipStipendPage() {
     try {
       const paid_days        = Number(cycleForm.paid_days);
       const buffer_paid_days = Number(cycleForm.buffer_paid_days);
+      const extra_leave_days = Math.max(0, Number(cycleForm.extra_leave_days) || 0);
       const deductions       = Number(cycleForm.deductions);
-      const gross = Math.round((cycleEditing.stipend_amount / 30) * (paid_days + buffer_paid_days));
+      // Extra holidays beyond the free allowance are LOP — they reduce paid days.
+      const effective_days = Math.max(0, paid_days + buffer_paid_days - extra_leave_days);
+      const gross = Math.round((cycleEditing.stipend_amount / 30) * effective_days);
       const body = {
         intern_id:        cycleEditing.intern_id,
         month:            cycleEditing.month,
         year:             cycleEditing.year,
         paid_days,
         buffer_paid_days,
+        extra_leave_days,
         deductions,
         gross_amount:     gross,
         payment_status:   cycleForm.payment_status,
@@ -451,8 +457,10 @@ export default function InternshipStipendPage() {
     if (!cycleEditing) return 0;
     const pd = Number(cycleForm.paid_days) || 0;
     const bpd = Number(cycleForm.buffer_paid_days) || 0;
-    return Math.round((cycleEditing.stipend_amount / 30) * (pd + bpd));
-  }, [cycleEditing, cycleForm.paid_days, cycleForm.buffer_paid_days]);
+    const extra = Math.max(0, Number(cycleForm.extra_leave_days) || 0);
+    const eff = Math.max(0, pd + bpd - extra);
+    return Math.round((cycleEditing.stipend_amount / 30) * eff);
+  }, [cycleEditing, cycleForm.paid_days, cycleForm.buffer_paid_days, cycleForm.extra_leave_days]);
   const cycleNet = useMemo(() => Math.max(0, cycleGross - Number(cycleForm.deductions || 0)), [cycleGross, cycleForm.deductions]);
 
   // CSV export of current month cycles
@@ -508,6 +516,11 @@ export default function InternshipStipendPage() {
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Intern
             </Button>
           )}
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/payroll/internship/manage">
+              <CalendarDays className="mr-1.5 h-3.5 w-3.5" /> Holidays &amp; Payments
+            </Link>
+          </Button>
           <Button asChild variant="outline" size="sm">
             <Link href="/admin/payroll/internship/settings">
               <Settings className="mr-1.5 h-3.5 w-3.5" /> Settings
@@ -862,7 +875,7 @@ export default function InternshipStipendPage() {
                 <Separator />
                 <div className="flex justify-between text-sm">
                   <span>
-                    Gross ({cycleForm.paid_days} days{Number(cycleForm.buffer_paid_days) > 0 ? ` + ${cycleForm.buffer_paid_days} buffer` : ""})
+                    Gross ({cycleForm.paid_days} days{Number(cycleForm.buffer_paid_days) > 0 ? ` + ${cycleForm.buffer_paid_days} buffer` : ""}{Number(cycleForm.extra_leave_days) > 0 ? ` − ${cycleForm.extra_leave_days} extra holiday(s)` : ""})
                   </span>
                   <span className="font-semibold tabular-nums">{formatCurrency(cycleGross)}</span>
                 </div>
@@ -889,7 +902,7 @@ export default function InternshipStipendPage() {
               </div>
 
               {/* Override fields */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Paid Days</Label>
                   <Input type="number" min={0} max={31} value={cycleForm.paid_days} onChange={(e) => setCycleForm({ ...cycleForm, paid_days: e.target.value })} className="tabular-nums" />
@@ -899,10 +912,17 @@ export default function InternshipStipendPage() {
                   <Input type="number" min={0} max={31} value={cycleForm.buffer_paid_days} onChange={(e) => setCycleForm({ ...cycleForm, buffer_paid_days: e.target.value })} className="tabular-nums" />
                 </div>
                 <div className="space-y-1.5">
+                  <Label className="text-rose-700 dark:text-rose-400">Extra Holidays (LOP)</Label>
+                  <Input type="number" min={0} max={60} value={cycleForm.extra_leave_days} onChange={(e) => setCycleForm({ ...cycleForm, extra_leave_days: e.target.value })} className="tabular-nums" />
+                </div>
+                <div className="space-y-1.5">
                   <Label>Deductions (₹)</Label>
                   <Input type="number" min={0} value={cycleForm.deductions} onChange={(e) => setCycleForm({ ...cycleForm, deductions: e.target.value })} className="tabular-nums" />
                 </div>
               </div>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                {DEFAULT_FREE_HOLIDAYS} holidays/month are free (4 weekly + 2 paid). <strong>Extra Holidays</strong> are unpaid — each removes one day&apos;s pay from the gross.
+              </p>
 
               <Separator />
 

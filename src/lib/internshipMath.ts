@@ -1,13 +1,19 @@
 /**
  * Internship stipend calculation rules:
  *   - Month is treated as a flat 30 days (NOT calendar days).
- *   - 6 paid holidays/month (4 weekly + 2 paid). Holidays are PAID — they
- *     don't reduce the gross.
+ *   - 6 free paid holidays/month (4 weekly + 2 paid). Those are baked into the
+ *     30 paid days — they don't reduce the gross.
+ *   - EXTRA holidays beyond the free allowance are Loss-of-Pay (LOP): each one
+ *     removes a paid day. extra_leave_days holds that count.
  *   - Mid-month start: paid_days = 30 − (billing_date.day − 1)
  *   - Buffer (starting_date − joining_date) is informational only.
- *   - gross = (stipend / 30) × paid_days
+ *   - effective_days = paid_days + buffer_paid_days − extra_leave_days
+ *   - gross = (stipend / 30) × effective_days
  *   - net   = gross − deductions
  */
+
+/** Default free (paid) holidays per 30-day month: 4 weekly + 2 paid. */
+export const DEFAULT_FREE_HOLIDAYS = 6;
 
 export interface InternForCalc {
   stipend_amount: number;
@@ -21,16 +27,27 @@ export interface CalcInput {
   year: number;
   // Overrides (used when admin manually adjusts a cycle)
   paid_days_override?: number;
-  buffer_paid_days?: number; // Default 0 — buffer days credited as paid
+  buffer_paid_days?: number;  // Default 0 — buffer days credited as paid
+  extra_leave_days?: number;  // LOP days (holidays beyond the free allowance)
   deductions?: number;
 }
 
 export interface CalcResult {
   paid_days: number;
   buffer_paid_days: number;
+  extra_leave_days: number;
+  effective_days: number;
   gross_amount: number;
   net_amount: number;
   applies: boolean; // false if intern's billing date is after the selected month
+}
+
+/**
+ * Given the total holidays taken in a month and the free allowance, return the
+ * number of LOP (unpaid) days. Only holidays beyond the free 6 cost pay.
+ */
+export function lopFromHolidays(holidaysTaken: number, freeHolidays = DEFAULT_FREE_HOLIDAYS): number {
+  return Math.max(0, Math.round(Number(holidaysTaken || 0) - Number(freeHolidays)));
 }
 
 /**
@@ -56,17 +73,21 @@ export function defaultPaidDays(billing_date: string, month: number, year: numbe
 }
 
 export function computeCycle(input: CalcInput): CalcResult {
-  const { intern, month, year, paid_days_override, buffer_paid_days, deductions = 0 } = input;
+  const { intern, month, year, paid_days_override, buffer_paid_days, extra_leave_days, deductions = 0 } = input;
   const default_pd  = defaultPaidDays(intern.billing_date, month, year);
   const default_bpd = defaultBufferPaidDays(intern.starting_date, intern.billing_date, month, year);
   const paid_days   = paid_days_override !== undefined ? paid_days_override : default_pd;
   const buffer_pd   = buffer_paid_days !== undefined ? buffer_paid_days : default_bpd;
-  const effective_days = paid_days + buffer_pd;
+  const extra_lop   = Math.max(0, Number(extra_leave_days ?? 0));
+  // Extra holidays beyond the free allowance eat into paid days (LOP).
+  const effective_days = Math.max(0, paid_days + buffer_pd - extra_lop);
   const gross_amount = Math.round((Number(intern.stipend_amount) / 30) * effective_days);
   const net_amount   = Math.max(0, gross_amount - Number(deductions));
   return {
     paid_days,
     buffer_paid_days: buffer_pd,
+    extra_leave_days: extra_lop,
+    effective_days,
     gross_amount,
     net_amount,
     applies: default_pd > 0 || default_bpd > 0,
