@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { computeCycle } from "@/lib/internshipMath";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 // POST /api/interns/cycles/bulk-pay
 //
@@ -125,6 +127,19 @@ export async function POST(req: NextRequest) {
         if (data?.id) created_ids.push(data.id);
       }
     }
+
+    try {
+      const actor = await getActor();
+      const { data: who } = await supabase.from("interns").select("full_name").eq("id", intern_id).maybeSingle();
+      await logAudit({
+        actorId: actor?.userId ?? null,
+        action: "internship.backlog_payment",
+        section: "Internship Payroll",
+        summary: `Cleared ${updated_ids.length + created_ids.length} stipend month(s) for ${who?.full_name ?? "intern"} · ref ${payment_ref}`,
+        targetType: "intern",
+        targetId: intern_id,
+      });
+    } catch {}
 
     return NextResponse.json({
       updated_ids,

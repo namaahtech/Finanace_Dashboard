@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { computeCycle } from "@/lib/internshipMath";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 interface RouteCtx { params: Promise<{ id: string }> }
+
+const MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // PATCH /api/interns/cycles/[id]
 //
@@ -124,9 +128,33 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
       .from("intern_stipend_cycles")
       .update(updatable)
       .eq("id", id)
-      .select("*")
+      .select("*, interns(full_name)")
       .single();
     if (error) throw error;
+
+    // Audit: record who changed what (feeds the intern-activity view).
+    try {
+      const actor = await getActor();
+      const who = (data as any)?.interns?.full_name ?? "intern";
+      const period = `${MONTHS[Number((data as any).month)]} ${(data as any).year}`;
+      let summary: string;
+      if (updatable.payment_status === "paid") {
+        summary = `Marked ${period} stipend PAID for ${who} (₹${Number((data as any).net_amount).toLocaleString("en-IN")})`;
+      } else if ("extra_leave_days" in updatable) {
+        summary = `Set ${Number(updatable.extra_leave_days)} extra holiday(s) for ${who} — ${period} (net ₹${Number((data as any).net_amount).toLocaleString("en-IN")})`;
+      } else {
+        summary = `Updated ${who}'s stipend cycle ${period} (net ₹${Number((data as any).net_amount).toLocaleString("en-IN")})`;
+      }
+      await logAudit({
+        actorId: actor?.userId ?? null,
+        action: "internship.cycle.update",
+        section: "Internship Payroll",
+        summary,
+        targetType: "intern_stipend_cycle",
+        targetId: id,
+      });
+    } catch {}
+
     return NextResponse.json({ cycle: data });
   } catch (err: unknown) {
     return NextResponse.json({ error: (err as Error).message ?? "Unknown error" }, { status: 500 });

@@ -32,7 +32,7 @@ import {
 import {
   Users, IndianRupee, Loader2, Plus, Pencil, Trash2, CheckCircle2,
   Clock, AlertCircle, Sparkles, Download, FileText, History, ListChecks,
-  Settings, Eye, CalendarDays,
+  Settings, Eye, CalendarDays, Activity,
 } from "lucide-react";
 import { bufferDays, DEFAULT_FREE_HOLIDAYS } from "@/lib/internshipMath";
 import dayjs from "dayjs";
@@ -521,11 +521,20 @@ export default function InternshipStipendPage() {
               <CalendarDays className="mr-1.5 h-3.5 w-3.5" /> Holidays &amp; Payments
             </Link>
           </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/admin/payroll/internship/settings">
-              <Settings className="mr-1.5 h-3.5 w-3.5" /> Settings
-            </Link>
-          </Button>
+          {user?.role === "admin" && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/payroll/internship/activity">
+                <Activity className="mr-1.5 h-3.5 w-3.5" /> Intern Activity
+              </Link>
+            </Button>
+          )}
+          {user?.role === "admin" && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/payroll/internship/settings">
+                <Settings className="mr-1.5 h-3.5 w-3.5" /> Settings
+              </Link>
+            </Button>
+          )}
         </div>
       }
     >

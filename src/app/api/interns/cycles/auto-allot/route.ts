@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { computeCycle, cycleApplies } from "@/lib/internshipMath";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 // POST /api/interns/cycles/auto-allot
 //
@@ -110,6 +112,20 @@ export async function POST(req: NextRequest) {
       remaining -= c.net_amount;
       allocated.push({ id: c.id, month: c.month, year: c.year, net_amount: c.net_amount });
     }
+
+    // Audit the bulk payment (feeds the intern-activity view).
+    try {
+      const actor = await getActor();
+      const { data: who } = await supabase.from("interns").select("full_name").eq("id", intern_id).maybeSingle();
+      await logAudit({
+        actorId: actor?.userId ?? null,
+        action: "internship.bulk_payment",
+        section: "Internship Payroll",
+        summary: `Recorded ₹${Number(amount).toLocaleString("en-IN")} to ${who?.full_name ?? "intern"} — cleared ${allocated.length} month(s)${Math.round(remaining) > 0 ? `, ₹${Math.round(remaining).toLocaleString("en-IN")} unallocated` : ""} · ref ${payment_ref}`,
+        targetType: "intern",
+        targetId: intern_id,
+      });
+    } catch {}
 
     return NextResponse.json({
       allocated,
