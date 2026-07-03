@@ -1,8 +1,22 @@
-// Resolve the public base URL for building magic links.
-// Order: the live request's own origin (so links match whatever domain the app is
-// being used on — localhost in dev, the real domain in prod, automatically) →
-// env override → localhost. No env juggling needed to switch environments.
+// Resolve the public base URL for building magic links sent to candidates.
+// Priority: env var (when pointing at a real public domain) → request origin → localhost.
+// This ensures emails triggered from localhost dev still contain nexus.namaah.io links,
+// not http://localhost:3000 links the candidate can never reach.
 export function baseUrlFrom(req?: { headers: Headers } | null): string {
+  const envUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_BASE_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL;
+
+  // If the env var is set to a real public domain (not localhost/127.*), always
+  // use it — overrides the request origin so candidate emails always link to
+  // the production domain even when the admin triggers the send from localhost.
+  if (envUrl && !envUrl.includes("localhost") && !/127\.\d+\.\d+/.test(envUrl)) {
+    return envUrl.replace(/\/+$/, "");
+  }
+
+  // Env var is localhost (dev with local testing) — fall back to request headers
+  // so the link at least works for the dev machine.
   if (req) {
     const h = req.headers;
     const origin = h.get("origin");
@@ -15,10 +29,6 @@ export function baseUrlFrom(req?: { headers: Headers } | null): string {
       return `${proto}://${host}`.replace(/\/+$/, "");
     }
   }
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.APP_BASE_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    "http://localhost:3000"
-  ).replace(/\/+$/, "");
+
+  return envUrl?.replace(/\/+$/, "") || "http://localhost:3000";
 }
