@@ -138,11 +138,13 @@ export async function dispatchOnboarding(
     { name: `Internship Handbook.pdf`, path: paths.handbook },
   ].filter((f) => f.path) as { name: string; path: string }[];
 
-  const descriptors: ZohoAttachment[] = [];
-  for (const f of files) {
-    const buf = await downloadPdf(f.path);
-    descriptors.push(await uploadZohoAttachment(token, sender.accountId, f.name, buf));
-  }
+  // Download from Storage + upload to Zoho in parallel — 3 independent round-trips.
+  const descriptors: ZohoAttachment[] = await Promise.all(
+    files.map(async (f) => {
+      const buf = await downloadPdf(f.path);
+      return uploadZohoAttachment(token, sender.accountId, f.name, buf);
+    })
+  );
 
   // 4. Compose + send.
   const signUrl = `${baseUrlFrom(opts.req)}/sign/${signToken}`;
