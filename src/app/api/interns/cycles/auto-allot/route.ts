@@ -113,6 +113,15 @@ export async function POST(req: NextRequest) {
       allocated.push({ id: c.id, month: c.month, year: c.year, net_amount: c.net_amount });
     }
 
+    // Record amount_paid = net for each cleared month (best-effort; column may not exist).
+    try {
+      for (const a of allocated) {
+        await supabase.from("intern_stipend_cycles")
+          .update({ amount_paid: a.net_amount })
+          .eq("intern_id", intern_id).eq("month", a.month).eq("year", a.year);
+      }
+    } catch { /* amount_paid column may not exist yet */ }
+
     // Audit the bulk payment (feeds the intern-activity view).
     try {
       const actor = await getActor();

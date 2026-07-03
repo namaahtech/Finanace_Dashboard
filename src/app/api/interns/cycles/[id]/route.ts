@@ -8,6 +8,20 @@ interface RouteCtx { params: Promise<{ id: string }> }
 
 const MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// Best-effort write of amount_paid (the actually-credited amount). Wrapped so a
+// missing column (before the ALTER is run) never breaks the main save.
+async function setAmountPaid(
+  supabase: any, cycleId: string, body: any, updatable: Record<string, unknown>, netAmount: number,
+) {
+  try {
+    let ap: number | null = null;
+    if ("amount_paid" in body && body.amount_paid != null) ap = Math.max(0, Number(body.amount_paid) || 0);
+    else if (updatable.payment_status === "paid") ap = Number(netAmount);
+    else if (updatable.payment_status === "pending" || updatable.payment_status === "failed") ap = 0;
+    if (ap != null) await supabase.from("intern_stipend_cycles").update({ amount_paid: ap }).eq("id", cycleId);
+  } catch { /* column may not exist yet — ignore */ }
+}
+
 // PATCH /api/interns/cycles/[id]
 //
 // Updates one persisted cycle. If id is "new", body must include
@@ -118,6 +132,8 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
         throw error;
       }
 
+      await setAmountPaid(supabase, (data as any).id, body, { payment_status: row.payment_status }, (data as any).net_amount);
+
       // Audit the newly-created cycle (drafts saved from the manage grid land here).
       try {
         const actor = await getActor();
@@ -154,6 +170,10 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
       .select("*, interns(full_name)")
       .single();
     if (error) throw error;
+
+    // Track the actual amount credited (best-effort — the amount_paid column may
+    // not exist yet; it's what distinguishes paid / half-paid / over-paid).
+    await setAmountPaid(supabase, id, body, updatable, (data as any).net_amount);
 
     // Audit: record who changed what (feeds the intern-activity view).
     try {

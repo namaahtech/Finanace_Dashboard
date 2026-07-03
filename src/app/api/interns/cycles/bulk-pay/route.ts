@@ -112,6 +112,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: `Failed to update cycle ${c.id}: ${error.message}` }, { status: 500 });
         }
         updated_ids.push(c.id);
+        try { await supabase.from("intern_stipend_cycles").update({ amount_paid: calc.net_amount }).eq("id", c.id); } catch {}
       } else {
         const { data, error } = await supabase
           .from("intern_stipend_cycles")
@@ -124,7 +125,10 @@ export async function POST(req: NextRequest) {
           }
           return NextResponse.json({ error: `Failed to insert cycle ${c.month}/${c.year}: ${error.message}` }, { status: 500 });
         }
-        if (data?.id) created_ids.push(data.id);
+        if (data?.id) {
+          created_ids.push(data.id);
+          try { await supabase.from("intern_stipend_cycles").update({ amount_paid: calc.net_amount }).eq("id", data.id); } catch {}
+        }
       }
     }
 

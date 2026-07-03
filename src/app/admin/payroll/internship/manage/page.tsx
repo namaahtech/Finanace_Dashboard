@@ -129,7 +129,7 @@ export default function InternshipManagePage() {
     try {
       const id = c.id ?? "new";
       const body: Record<string, unknown> = c.id
-        ? { extra_leave_days: extra, deductions }
+        ? { extra_leave_days: extra, deductions, holidays_taken: DEFAULT_FREE_HOLIDAYS + extra }
         : {
             intern_id: c.intern_id, month: c.month, year: c.year,
             paid_days: c.paid_days, buffer_paid_days: c.buffer_paid_days,
