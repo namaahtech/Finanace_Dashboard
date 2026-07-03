@@ -102,19 +102,28 @@ export async function dispatchOnboarding(
     offerDateISO: final ? (packet.sent_at || packet.approved_at || null) : new Date().toISOString(),
   });
 
-  // 1. Generate + store the three PDFs (signed copies in final mode).
-  const paths = await generateAndStorePdfs(packet.id, data);
-
-  const pdfUpdate: Record<string, any> = {
-    offer_pdf_url: paths.offer ?? null,
-    nda_pdf_url: paths.nda ?? null,
-    handbook_pdf_url: paths.handbook ?? null,
-  };
-  if (!final) {
-    pdfUpdate.sign_token = signToken;
-    pdfUpdate.token_expires_at = expires;
+  // 1. PDFs are only generated for the FINAL send (the countersigned copies that
+  //    get attached). The OFFER send is link-only: the candidate reviews the docs
+  //    live on the /sign page (which renders from template data, not stored PDFs),
+  //    so we skip Chromium entirely here. That makes the offer send instant and
+  //    reliable, and a link-only email lands in the inbox instead of Spam/Promotions.
+  let paths: Partial<Record<"offer" | "nda" | "handbook", string>> = {};
+  if (final) {
+    paths = await generateAndStorePdfs(packet.id, data);
+    await supabase
+      .from("onboarding_packets")
+      .update({
+        offer_pdf_url: paths.offer ?? null,
+        nda_pdf_url: paths.nda ?? null,
+        handbook_pdf_url: paths.handbook ?? null,
+      })
+      .eq("id", packet.id);
+  } else {
+    await supabase
+      .from("onboarding_packets")
+      .update({ sign_token: signToken, token_expires_at: expires })
+      .eq("id", packet.id);
   }
-  await supabase.from("onboarding_packets").update(pdfUpdate).eq("id", packet.id);
 
   // 2. Resolve Zoho token + sending mailbox (form creator's, else admin).
   const token = await getZohoToken();
@@ -131,14 +140,16 @@ export async function dispatchOnboarding(
   }
   const sender = await resolveSender(token, creator);
 
-  // 3. Upload the PDFs as native Zoho attachments on the sending account.
-  const files = [
-    { name: `Offer Letter - ${packet.candidate_name}.pdf`, path: paths.offer },
-    { name: `NDA - ${packet.candidate_name}.pdf`, path: paths.nda },
-    { name: `Internship Handbook.pdf`, path: paths.handbook },
-  ].filter((f) => f.path) as { name: string; path: string }[];
+  // 3. Attach the signed PDFs — ONLY on the final send. The offer send carries no
+  //    attachments (link-only). Download from Storage + upload to Zoho in parallel.
+  const files = final
+    ? ([
+        { name: `Offer Letter - ${packet.candidate_name}.pdf`, path: paths.offer },
+        { name: `NDA - ${packet.candidate_name}.pdf`, path: paths.nda },
+        { name: `Internship Handbook.pdf`, path: paths.handbook },
+      ].filter((f) => f.path) as { name: string; path: string }[])
+    : [];
 
-  // Download from Storage + upload to Zoho in parallel — 3 independent round-trips.
   const descriptors: ZohoAttachment[] = await Promise.all(
     files.map(async (f) => {
       const buf = await downloadPdf(f.path);
@@ -172,11 +183,11 @@ export async function dispatchOnboarding(
     toAddress: packet.candidate_email,
     subject: final
       ? `Your Signed Internship Offer & Documents — ${signatory.companyName}`
-      : `Internship Offer & Onboarding Documents — ${signatory.companyName}`,
+      : `Your Internship Offer — Action Required to Accept`,
     content,
     mailFormat: "html",
-    attachments: descriptors,
   };
+  if (descriptors.length) payload.attachments = descriptors;
 
   const res = await zohoPost(token, `/accounts/${sender.accountId}/messages`, payload);
   if (res?.status?.code !== 200 && res?.status?.code !== 201) {
