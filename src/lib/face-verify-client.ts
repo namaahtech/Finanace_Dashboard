@@ -143,26 +143,52 @@ export function laplacianVar(src: HTMLCanvasElement): number {
   return cnt ? sumSq / cnt - mean * mean : 0;
 }
 
-interface RStat { r: number; g: number; b: number; lumaVar: number; edge: number; n: number }
+interface RStat { r: number; g: number; b: number; lumaVar: number; edge: number; bright: number; n: number }
 function regionStat(data: Uint8ClampedArray, W: number, H: number, x0: number, y0: number, x1: number, y1: number): RStat {
   x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0));
   x1 = Math.min(W, Math.ceil(x1));  y1 = Math.min(H, Math.ceil(y1));
-  let r = 0, g = 0, b = 0, ls = 0, lss = 0, edge = 0, n = 0, en = 0;
+  let r = 0, g = 0, b = 0, ls = 0, lss = 0, edge = 0, n = 0, en = 0, bright = 0;
   const step = Math.max(1, Math.floor(Math.min(x1 - x0, y1 - y0) / 40) || 1);
   for (let y = y0; y < y1; y += step) for (let x = x0; x < x1; x += step) {
     const i = (y * W + x) * 4;
     const R = data[i], G = data[i + 1], B = data[i + 2];
     r += R; g += G; b += B;
     const lum = 0.299 * R + 0.587 * G + 0.114 * B;
+    if (lum > 232) bright++;               // near-white specular pixel (lens glare)
     ls += lum; lss += lum * lum; n++;
     const xr = Math.min(W - 1, x + step);
     const j = (y * W + xr) * 4;
     const lum2 = 0.299 * data[j] + 0.587 * data[j + 1] + 0.114 * data[j + 2];
     edge += Math.abs(lum - lum2); en++;
   }
-  if (!n) return { r: 0, g: 0, b: 0, lumaVar: 0, edge: 0, n: 0 };
+  if (!n) return { r: 0, g: 0, b: 0, lumaVar: 0, edge: 0, bright: 0, n: 0 };
   const mean = ls / n;
-  return { r: r / n, g: g / n, b: b / n, lumaVar: Math.max(0, lss / n - mean * mean), edge: en ? edge / en : 0, n };
+  return { r: r / n, g: g / n, b: b / n, lumaVar: Math.max(0, lss / n - mean * mean), edge: en ? edge / en : 0, bright: bright / n, n };
+}
+
+// Eye Aspect Ratio (EAR) from a 6-point face-api eye — high when open, drops
+// toward 0 on a blink. Used for real-time liveness (a photo can't blink).
+function eyeAspect(eye: Array<{ x: number; y: number }>): number {
+  if (!eye || eye.length < 6) return 0.3;
+  const d = (a: any, b: any) => Math.hypot(a.x - b.x, a.y - b.y);
+  const v = (d(eye[1], eye[5]) + d(eye[2], eye[4])) / 2;
+  const h = d(eye[0], eye[3]) || 1;
+  return v / h;
+}
+
+// One live-frame read for the camera guide + blink liveness: face count, largest
+// box, and mean eye-openness. Landmarks only (no descriptor) → cheap per tick.
+export async function detectLive(
+  input: HTMLVideoElement | HTMLCanvasElement
+): Promise<{ count: number; box: { x: number; y: number; width: number; height: number } | null; ear: number | null }> {
+  const faceapi = await getFaceApi();
+  const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+  const all = await faceapi.detectAllFaces(input, opts).withFaceLandmarks();
+  if (!all.length) return { count: 0, box: null, ear: null };
+  const best = all.slice().sort((a: any, b: any) => b.detection.box.width * b.detection.box.height - a.detection.box.width * a.detection.box.height)[0];
+  const lm = best.landmarks;
+  const ear = (eyeAspect(lm.getLeftEye()) + eyeAspect(lm.getRightEye())) / 2;
+  return { count: all.length, box: best.detection.box, ear };
 }
 function colorDist(a: RStat, b: RStat): number {
   return Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);
@@ -180,7 +206,7 @@ export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, fac
 
   const skinL = regionStat(data, W, H, fx + 0.12 * fw, fy + 0.48 * fh, fx + 0.32 * fw, fy + 0.66 * fh);
   const skinR = regionStat(data, W, H, fx + 0.68 * fw, fy + 0.48 * fh, fx + 0.88 * fw, fy + 0.66 * fh);
-  const skin: RStat = { r: (skinL.r + skinR.r) / 2, g: (skinL.g + skinR.g) / 2, b: (skinL.b + skinR.b) / 2, lumaVar: (skinL.lumaVar + skinR.lumaVar) / 2, edge: (skinL.edge + skinR.edge) / 2, n: skinL.n + skinR.n };
+  const skin: RStat = { r: (skinL.r + skinR.r) / 2, g: (skinL.g + skinR.g) / 2, b: (skinL.b + skinR.b) / 2, lumaVar: (skinL.lumaVar + skinR.lumaVar) / 2, edge: (skinL.edge + skinR.edge) / 2, bright: (skinL.bright + skinR.bright) / 2, n: skinL.n + skinR.n };
   const mouth    = regionStat(data, W, H, fx + 0.30 * fw, fy + 0.72 * fh, fx + 0.70 * fw, fy + 0.95 * fh);
   const eyes     = regionStat(data, W, H, fx + 0.18 * fw, fy + 0.30 * fh, fx + 0.82 * fw, fy + 0.50 * fh);
   const forehead = regionStat(data, W, H, fx + 0.28 * fw, fy + 0.04 * fh, fx + 0.72 * fw, fy + 0.20 * fh);
@@ -206,9 +232,11 @@ export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, fac
   const sharp   = laplacianVar(canvas) > 45;
   const baseEdge  = Math.max(4, skin.edge);                 // smooth-cheek edge baseline (lighting-normalised)
   const noMask    = colorDist(mouth, skin) < 62;            // mask = colour block over mouth/chin
-  // Glasses: a bare nose bridge is smooth skin (edge ≈ cheek). A frame/bridge bar
-  // there raises edges well above the cheek baseline; lens reflections add brightness.
-  const noGlasses = (bridge.edge / baseEdge) < 1.7 && !(bridge.lumaVar > 240 && bridge.r > skin.r + 25);
+  // Glasses: a bare nose bridge / eye area has edges (nose, brows) but NO glare.
+  // Require BOTH elevated bridge edges AND a lens reflection (bright specular
+  // pixels) so a bare, un-bespectacled face never trips it.
+  const glareFrac = Math.max(bridge.bright, eyes.bright);
+  const noGlasses = !((bridge.edge / baseEdge) > 2.0 && glareFrac > 0.05);
   const noHat     = !(colorDist(forehead, skin) > 66 && forehead.lumaVar < 42); // flat non-skin forehead
   const plainBg   = bgSpread < 36 && bgTexture < 17;
 

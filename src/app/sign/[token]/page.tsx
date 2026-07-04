@@ -12,6 +12,10 @@ import { cn } from "@/lib/utils";
 import { DocumentPreview } from "@/components/onboarding/DocumentPreview";
 import { SignaturePad } from "@/components/onboarding/SignaturePad";
 import { loadFaceModels, detectFromImage, verifyAgainst, assessQuality, type FaceVerdict } from "@/lib/face-verify-client";
+import {
+  loadFaceLandmarker, detectFrame, makeChallengeSequence, newProgress, stepChallenge,
+  scoreRisk, type Challenge, type ChallengeProgress,
+} from "@/lib/liveness-client";
 import type { TemplateData } from "@/lib/onboarding/types";
 
 type SignState = "ready" | "invalid" | "expired" | "signed" | "error";
@@ -59,6 +63,18 @@ export default function SignPage() {
   // never from a bare useEffect. camLive flips true once the video is playing.
   const [camStarted, setCamStarted] = useState(false);
   const [camLive, setCamLive] = useState(false);
+  // Randomized active-liveness challenge sequence (blink / turn / smile)
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [chIdx, setChIdx] = useState(0);
+  const [chCount, setChCount] = useState(0);
+  const [liveDone, setLiveDone] = useState(false);
+  const [centered, setCentered] = useState(false);
+  const progRef = useRef<ChallengeProgress>(newProgress());
+  const idxRef = useRef(0);
+  const doneRef = useRef(false);
+  const challengesRef = useRef<Challenge[]>([]);
+  const rafRef = useRef<number | null>(null);
+  const tsRef = useRef(0);
 
   // ── Session security ────────────────────────────────────────────────────────
   // After OTP verification: 30-second window to complete face capture.
@@ -187,7 +203,7 @@ export default function SignPage() {
       try {
         setFaceStatus("init");
         setFaceMsg("Loading face verification…");
-        await loadFaceModels();
+        await Promise.allSettled([loadFaceModels(), loadFaceLandmarker()]);
         try {
           const img = await loadImageEl(`/api/sign/${token}/profile-photo`);
           const { result } = await detectFromImage(img);
@@ -268,6 +284,49 @@ export default function SignPage() {
     }
   }, [step, camLive, faceStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Randomized liveness loop: once the camera is live, run a fresh challenge
+  // sequence (blink / turn / smile) via MediaPipe. Capture is gated on completing
+  // it — a photo or replayed clip can't satisfy a random live sequence.
+  useEffect(() => {
+    if (step !== "face" || !camLive) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      return;
+    }
+    const seq = makeChallengeSequence();
+    challengesRef.current = seq; setChallenges(seq);
+    idxRef.current = 0; setChIdx(0);
+    progRef.current = newProgress(); setChCount(0);
+    doneRef.current = false; setLiveDone(false);
+
+    let lastRun = 0;
+    const tick = () => {
+      rafRef.current = requestAnimationFrame(tick);
+      const v = videoRef.current;
+      if (!v || !v.videoWidth) return;
+      const now = performance.now();
+      if (now - lastRun < 66) return; // ~15fps
+      lastRun = now;
+      tsRef.current = Math.max(tsRef.current + 1, Math.round(now));
+      const s = detectFrame(v, tsRef.current);
+      if (s.present && s.faceCount === 1 && s.box) {
+        const cx = s.box.x + s.box.width / 2, cy = s.box.y + s.box.height / 2;
+        setCentered(cx > 0.34 && cx < 0.66 && cy > 0.24 && cy < 0.74 && s.box.width > 0.24 && s.box.width < 0.85);
+      } else setCentered(false);
+      if (doneRef.current || !s.present || s.faceCount !== 1) return;
+      const ch = challengesRef.current[idxRef.current];
+      if (!ch) return;
+      const p = stepChallenge(ch, s, progRef.current);
+      setChCount(p.count);
+      if (p.done) {
+        if (idxRef.current + 1 >= challengesRef.current.length) { doneRef.current = true; setLiveDone(true); }
+        else { idxRef.current += 1; setChIdx(idxRef.current); progRef.current = newProgress(); setChCount(0); }
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = null; };
+  }, [step, camLive]);
+
   // Tab-switch guard: switching away from the page after OTP forces re-verification.
   useEffect(() => {
     if (step === "gate") return;
@@ -318,34 +377,31 @@ export default function SignPage() {
       // mask/glasses/hat, plain background) — same checks as the KYC selfie.
       const q = assessQuality(canvas, result, faces);
       const qChecks = q.checks.map((c) => ({ label: c.label, pass: c.pass }));
+      const noSun = (q.checks.find((c) => c.key === "noglasses")?.pass ?? true) && (q.checks.find((c) => c.key === "nomask")?.pass ?? true);
+      const headMoved = challengesRef.current.some((c) => c.type === "turn_left" || c.type === "turn_right");
+      const hasRef = !(refMissing || !refDescRef.current);
+      const verdict = hasRef ? verifyAgainst(refDescRef.current!, result, canvas.width * canvas.height, faces) : null;
 
-      // No reference photo → can't match identity, but still REQUIRE a clean,
-      // single, live face. No silent skip-forward in production.
-      if (refMissing || !refDescRef.current) {
-        setFaceResult({ pass: q.pass, similarity: 0, distance: 1, checks: qChecks });
-        setFaceStatus("ready");
-        if (q.pass) {
-          stopCountdown();
-          setTimeout(() => { stopStream(); setStep("sign"); }, 700);
-        } else {
-          setFaceFails((n) => n + 1);
-        }
-        return;
-      }
+      // Weighted enterprise risk score (liveness already completed to reach here).
+      const risk = scoreRisk({
+        faceDetected: true,
+        qualityPass: q.pass,
+        noSunglassesMask: noSun,
+        eyesVisible: q.checks.find((c) => c.key === "frontal")?.pass ?? true,
+        livenessPass: doneRef.current,
+        headMovement: headMoved,
+        identityMatch: hasRef ? !!verdict?.pass : null,
+      });
 
-      // Reference exists → identity match AND quality must both pass.
-      const verdict = verifyAgainst(refDescRef.current, result, canvas.width * canvas.height, faces);
-      const merged: FaceVerdict = {
-        similarity: verdict.similarity,
-        distance: verdict.distance,
-        checks: [verdict.checks[0], ...qChecks], // "Same person…" + quality checks
-        pass: verdict.pass && q.pass,
-      };
-      setFaceResult(merged);
+      const checks = hasRef && verdict ? [verdict.checks[0], ...qChecks] : qChecks;
+      checks.push({ label: `Security score ${risk.score}/${risk.max}`, pass: risk.pass });
+      const pass = risk.pass && q.pass && (!hasRef || !!verdict?.pass);
+
+      setFaceResult({ pass, similarity: verdict?.similarity ?? 0, distance: verdict?.distance ?? 1, checks });
       setFaceStatus("ready");
-      if (merged.pass) {
+      if (pass) {
         stopCountdown();
-        setTimeout(() => { stopStream(); setStep("sign"); }, 900);
+        setTimeout(() => { stopStream(); setStep("sign"); }, 800);
       } else {
         setFaceFails((n) => n + 1);
       }
@@ -609,6 +665,29 @@ export default function SignPage() {
                       className="h-full w-full object-cover"
                       style={{ transform: facing === "user" ? "scaleX(-1)" : undefined }}
                     />
+                    {/* Liveness oval + challenge prompt */}
+                    {faceStatus === "ready" && !faceResult?.pass && (
+                      <>
+                        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-[3px] border-dashed transition-colors"
+                          style={{ width: "54%", height: "82%", borderColor: liveDone ? "#22c55e" : centered ? "#f59e0b" : "#f43f5e" }} />
+                        <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center px-3">
+                          <span className={cn("rounded-full px-2.5 py-0.5 text-center text-[11px] font-medium text-white", liveDone ? "bg-emerald-600/85" : centered ? "bg-amber-600/90" : "bg-rose-600/85")}>
+                            {!centered ? "Center your face in the oval"
+                              : liveDone ? "Liveness confirmed — tap Capture"
+                              : challenges[chIdx]
+                                ? (challenges[chIdx].type === "blink" ? `${challenges[chIdx].label} (${chCount}/${challenges[chIdx].target})` : challenges[chIdx].label)
+                                : "Follow the prompts…"}
+                          </span>
+                        </div>
+                        {challenges.length > 0 && (
+                          <div className="pointer-events-none absolute left-1/2 top-2 flex -translate-x-1/2 gap-1.5">
+                            {challenges.map((_, i) => (
+                              <span key={i} className={cn("h-1.5 w-1.5 rounded-full", i < chIdx || liveDone ? "bg-emerald-400" : i === chIdx ? "bg-amber-400" : "bg-white/40")} />
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
                     {(faceStatus === "init" || faceStatus === "verifying") && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 text-white">
                         <Loader2 className="animate-spin" size={22} />
@@ -660,9 +739,9 @@ export default function SignPage() {
                   {faceResult?.pass ? (
                     <Button className="w-full" disabled><CheckCircle2 size={15} /> Verified — continuing…</Button>
                   ) : (
-                    <Button className="w-full" onClick={captureVerify} disabled={faceStatus !== "ready" || !!camError}>
+                    <Button className="w-full" onClick={captureVerify} disabled={faceStatus !== "ready" || !!camError || (!liveDone && !faceResult)}>
                       {faceStatus === "verifying" ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}
-                      {faceResult ? "Retry capture" : "Capture & verify"}
+                      {faceStatus !== "ready" ? "Loading…" : !liveDone && !faceResult ? "Complete the liveness steps…" : faceResult ? "Retry capture" : "Capture & verify"}
                     </Button>
                   )}
 
