@@ -43,6 +43,19 @@ export async function detectFromImage(
   };
 }
 
+// Fast box-only detection for the live camera oval guide (no landmarks/descriptors
+// → cheap enough to run a few times a second). Returns face count + largest box.
+export async function detectFaceBox(
+  input: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement
+): Promise<{ count: number; box: { x: number; y: number; width: number; height: number } | null }> {
+  const faceapi = await getFaceApi();
+  const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+  const all = await faceapi.detectAllFaces(input, opts);
+  if (!all.length) return { count: 0, box: null };
+  const best = all.slice().sort((a: any, b: any) => b.box.width * b.box.height - a.box.width * a.box.height)[0];
+  return { count: all.length, box: best.box };
+}
+
 function euclidean(a: Float32Array, b: Float32Array): number {
   let s = 0;
   for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; }
@@ -171,6 +184,10 @@ export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, fac
   const mouth    = regionStat(data, W, H, fx + 0.30 * fw, fy + 0.72 * fh, fx + 0.70 * fw, fy + 0.95 * fh);
   const eyes     = regionStat(data, W, H, fx + 0.18 * fw, fy + 0.30 * fh, fx + 0.82 * fw, fy + 0.50 * fh);
   const forehead = regionStat(data, W, H, fx + 0.28 * fw, fy + 0.04 * fh, fx + 0.72 * fw, fy + 0.20 * fh);
+  // Nose bridge (between the eyes): smooth skin bare-faced, but a glasses bridge
+  // bar / frame rims put strong edges + often bright reflections right here — a
+  // far more reliable glasses signal than the always-edgy eye band.
+  const bridge   = regionStat(data, W, H, fx + 0.42 * fw, fy + 0.32 * fh, fx + 0.58 * fw, fy + 0.46 * fh);
 
   const cw = W * 0.18, ch = H * 0.18;
   const corners = [
@@ -187,8 +204,11 @@ export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, fac
   const frontal = isFrontal(result.landmarks);
   const sizeOk  = (fw * fh) / (W * H) > 0.05;
   const sharp   = laplacianVar(canvas) > 45;
+  const baseEdge  = Math.max(4, skin.edge);                 // smooth-cheek edge baseline (lighting-normalised)
   const noMask    = colorDist(mouth, skin) < 62;            // mask = colour block over mouth/chin
-  const noGlasses = eyes.edge < 27;                         // frames = strong edges across eye band
+  // Glasses: a bare nose bridge is smooth skin (edge ≈ cheek). A frame/bridge bar
+  // there raises edges well above the cheek baseline; lens reflections add brightness.
+  const noGlasses = (bridge.edge / baseEdge) < 1.7 && !(bridge.lumaVar > 240 && bridge.r > skin.r + 25);
   const noHat     = !(colorDist(forehead, skin) > 66 && forehead.lumaVar < 42); // flat non-skin forehead
   const plainBg   = bgSpread < 36 && bgTexture < 17;
 

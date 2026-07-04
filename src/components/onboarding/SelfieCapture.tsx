@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, Camera, RefreshCw, Check, X, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { loadFaceModels, detectFromImage, assessQuality, type QualityResult } from "@/lib/face-verify-client";
+import { loadFaceModels, detectFromImage, detectFaceBox, assessQuality, type QualityResult } from "@/lib/face-verify-client";
 
 // Live front-camera selfie with on-device face-quality checks (single face,
 // frontal, size, sharpness, plain background, no mask/glasses/hat). Produces a
@@ -23,6 +23,7 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<QualityResult | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [centered, setCentered] = useState(false); // face inside the oval guide
 
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -62,6 +63,29 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
   }, [camStarted, facing, stop]);
 
   useEffect(() => () => stop(), [stop]);
+
+  // Live oval guide: a few times a second, detect the face box and decide if it
+  // sits centered + large enough inside the guide → green oval, else red.
+  useEffect(() => {
+    if (!camStarted || preview || !modelsReady) { setCentered(false); return; }
+    let stopped = false, running = false;
+    const id = setInterval(async () => {
+      const v = videoRef.current;
+      if (running || !v || !v.videoWidth) return;
+      running = true;
+      try {
+        const { count, box } = await detectFaceBox(v);
+        if (stopped) return;
+        if (count === 1 && box) {
+          const cx = (box.x + box.width / 2) / v.videoWidth;
+          const cy = (box.y + box.height / 2) / v.videoHeight;
+          const wR = box.width / v.videoWidth;
+          setCentered(cx > 0.34 && cx < 0.66 && cy > 0.26 && cy < 0.72 && wR > 0.28 && wR < 0.82);
+        } else setCentered(false);
+      } catch { /* ignore */ } finally { running = false; }
+    }, 450);
+    return () => { stopped = true; clearInterval(id); };
+  }, [camStarted, preview, modelsReady]);
 
   async function capture() {
     const v = videoRef.current;
@@ -119,6 +143,20 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
                 ) : (
                   <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" style={{ transform: facing === "user" ? "scaleX(-1)" : undefined }} />
                 )}
+                {/* Face-centering oval guide — green when the face is centered. */}
+                {!preview && (
+                  <>
+                    <div
+                      className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-[3px] border-dashed transition-colors"
+                      style={{ width: "64%", height: "74%", borderColor: centered ? "#22c55e" : "#f43f5e" }}
+                    />
+                    <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
+                      <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium text-white", centered ? "bg-emerald-600/85" : "bg-rose-600/85")}>
+                        {centered ? "Perfect — hold still & capture" : "Center your face in the oval"}
+                      </span>
+                    </div>
+                  </>
+                )}
                 {busy && <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white"><Loader2 className="animate-spin" size={22} /></div>}
                 {hasMulti && !preview && (
                   <button type="button" onClick={() => setFacing((f) => (f === "user" ? "environment" : "user"))} className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-[11px] text-white hover:bg-black/70">
@@ -151,8 +189,9 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
               )}
 
               {!preview ? (
-                <Button className="w-full" onClick={capture} disabled={busy || !modelsReady || !!camErr}>
-                  {busy ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />} {modelsReady ? "Capture" : "Loading checks…"}
+                <Button className="w-full" onClick={capture} disabled={busy || !modelsReady || !!camErr || !centered}>
+                  {busy ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}{" "}
+                  {!modelsReady ? "Loading checks…" : !centered ? "Center your face…" : "Capture"}
                 </Button>
               ) : result?.pass ? (
                 <Button className="w-full" onClick={useIt}><Check size={15} /> Use this photo</Button>
