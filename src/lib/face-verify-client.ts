@@ -100,3 +100,107 @@ export function verifyAgainst(ref: Float32Array, live: FaceResult, frameArea: nu
   ];
   return { pass: identity && single && frontal && sizeOk && confident, similarity, distance, checks };
 }
+
+// ── Photo-quality / anti-spoof checks (identity-independent) ─────────────────
+// All computed locally from pixels + face-api landmarks. The occlusion checks
+// (glasses / mask / hat) are heuristic — tuned to block clear cases without
+// rejecting normal selfies; thresholds live here for easy tuning.
+
+export interface QualityCheck { key: string; label: string; pass: boolean }
+export interface QualityResult { pass: boolean; checks: QualityCheck[]; sharpness: number }
+
+/** Sharpness via Laplacian variance on a downscaled copy — low = blurry. */
+export function laplacianVar(src: HTMLCanvasElement): number {
+  const maxDim = 320;
+  const scale = Math.min(1, maxDim / Math.max(src.width, src.height));
+  const w = Math.max(1, Math.round(src.width * scale));
+  const h = Math.max(1, Math.round(src.height * scale));
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const ctx = c.getContext("2d")!; ctx.drawImage(src, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const gray = new Float64Array(w * h);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) gray[p] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+  let sum = 0, sumSq = 0, cnt = 0;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const idx = y * w + x;
+    const lap = 4 * gray[idx] - gray[idx - 1] - gray[idx + 1] - gray[idx - w] - gray[idx + w];
+    sum += lap; sumSq += lap * lap; cnt++;
+  }
+  const mean = cnt ? sum / cnt : 0;
+  return cnt ? sumSq / cnt - mean * mean : 0;
+}
+
+interface RStat { r: number; g: number; b: number; lumaVar: number; edge: number; n: number }
+function regionStat(data: Uint8ClampedArray, W: number, H: number, x0: number, y0: number, x1: number, y1: number): RStat {
+  x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0));
+  x1 = Math.min(W, Math.ceil(x1));  y1 = Math.min(H, Math.ceil(y1));
+  let r = 0, g = 0, b = 0, ls = 0, lss = 0, edge = 0, n = 0, en = 0;
+  const step = Math.max(1, Math.floor(Math.min(x1 - x0, y1 - y0) / 40) || 1);
+  for (let y = y0; y < y1; y += step) for (let x = x0; x < x1; x += step) {
+    const i = (y * W + x) * 4;
+    const R = data[i], G = data[i + 1], B = data[i + 2];
+    r += R; g += G; b += B;
+    const lum = 0.299 * R + 0.587 * G + 0.114 * B;
+    ls += lum; lss += lum * lum; n++;
+    const xr = Math.min(W - 1, x + step);
+    const j = (y * W + xr) * 4;
+    const lum2 = 0.299 * data[j] + 0.587 * data[j + 1] + 0.114 * data[j + 2];
+    edge += Math.abs(lum - lum2); en++;
+  }
+  if (!n) return { r: 0, g: 0, b: 0, lumaVar: 0, edge: 0, n: 0 };
+  const mean = ls / n;
+  return { r: r / n, g: g / n, b: b / n, lumaVar: Math.max(0, lss / n - mean * mean), edge: en ? edge / en : 0, n };
+}
+function colorDist(a: RStat, b: RStat): number {
+  return Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);
+}
+
+/**
+ * Full photo-quality assessment for a captured face frame. Blur + single-face +
+ * frontal + size are reliable; plain-background + glasses/mask/hat are heuristic
+ * (cheek-skin reference vs region colour/texture).
+ */
+export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, faceCount: number): QualityResult {
+  const W = canvas.width, H = canvas.height;
+  const data = canvas.getContext("2d")!.getImageData(0, 0, W, H).data;
+  const { x: fx, y: fy, width: fw, height: fh } = result.box;
+
+  const skinL = regionStat(data, W, H, fx + 0.12 * fw, fy + 0.48 * fh, fx + 0.32 * fw, fy + 0.66 * fh);
+  const skinR = regionStat(data, W, H, fx + 0.68 * fw, fy + 0.48 * fh, fx + 0.88 * fw, fy + 0.66 * fh);
+  const skin: RStat = { r: (skinL.r + skinR.r) / 2, g: (skinL.g + skinR.g) / 2, b: (skinL.b + skinR.b) / 2, lumaVar: (skinL.lumaVar + skinR.lumaVar) / 2, edge: (skinL.edge + skinR.edge) / 2, n: skinL.n + skinR.n };
+  const mouth    = regionStat(data, W, H, fx + 0.30 * fw, fy + 0.72 * fh, fx + 0.70 * fw, fy + 0.95 * fh);
+  const eyes     = regionStat(data, W, H, fx + 0.18 * fw, fy + 0.30 * fh, fx + 0.82 * fw, fy + 0.50 * fh);
+  const forehead = regionStat(data, W, H, fx + 0.28 * fw, fy + 0.04 * fh, fx + 0.72 * fw, fy + 0.20 * fh);
+
+  const cw = W * 0.18, ch = H * 0.18;
+  const corners = [
+    regionStat(data, W, H, 0, 0, cw, ch),
+    regionStat(data, W, H, W - cw, 0, W, ch),
+    regionStat(data, W, H, 0, H - ch, cw, H),
+    regionStat(data, W, H, W - cw, H - ch, W, H),
+  ];
+  const bgR = corners.reduce((s, c) => s + c.r, 0) / 4, bgG = corners.reduce((s, c) => s + c.g, 0) / 4, bgB = corners.reduce((s, c) => s + c.b, 0) / 4;
+  const bgSpread = corners.reduce((s, c) => s + Math.sqrt((c.r - bgR) ** 2 + (c.g - bgG) ** 2 + (c.b - bgB) ** 2), 0) / 4;
+  const bgTexture = corners.reduce((s, c) => s + c.edge, 0) / 4;
+
+  const single  = faceCount === 1;
+  const frontal = isFrontal(result.landmarks);
+  const sizeOk  = (fw * fh) / (W * H) > 0.05;
+  const sharp   = laplacianVar(canvas) > 45;
+  const noMask    = colorDist(mouth, skin) < 62;            // mask = colour block over mouth/chin
+  const noGlasses = eyes.edge < 27;                         // frames = strong edges across eye band
+  const noHat     = !(colorDist(forehead, skin) > 66 && forehead.lumaVar < 42); // flat non-skin forehead
+  const plainBg   = bgSpread < 36 && bgTexture < 17;
+
+  const checks: QualityCheck[] = [
+    { key: "single",    label: "Only one person in frame",       pass: single },
+    { key: "frontal",   label: "Looking straight at the camera",  pass: frontal },
+    { key: "size",      label: "Face close enough to the camera", pass: sizeOk },
+    { key: "sharp",     label: "Photo is sharp (not blurry)",     pass: sharp },
+    { key: "nomask",    label: "Face uncovered — no mask",        pass: noMask },
+    { key: "noglasses", label: "No glasses / spectacles",         pass: noGlasses },
+    { key: "nohat",     label: "Head uncovered — no cap / hat",   pass: noHat },
+    { key: "plainbg",   label: "Plain, uncluttered background",   pass: plainBg },
+  ];
+  return { pass: checks.every((c) => c.pass), checks, sharpness: laplacianVar(canvas) };
+}
