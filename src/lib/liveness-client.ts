@@ -80,16 +80,9 @@ export type ChallengeType = "blink" | "turn_left" | "turn_right" | "smile";
 export interface Challenge { type: ChallengeType; label: string; target: number }
 
 export function makeChallengeSequence(): Challenge[] {
-  const blinkN = 2 + Math.floor(Math.random() * 2); // 2 or 3
-  const pool: Challenge[] = [
-    { type: "blink", label: `Blink your eyes ${blinkN} times`, target: blinkN },
-    { type: "turn_left", label: "Slowly turn your head to the LEFT", target: 1 },
-    { type: "turn_right", label: "Slowly turn your head to the RIGHT", target: 1 },
-    { type: "smile", label: "Give a big SMILE", target: 1 },
-  ];
-  // Fisher–Yates shuffle, take 3 (blink first if present feels natural, but random is stronger)
-  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  return pool.slice(0, 3);
+  // Kept intentionally light: a single blink is enough to prove a live person
+  // (a printed photo / static screen can't blink) without a tiring multi-step flow.
+  return [{ type: "blink", label: "Blink once to confirm you're live", target: 1 }];
 }
 
 // Per-challenge progress tracker. Feed frames; returns updated internal state.
@@ -118,30 +111,27 @@ export function stepChallenge(ch: Challenge, s: FrameSignals, p: ChallengeProgre
 // ── Risk scoring ─────────────────────────────────────────────────────────────
 export interface RiskInput {
   faceDetected: boolean;
-  qualityPass: boolean;   // blur/size/exposure/plain-bg from assessQuality
+  qualityPass: boolean;   // shape/blur/size/plain-bg from assessQuality
   noSunglassesMask: boolean;
-  eyesVisible: boolean;
-  livenessPass: boolean;  // all challenges completed
-  headMovement: boolean;  // at least one turn challenge done
+  eyesVisible: boolean;   // eyes open, looking at camera ("eye-ball read")
+  livenessPass: boolean;  // the single blink completed
   identityMatch?: boolean | null; // null when no reference photo
 }
 export interface RiskResult { score: number; max: number; pass: boolean; breakdown: { label: string; got: number; of: number }[] }
 
-// Weighted score (matches the enterprise spec). Passive CNN anti-spoof (20) is
-// reserved for the backend phase and excluded from the client max.
+// Lightweight weighted score. Head-movement challenge removed for ease; passive
+// CNN anti-spoof stays a backend-phase item.
 export function scoreRisk(i: RiskInput): RiskResult {
   const rows: { label: string; got: number; of: number }[] = [
     { label: "Face detected", got: i.faceDetected ? 5 : 0, of: 5 },
     { label: "Image quality", got: i.qualityPass ? 10 : 0, of: 10 },
-    { label: "No sunglasses / mask", got: i.noSunglassesMask ? 10 : 0, of: 10 },
+    { label: "Nothing on face (no glasses/mask)", got: i.noSunglassesMask ? 10 : 0, of: 10 },
     { label: "Eyes visible", got: i.eyesVisible ? 10 : 0, of: 10 },
-    { label: "Blink challenge", got: i.livenessPass ? 10 : 0, of: 10 },
-    { label: "Head movement", got: i.headMovement ? 10 : 0, of: 10 },
+    { label: "Live blink", got: i.livenessPass ? 10 : 0, of: 10 },
   ];
   if (i.identityMatch != null) rows.push({ label: "Face match", got: i.identityMatch ? 15 : 0, of: 15 });
   const score = rows.reduce((s, r) => s + r.got, 0);
   const max = rows.reduce((s, r) => s + r.of, 0);
-  // Approve at ≥90% of the achievable score AND liveness+quality must be present.
   const pass = i.livenessPass && i.qualityPass && i.faceDetected && (i.identityMatch !== false) && score / max >= 0.9;
   return { score, max, pass, breakdown: rows };
 }

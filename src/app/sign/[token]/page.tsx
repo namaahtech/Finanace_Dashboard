@@ -378,18 +378,16 @@ export default function SignPage() {
       const q = assessQuality(canvas, result, faces);
       const qChecks = q.checks.map((c) => ({ label: c.label, pass: c.pass }));
       const noSun = (q.checks.find((c) => c.key === "noglasses")?.pass ?? true) && (q.checks.find((c) => c.key === "nomask")?.pass ?? true);
-      const headMoved = challengesRef.current.some((c) => c.type === "turn_left" || c.type === "turn_right");
       const hasRef = !(refMissing || !refDescRef.current);
       const verdict = hasRef ? verifyAgainst(refDescRef.current!, result, canvas.width * canvas.height, faces) : null;
 
-      // Weighted enterprise risk score (liveness already completed to reach here).
+      // Weighted risk score (liveness already completed to reach here).
       const risk = scoreRisk({
         faceDetected: true,
         qualityPass: q.pass,
         noSunglassesMask: noSun,
-        eyesVisible: q.checks.find((c) => c.key === "frontal")?.pass ?? true,
+        eyesVisible: q.checks.find((c) => c.key === "eyes")?.pass ?? true,
         livenessPass: doneRef.current,
-        headMovement: headMoved,
         identityMatch: hasRef ? !!verdict?.pass : null,
       });
 

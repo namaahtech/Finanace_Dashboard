@@ -71,6 +71,13 @@ function center(pts: any[]): { x: number; y: number } {
   for (const p of pts) { x += p.x; y += p.y; }
   return { x: x / pts.length, y: y / pts.length };
 }
+// Eye Aspect Ratio from a face-api 6-point eye — high open, ~0 closed.
+function eyeEAR(eye: Array<{ x: number; y: number }>): number {
+  if (!eye || eye.length < 6) return 0.3;
+  const d = (a: any, b: any) => Math.hypot(a.x - b.x, a.y - b.y);
+  return (d(eye[1], eye[5]) + d(eye[2], eye[4])) / (2 * (d(eye[0], eye[3]) || 1));
+}
+
 // Frontal-pose proxy: nose tip should sit near the midpoint between the eyes.
 function isFrontal(landmarks: any): boolean {
   try {
@@ -209,7 +216,6 @@ export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, fac
   const skin: RStat = { r: (skinL.r + skinR.r) / 2, g: (skinL.g + skinR.g) / 2, b: (skinL.b + skinR.b) / 2, lumaVar: (skinL.lumaVar + skinR.lumaVar) / 2, edge: (skinL.edge + skinR.edge) / 2, bright: (skinL.bright + skinR.bright) / 2, n: skinL.n + skinR.n };
   const mouth    = regionStat(data, W, H, fx + 0.30 * fw, fy + 0.72 * fh, fx + 0.70 * fw, fy + 0.95 * fh);
   const eyes     = regionStat(data, W, H, fx + 0.18 * fw, fy + 0.30 * fh, fx + 0.82 * fw, fy + 0.50 * fh);
-  const forehead = regionStat(data, W, H, fx + 0.28 * fw, fy + 0.04 * fh, fx + 0.72 * fw, fy + 0.20 * fh);
   // Nose bridge (between the eyes): smooth skin bare-faced, but a glasses bridge
   // bar / frame rims put strong edges + often bright reflections right here — a
   // far more reliable glasses signal than the always-edgy eye band.
@@ -224,31 +230,37 @@ export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, fac
   ];
   const bgR = corners.reduce((s, c) => s + c.r, 0) / 4, bgG = corners.reduce((s, c) => s + c.g, 0) / 4, bgB = corners.reduce((s, c) => s + c.b, 0) / 4;
   const bgSpread = corners.reduce((s, c) => s + Math.sqrt((c.r - bgR) ** 2 + (c.g - bgG) ** 2 + (c.b - bgB) ** 2), 0) / 4;
-  const bgTexture = corners.reduce((s, c) => s + c.edge, 0) / 4;
 
   const single  = faceCount === 1;
   const frontal = isFrontal(result.landmarks);
+  // "Eye-ball read": eyes open + looking at camera (EAR from the eye landmarks).
+  let earOpen = true;
+  try {
+    const le = result.landmarks.getLeftEye?.() || [];
+    const re = result.landmarks.getRightEye?.() || [];
+    earOpen = (eyeEAR(le) + eyeEAR(re)) / 2 > 0.15;
+  } catch { /* keep true if landmarks unavailable */ }
   const sizeOk  = (fw * fh) / (W * H) > 0.05;
   const sharp   = laplacianVar(canvas) > 45;
-  const baseEdge  = Math.max(4, skin.edge);                 // smooth-cheek edge baseline (lighting-normalised)
+  const baseEdge  = Math.max(4, skin.edge);
   const noMask    = colorDist(mouth, skin) < 62;            // mask = colour block over mouth/chin
-  // Glasses: a bare nose bridge / eye area has edges (nose, brows) but NO glare.
-  // Require BOTH elevated bridge edges AND a lens reflection (bright specular
-  // pixels) so a bare, un-bespectacled face never trips it.
+  // Glasses: require BOTH elevated bridge edges AND a lens reflection, so a bare
+  // face never trips it (catches "anything on the face" over the eyes).
   const glareFrac = Math.max(bridge.bright, eyes.bright);
   const noGlasses = !((bridge.edge / baseEdge) > 2.0 && glareFrac > 0.05);
-  const noHat     = !(colorDist(forehead, skin) > 66 && forehead.lumaVar < 42); // flat non-skin forehead
-  const plainBg   = bgSpread < 36 && bgTexture < 17;
+  // Plain background = ONE uniform colour (any colour). Only the 4 corners being
+  // similar to each other matters — brightness/texture don't. Rejects mixed /
+  // cluttered backgrounds only.
+  const plainBg   = bgSpread < 44;
 
   const checks: QualityCheck[] = [
-    { key: "single",    label: "Only one person in frame",       pass: single },
-    { key: "frontal",   label: "Looking straight at the camera",  pass: frontal },
-    { key: "size",      label: "Face close enough to the camera", pass: sizeOk },
-    { key: "sharp",     label: "Photo is sharp (not blurry)",     pass: sharp },
-    { key: "nomask",    label: "Face uncovered — no mask",        pass: noMask },
-    { key: "noglasses", label: "No glasses / spectacles",         pass: noGlasses },
-    { key: "nohat",     label: "Head uncovered — no cap / hat",   pass: noHat },
-    { key: "plainbg",   label: "Plain, uncluttered background",   pass: plainBg },
+    { key: "single",    label: "Only one person in frame",         pass: single },
+    { key: "eyes",      label: "Eyes open, looking at camera",     pass: earOpen && frontal },
+    { key: "size",      label: "Face close enough to the camera",  pass: sizeOk },
+    { key: "sharp",     label: "Photo is sharp (not blurry)",      pass: sharp },
+    { key: "nomask",    label: "Face uncovered — no mask",         pass: noMask },
+    { key: "noglasses", label: "Nothing on the face — no glasses", pass: noGlasses },
+    { key: "plainbg",   label: "Plain single-colour background",   pass: plainBg },
   ];
   return { pass: checks.every((c) => c.pass), checks, sharpness: laplacianVar(canvas) };
 }
