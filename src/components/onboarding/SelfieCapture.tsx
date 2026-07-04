@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, Camera, RefreshCw, Check, X, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { loadFaceModels, detectFromImage, detectFaceBox, assessQuality, type QualityResult } from "@/lib/face-verify-client";
+import { loadFaceModels, detectFromImage, detectLive, assessQuality, type QualityResult } from "@/lib/face-verify-client";
 
 // Live front-camera selfie with on-device face-quality checks (single face,
 // frontal, size, sharpness, plain background, no mask/glasses/hat). Produces a
@@ -24,6 +24,8 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
   const [result, setResult] = useState<QualityResult | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [centered, setCentered] = useState(false); // face inside the oval guide
+  const [blinked, setBlinked] = useState(false);   // liveness: a real blink was seen
+  const blinkStage = useRef<"open" | "wasOpen" | "wasClosed">("open");
 
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -64,8 +66,9 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
 
   useEffect(() => () => stop(), [stop]);
 
-  // Live oval guide: a few times a second, detect the face box and decide if it
-  // sits centered + large enough inside the guide → green oval, else red.
+  // Live loop: centering oval + blink liveness. Detects the face box (centering)
+  // and eye-openness (EAR) each tick; a real open→closed→open blink flips liveness
+  // on — a printed photo or a face on another screen can't blink.
   useEffect(() => {
     if (!camStarted || preview || !modelsReady) { setCentered(false); return; }
     let stopped = false, running = false;
@@ -74,16 +77,22 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
       if (running || !v || !v.videoWidth) return;
       running = true;
       try {
-        const { count, box } = await detectFaceBox(v);
+        const { count, box, ear } = await detectLive(v);
         if (stopped) return;
         if (count === 1 && box) {
           const cx = (box.x + box.width / 2) / v.videoWidth;
           const cy = (box.y + box.height / 2) / v.videoHeight;
           const wR = box.width / v.videoWidth;
           setCentered(cx > 0.34 && cx < 0.66 && cy > 0.26 && cy < 0.72 && wR > 0.28 && wR < 0.82);
-        } else setCentered(false);
+          if (ear != null) {
+            const st = blinkStage.current;
+            if (st === "open" && ear > 0.26) blinkStage.current = "wasOpen";
+            else if (st === "wasOpen" && ear < 0.16) blinkStage.current = "wasClosed";
+            else if (st === "wasClosed" && ear > 0.24) { blinkStage.current = "open"; setBlinked(true); }
+          }
+        } else { setCentered(false); }
       } catch { /* ignore */ } finally { running = false; }
-    }, 450);
+    }, 220);
     return () => { stopped = true; clearInterval(id); };
   }, [camStarted, preview, modelsReady]);
 
@@ -114,7 +123,12 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
   }
 
   function useIt() { if (fileRef.current) { stop(); onCapture(fileRef.current); } }
-  function retake() { setResult(null); if (preview) URL.revokeObjectURL(preview); setPreview(null); fileRef.current = null; }
+  function retake() {
+    setResult(null);
+    if (preview) URL.revokeObjectURL(preview);
+    setPreview(null); fileRef.current = null;
+    setBlinked(false); blinkStage.current = "open"; // re-require a live blink
+  }
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
@@ -151,8 +165,8 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
                       style={{ width: "64%", height: "74%", borderColor: centered ? "#22c55e" : "#f43f5e" }}
                     />
                     <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
-                      <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium text-white", centered ? "bg-emerald-600/85" : "bg-rose-600/85")}>
-                        {centered ? "Perfect — hold still & capture" : "Center your face in the oval"}
+                      <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium text-white", centered && blinked ? "bg-emerald-600/85" : "bg-rose-600/85")}>
+                        {!centered ? "Center your face in the oval" : !blinked ? "Now blink once (slowly) to confirm you're live" : "Live confirmed — hold still & capture"}
                       </span>
                     </div>
                   </>
@@ -189,9 +203,9 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
               )}
 
               {!preview ? (
-                <Button className="w-full" onClick={capture} disabled={busy || !modelsReady || !!camErr || !centered}>
+                <Button className="w-full" onClick={capture} disabled={busy || !modelsReady || !!camErr || !centered || !blinked}>
                   {busy ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}{" "}
-                  {!modelsReady ? "Loading checks…" : !centered ? "Center your face…" : "Capture"}
+                  {!modelsReady ? "Loading checks…" : !centered ? "Center your face…" : !blinked ? "Blink to confirm…" : "Capture"}
                 </Button>
               ) : result?.pass ? (
                 <Button className="w-full" onClick={useIt}><Check size={15} /> Use this photo</Button>
