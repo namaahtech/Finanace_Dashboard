@@ -32,9 +32,10 @@ import {
 import {
   Users, IndianRupee, Loader2, Plus, Pencil, Trash2, CheckCircle2,
   Clock, AlertCircle, Sparkles, Download, FileText, History, ListChecks,
-  Settings, Eye,
+  Settings, Eye, CalendarDays, Activity, UserSearch,
 } from "lucide-react";
-import { bufferDays } from "@/lib/internshipMath";
+import { bufferDays, DEFAULT_FREE_HOLIDAYS } from "@/lib/internshipMath";
+import { InternsSummary } from "@/components/interns/InternsSummary";
 import dayjs from "dayjs";
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ interface Cycle {
   gross_amount: number;
   deductions: number;
   net_amount: number;
+  amount_paid: number;
   payment_status: "pending" | "paid" | "failed";
   payment_date: string | null;
   payment_ref: string | null;
@@ -115,7 +117,7 @@ export default function InternshipStipendPage() {
   const today = new Date();
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [year, setYear]   = useState(today.getFullYear());
-  const [tab, setTab]     = useState<"cycles" | "roster" | "history">("cycles");
+  const [tab, setTab]     = useState<"cycles" | "roster" | "history" | "summary">("cycles");
 
   // Data
   const [interns, setInterns]   = useState<Intern[]>([]);
@@ -136,13 +138,17 @@ export default function InternshipStipendPage() {
   const [cycleForm, setCycleForm] = useState({
     paid_days: "30",
     buffer_paid_days: "0",
+    extra_leave_days: "0",
     deductions: "0",
+    amount_paid: "0",
     payment_status: "pending" as Cycle["payment_status"],
     payment_date: "",
     payment_ref: "",
     notes: "",
   });
   const [cycleSaving, setCycleSaving] = useState(false);
+  // Carry-forward context for the month being paid (excess from the previous month).
+  const [cycleCarry, setCycleCarry] = useState<{ carry_in: number; net: number; from: { month: number; year: number } | null } | null>(null);
 
   // Clear Backlog dialog
   const [backlogOpen, setBacklogOpen] = useState(false);
@@ -387,18 +393,39 @@ export default function InternshipStipendPage() {
   }
 
   // ─── Cycle dialog actions ───────────────────────────────────────────────
-  function openCycle(c: Cycle) {
+  async function openCycle(c: Cycle) {
     setCycleEditing(c);
     setCycleForm({
       paid_days:        String(c.paid_days),
       buffer_paid_days: String(c.buffer_paid_days ?? 0),
+      extra_leave_days: String(c.extra_leave_days ?? 0),
       deductions:       String(c.deductions),
+      amount_paid:      String(c.amount_paid || c.net_amount),
       payment_status:   c.payment_status,
       payment_date:     c.payment_date ?? dayjs().format("YYYY-MM-DD"),
       payment_ref:      c.payment_ref ?? "",
       notes:            c.notes ?? "",
     });
+    setCycleCarry(null);
     setCycleOpen(true);
+
+    // Look up carry-forward for THIS month (from earlier over-payments) so the
+    // dialog can show how much is really owed and auto-fill the amount to pay.
+    try {
+      const res = await fetch(`/api/interns/${c.intern_id}/summary?year=${c.year}`);
+      const j = await res.json();
+      if (res.ok) {
+        const tm = (j.months || []).find((x: any) => x.month === c.month);
+        const carry_in = Number(tm?.carry_in ?? 0);
+        const net = Number(tm?.net ?? c.net_amount);
+        const from = tm?.carry_from ?? null;
+        setCycleCarry({ carry_in, net, from });
+        // Auto-allot the carry: only the remainder needs to be paid this month.
+        if (c.payment_status !== "paid" && carry_in > 0) {
+          setCycleForm((f) => ({ ...f, amount_paid: String(Math.max(0, net - carry_in)) }));
+        }
+      }
+    } catch { /* carry lookup is best-effort */ }
   }
 
   async function saveCycle(e: React.FormEvent) {
@@ -408,16 +435,25 @@ export default function InternshipStipendPage() {
     try {
       const paid_days        = Number(cycleForm.paid_days);
       const buffer_paid_days = Number(cycleForm.buffer_paid_days);
+      const extra_leave_days = Math.max(0, Number(cycleForm.extra_leave_days) || 0);
       const deductions       = Number(cycleForm.deductions);
-      const gross = Math.round((cycleEditing.stipend_amount / 30) * (paid_days + buffer_paid_days));
+      // Extra holidays beyond the free allowance are LOP — they reduce paid days.
+      const effective_days = Math.max(0, paid_days + buffer_paid_days - extra_leave_days);
+      const gross = Math.round((cycleEditing.stipend_amount / 30) * effective_days);
       const body = {
         intern_id:        cycleEditing.intern_id,
         month:            cycleEditing.month,
         year:             cycleEditing.year,
         paid_days,
         buffer_paid_days,
+        extra_leave_days,
+        // Keep total holidays coherent with the extra (LOP) count so the summary
+        // never shows "6 (incl. N extra)" where N > the total.
+        holidays_taken:   DEFAULT_FREE_HOLIDAYS + extra_leave_days,
         deductions,
         gross_amount:     gross,
+        // Actual amount credited — full = Paid, less = Half-paid, more = Over-paid.
+        amount_paid:      cycleForm.payment_status === "paid" ? Math.max(0, Number(cycleForm.amount_paid) || 0) : 0,
         payment_status:   cycleForm.payment_status,
         payment_date:     cycleForm.payment_status === "paid" ? cycleForm.payment_date || null : null,
         payment_ref:      cycleForm.payment_ref.trim() || null,
@@ -451,8 +487,10 @@ export default function InternshipStipendPage() {
     if (!cycleEditing) return 0;
     const pd = Number(cycleForm.paid_days) || 0;
     const bpd = Number(cycleForm.buffer_paid_days) || 0;
-    return Math.round((cycleEditing.stipend_amount / 30) * (pd + bpd));
-  }, [cycleEditing, cycleForm.paid_days, cycleForm.buffer_paid_days]);
+    const extra = Math.max(0, Number(cycleForm.extra_leave_days) || 0);
+    const eff = Math.max(0, pd + bpd - extra);
+    return Math.round((cycleEditing.stipend_amount / 30) * eff);
+  }, [cycleEditing, cycleForm.paid_days, cycleForm.buffer_paid_days, cycleForm.extra_leave_days]);
   const cycleNet = useMemo(() => Math.max(0, cycleGross - Number(cycleForm.deductions || 0)), [cycleGross, cycleForm.deductions]);
 
   // CSV export of current month cycles
@@ -509,10 +547,24 @@ export default function InternshipStipendPage() {
             </Button>
           )}
           <Button asChild variant="outline" size="sm">
-            <Link href="/admin/payroll/internship/settings">
-              <Settings className="mr-1.5 h-3.5 w-3.5" /> Settings
+            <Link href="/admin/payroll/internship/manage">
+              <CalendarDays className="mr-1.5 h-3.5 w-3.5" /> Holidays &amp; Payments
             </Link>
           </Button>
+          {user?.role === "admin" && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/payroll/internship/activity">
+                <Activity className="mr-1.5 h-3.5 w-3.5" /> Intern Activity
+              </Link>
+            </Button>
+          )}
+          {user?.role === "admin" && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/payroll/internship/settings">
+                <Settings className="mr-1.5 h-3.5 w-3.5" /> Settings
+              </Link>
+            </Button>
+          )}
         </div>
       }
     >
@@ -544,8 +596,14 @@ export default function InternshipStipendPage() {
             <TabsTrigger value="cycles"><ListChecks className="mr-1.5 h-3.5 w-3.5" /> {MONTHS[month - 1]} {year}</TabsTrigger>
             <TabsTrigger value="roster"><Users className="mr-1.5 h-3.5 w-3.5" /> Roster ({interns.length})</TabsTrigger>
             <TabsTrigger value="history"><History className="mr-1.5 h-3.5 w-3.5" /> Payment History</TabsTrigger>
+            <TabsTrigger value="summary"><UserSearch className="mr-1.5 h-3.5 w-3.5" /> Interns Summary</TabsTrigger>
           </TabsList>
         </Tabs>
+
+        {/* ── Interns Summary Tab ──────────────────────────────────────── */}
+        {tab === "summary" && (
+          <InternsSummary interns={interns.map((i) => ({ id: i.id, full_name: i.full_name, intern_id: i.intern_id }))} />
+        )}
 
         {/* ── Cycles Tab ───────────────────────────────────────────────── */}
         {tab === "cycles" && (
@@ -862,7 +920,7 @@ export default function InternshipStipendPage() {
                 <Separator />
                 <div className="flex justify-between text-sm">
                   <span>
-                    Gross ({cycleForm.paid_days} days{Number(cycleForm.buffer_paid_days) > 0 ? ` + ${cycleForm.buffer_paid_days} buffer` : ""})
+                    Gross ({cycleForm.paid_days} days{Number(cycleForm.buffer_paid_days) > 0 ? ` + ${cycleForm.buffer_paid_days} buffer` : ""}{Number(cycleForm.extra_leave_days) > 0 ? ` − ${cycleForm.extra_leave_days} extra holiday(s)` : ""})
                   </span>
                   <span className="font-semibold tabular-nums">{formatCurrency(cycleGross)}</span>
                 </div>
@@ -877,6 +935,27 @@ export default function InternshipStipendPage() {
                 </div>
               </div>
 
+              {/* Carry-forward from earlier over-payment(s) */}
+              {cycleCarry && cycleCarry.carry_in > 0 && (
+                <div className="rounded-md border border-sky-500/30 bg-sky-500/[0.06] p-3 text-xs space-y-1">
+                  <div className="font-semibold text-sky-700 dark:text-sky-400">
+                    ↩ {formatCurrency(cycleCarry.carry_in)} carried over{cycleCarry.from ? ` from ${MONTHS[cycleCarry.from.month - 1]} ${cycleCarry.from.year}` : " from earlier"} (over-payment)
+                  </div>
+                  <p className="text-foreground">
+                    Net owed <b className="tabular-nums">{formatCurrency(cycleCarry.net)}</b> − carried{" "}
+                    <b className="tabular-nums">{formatCurrency(Math.min(cycleCarry.carry_in, cycleCarry.net))}</b> ={" "}
+                    {cycleCarry.net - cycleCarry.carry_in <= 0 ? (
+                      <b className="text-emerald-600">fully covered — nothing to pay this month.</b>
+                    ) : (
+                      <>
+                        <b className="text-emerald-600 tabular-nums">{formatCurrency(cycleCarry.net - cycleCarry.carry_in)} to pay</b>
+                        {" "}<span className="text-muted-foreground">(auto-filled in Amount Paid below).</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+
               {/* Buffer info for context */}
               <div className="rounded-md border bg-amber-500/[0.05] border-amber-500/20 p-3 text-xs space-y-1">
                 <div className="flex items-center justify-between">
@@ -889,7 +968,7 @@ export default function InternshipStipendPage() {
               </div>
 
               {/* Override fields */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Paid Days</Label>
                   <Input type="number" min={0} max={31} value={cycleForm.paid_days} onChange={(e) => setCycleForm({ ...cycleForm, paid_days: e.target.value })} className="tabular-nums" />
@@ -899,10 +978,17 @@ export default function InternshipStipendPage() {
                   <Input type="number" min={0} max={31} value={cycleForm.buffer_paid_days} onChange={(e) => setCycleForm({ ...cycleForm, buffer_paid_days: e.target.value })} className="tabular-nums" />
                 </div>
                 <div className="space-y-1.5">
+                  <Label className="text-rose-700 dark:text-rose-400">Extra Holidays (LOP)</Label>
+                  <Input type="number" min={0} max={60} value={cycleForm.extra_leave_days} onChange={(e) => setCycleForm({ ...cycleForm, extra_leave_days: e.target.value })} className="tabular-nums" />
+                </div>
+                <div className="space-y-1.5">
                   <Label>Deductions (₹)</Label>
                   <Input type="number" min={0} value={cycleForm.deductions} onChange={(e) => setCycleForm({ ...cycleForm, deductions: e.target.value })} className="tabular-nums" />
                 </div>
               </div>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                {DEFAULT_FREE_HOLIDAYS} holidays/month are free (4 weekly + 2 paid). <strong>Extra Holidays</strong> are unpaid — each removes one day&apos;s pay from the gross.
+              </p>
 
               <Separator />
 
@@ -921,16 +1007,31 @@ export default function InternshipStipendPage() {
                 </div>
 
                 {cycleForm.payment_status === "paid" && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <>
                     <div className="space-y-1.5">
-                      <Label>Payment Date</Label>
-                      <Input type="date" value={cycleForm.payment_date} onChange={(e) => setCycleForm({ ...cycleForm, payment_date: e.target.value })} />
+                      <Label>Amount Paid (₹)</Label>
+                      <Input type="number" min={0} value={cycleForm.amount_paid} onChange={(e) => setCycleForm({ ...cycleForm, amount_paid: e.target.value })} className="tabular-nums" />
+                      <p className="text-[10px] text-muted-foreground">
+                        {(() => {
+                          const ap = Number(cycleForm.amount_paid) || 0;
+                          if (ap === 0) return "Nothing credited → shows as Not Paid.";
+                          if (ap === cycleNet) return "Full amount → Paid.";
+                          if (ap < cycleNet) return `Less than net (${formatCurrency(cycleNet)}) → Half/Less Paid · balance ${formatCurrency(cycleNet - ap)}.`;
+                          return `More than net (${formatCurrency(cycleNet)}) → Over Paid · excess ${formatCurrency(ap - cycleNet)}.`;
+                        })()}
+                      </p>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label>UPI Ref</Label>
-                      <Input value={cycleForm.payment_ref} onChange={(e) => setCycleForm({ ...cycleForm, payment_ref: e.target.value })} placeholder="UTR / Txn ID" className="font-mono" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Payment Date</Label>
+                        <Input type="date" value={cycleForm.payment_date} onChange={(e) => setCycleForm({ ...cycleForm, payment_date: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>UPI Ref</Label>
+                        <Input value={cycleForm.payment_ref} onChange={(e) => setCycleForm({ ...cycleForm, payment_ref: e.target.value })} placeholder="UTR / Txn ID" className="font-mono" />
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
 
                 <div className="space-y-1.5">

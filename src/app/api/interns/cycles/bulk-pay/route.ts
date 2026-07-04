@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { computeCycle } from "@/lib/internshipMath";
+import { getActor } from "@/lib/onboarding/server";
+import { logAudit } from "@/lib/audit";
 
 // POST /api/interns/cycles/bulk-pay
 //
@@ -110,6 +112,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: `Failed to update cycle ${c.id}: ${error.message}` }, { status: 500 });
         }
         updated_ids.push(c.id);
+        try { await supabase.from("intern_stipend_cycles").update({ amount_paid: calc.net_amount }).eq("id", c.id); } catch {}
       } else {
         const { data, error } = await supabase
           .from("intern_stipend_cycles")
@@ -122,9 +125,25 @@ export async function POST(req: NextRequest) {
           }
           return NextResponse.json({ error: `Failed to insert cycle ${c.month}/${c.year}: ${error.message}` }, { status: 500 });
         }
-        if (data?.id) created_ids.push(data.id);
+        if (data?.id) {
+          created_ids.push(data.id);
+          try { await supabase.from("intern_stipend_cycles").update({ amount_paid: calc.net_amount }).eq("id", data.id); } catch {}
+        }
       }
     }
+
+    try {
+      const actor = await getActor();
+      const { data: who } = await supabase.from("interns").select("full_name").eq("id", intern_id).maybeSingle();
+      await logAudit({
+        actorId: actor?.userId ?? null,
+        action: "internship.backlog_payment",
+        section: "Internship Payroll",
+        summary: `Cleared ${updated_ids.length + created_ids.length} stipend month(s) for ${who?.full_name ?? "intern"} · ref ${payment_ref}`,
+        targetType: "intern",
+        targetId: intern_id,
+      });
+    } catch {}
 
     return NextResponse.json({
       updated_ids,

@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { validatePhotoLocally } from "@/lib/photo-validate-client";
+import { SelfieCapture } from "@/components/onboarding/SelfieCapture";
 
 // ── Crop config per document type ─────────────────────────────────────────────
 const CROP_ASPECT: Record<string, number | null> = {
@@ -57,6 +58,7 @@ export default function DocumentsPage() {
 
   // Crop modal state
   const [cropModal, setCropModal] = useState<{ docType: string; rawFile: File } | null>(null);
+  const [selfieOpen, setSelfieOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -151,6 +153,14 @@ export default function DocumentsPage() {
         />
       )}
 
+      {/* Live front-camera selfie for the face photo (with on-device CV checks) */}
+      {selfieOpen && (
+        <SelfieCapture
+          onCapture={(file) => { pickFile("face_photo", file); setSelfieOpen(false); }}
+          onCancel={() => setSelfieOpen(false)}
+        />
+      )}
+
       <header className="bg-card border-b border-border">
         <div className="mx-auto max-w-3xl px-5 py-4 flex items-center gap-3">
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">
@@ -195,13 +205,21 @@ export default function DocumentsPage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-foreground">{labels[docType] || docType}</p>
                       <p className="text-xs text-muted-foreground">
-                        {file ? "Ready to send" : hasCropper ? "JPG or PNG · cropping tool opens automatically" : "JPG, PNG or PDF"}
+                        {file ? "Ready to send" : docType === "face_photo" ? "Live camera selfie · quality checks run automatically" : hasCropper ? "JPG or PNG · cropping tool opens automatically" : "JPG, PNG or PDF"}
                       </p>
                     </div>
                     {file ? (
                       <Button variant="ghost" size="sm" onClick={() => clearFile(docType)} className="text-muted-foreground">
                         <X size={14} /> Remove
                       </Button>
+                    ) : docType === "face_photo" ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelfieOpen(true)}
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                      >
+                        <Camera size={13} /> Take live selfie
+                      </button>
                     ) : (
                       <Label
                         htmlFor={`f-${docType}`}
@@ -211,32 +229,34 @@ export default function DocumentsPage() {
                         Choose file
                       </Label>
                     )}
-                    <input
-                      id={`f-${docType}`}
-                      type="file"
-                      accept={hasCropper ? "image/*" : "image/*,application/pdf"}
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        e.target.value = "";
-                        if (!f) return;
-                        if (hasCropper && f.type.startsWith("image/")) {
-                          setCropModal({ docType, rawFile: f });
-                        } else {
-                          pickFile(docType, f);
-                        }
-                      }}
-                    />
+                    {docType !== "face_photo" && (
+                      <input
+                        id={`f-${docType}`}
+                        type="file"
+                        accept={hasCropper ? "image/*" : "image/*,application/pdf"}
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          e.target.value = "";
+                          if (!f) return;
+                          if (hasCropper && f.type.startsWith("image/")) {
+                            setCropModal({ docType, rawFile: f });
+                          } else {
+                            pickFile(docType, f);
+                          }
+                        }}
+                      />
+                    )}
                   </div>
 
                   {docType === "face_photo" && !file && (
                     <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
                       <p className="mb-0.5 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-                        <Info size={12} className="flex-shrink-0" /> Please also make sure your photo has:
+                        <Info size={12} className="flex-shrink-0" /> Before you tap “Take live selfie”:
                       </p>
                       <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        No sunglasses · no mask · no heavy filter · not a screenshot · not a cartoon or AI-generated avatar.
-                        These aren&apos;t checked automatically and are reviewed by our team — an invalid photo can delay your onboarding.
+                        Remove glasses, mask, and any cap/hat · face the camera in good light · use a plain background.
+                        Your live photo is checked on your device (single face, sharp, uncovered) and becomes your verification photo for e-signing.
                       </p>
                     </div>
                   )}
@@ -256,30 +276,41 @@ export default function DocumentsPage() {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium text-foreground">{file.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB · cropped</p>
+                        <p className="text-[11px] text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB · {docType === "face_photo" ? "live selfie" : "cropped"}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
-                        {/* Re-crop button */}
-                        <Label
-                          htmlFor={`recrop-${docType}`}
-                          className="inline-flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground"
-                        >
-                          <Scissors size={10} /> Re-crop
-                        </Label>
-                        <input
-                          id={`recrop-${docType}`}
-                          type="file"
-                          accept={hasCropper ? "image/*" : "image/*,application/pdf"}
-                          className="hidden"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            e.target.value = "";
-                            if (!f) return;
-                            if (hasCropper && f.type.startsWith("image/")) setCropModal({ docType, rawFile: f });
-                            else pickFile(docType, f);
-                          }}
-                        />
+                        {docType === "face_photo" ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelfieOpen(true)}
+                            className="inline-flex cursor-pointer items-center gap-1 rounded border border-border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground"
+                          >
+                            <Camera size={10} /> Retake
+                          </button>
+                        ) : (
+                          <>
+                            <Label
+                              htmlFor={`recrop-${docType}`}
+                              className="inline-flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground"
+                            >
+                              <Scissors size={10} /> Re-crop
+                            </Label>
+                            <input
+                              id={`recrop-${docType}`}
+                              type="file"
+                              accept={hasCropper ? "image/*" : "image/*,application/pdf"}
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                e.target.value = "";
+                                if (!f) return;
+                                if (hasCropper && f.type.startsWith("image/")) setCropModal({ docType, rawFile: f });
+                                else pickFile(docType, f);
+                              }}
+                            />
+                          </>
+                        )}
                       </div>
                     </div>
                   )}

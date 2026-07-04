@@ -56,11 +56,25 @@ export async function logAudit(opts: LogAuditOpts): Promise<void> {
 
     const changes = opts.changes ?? diffObjects(opts.before, opts.after);
 
+    // audit_logs carries two legacy NOT-NULL columns from the original table:
+    //   table_name (text) and record_id (uuid). logAudit historically omitted both,
+    //   so EVERY call failed silently on the not-null constraint. Always populate
+    //   them: record_id must be a valid uuid (target if it's one, else the actor,
+    //   else the nil uuid) so the insert never violates the type/not-null.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const targetIdStr = opts.targetId != null ? String(opts.targetId) : null;
+    const recordId =
+      (targetIdStr && UUID_RE.test(targetIdStr) && targetIdStr) ||
+      (opts.actorId && UUID_RE.test(opts.actorId) && opts.actorId) ||
+      "00000000-0000-0000-0000-000000000000";
+
     await supabase.from("audit_logs").insert({
       user_id: opts.actorId ?? null,
       action: opts.action,
+      table_name: opts.targetType ?? opts.section ?? "system",
+      record_id: recordId,
       target_type: opts.targetType ?? null,
-      target_id: opts.targetId ? String(opts.targetId) : null,
+      target_id: targetIdStr,
       actor_name: name,
       actor_emp_id: empId,
       actor_role: role,

@@ -62,6 +62,9 @@ export async function GET(req: NextRequest) {
           gross_amount: Number(stored.gross_amount),
           deductions: Number(stored.deductions),
           net_amount: Number(stored.net_amount),
+          amount_paid: stored.amount_paid != null
+            ? Number(stored.amount_paid)
+            : (stored.payment_status === "paid" ? Number(stored.net_amount) : 0),
           payment_status: stored.payment_status,
           payment_date: stored.payment_date,
           payment_ref: stored.payment_ref,
@@ -99,6 +102,7 @@ export async function GET(req: NextRequest) {
         gross_amount: c.gross_amount,
         deductions: 0,
         net_amount: c.net_amount,
+        amount_paid: 0,
         payment_status: "pending" as const,
         payment_date: null,
         payment_ref: null,

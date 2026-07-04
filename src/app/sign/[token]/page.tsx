@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { DocumentPreview } from "@/components/onboarding/DocumentPreview";
 import { SignaturePad } from "@/components/onboarding/SignaturePad";
-import { loadFaceModels, detectFromImage, verifyAgainst, type FaceVerdict } from "@/lib/face-verify-client";
+import { loadFaceModels, detectFromImage, verifyAgainst, assessQuality, type FaceVerdict } from "@/lib/face-verify-client";
 import type { TemplateData } from "@/lib/onboarding/types";
 
 type SignState = "ready" | "invalid" | "expired" | "signed" | "error";
@@ -54,6 +54,11 @@ export default function SignPage() {
   const [faceFails, setFaceFails] = useState(0);
   const [camAttempt, setCamAttempt] = useState(0);
   const [hasMultiCam, setHasMultiCam] = useState(false);
+  // Camera must be started by an explicit tap — some mobile browsers (Samsung
+  // Internet, in-app browsers) only show the permission prompt on a user gesture,
+  // never from a bare useEffect. camLive flips true once the video is playing.
+  const [camStarted, setCamStarted] = useState(false);
+  const [camLive, setCamLive] = useState(false);
 
   // ── Session security ────────────────────────────────────────────────────────
   // After OTP verification: 30-second window to complete face capture.
@@ -146,8 +151,11 @@ export default function SignPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Verification failed.");
       setSessionMsg(null);
+      // Enter face step but DON'T start the timer yet — it starts only once the
+      // camera is live + models ready (see the camLive effect). Camera starts on tap.
+      setCamStarted(false);
+      setCamLive(false);
       setStep("face");
-      startCountdown();
     } catch (e: any) {
       setOtpErr(e.message || "Verification failed.");
     } finally {
@@ -196,12 +204,15 @@ export default function SignPage() {
     return () => { cancelled = true; };
   }, [step, token]);
 
-  // Camera lifecycle — (re)start on entering the face step, switching camera, or retry.
+  // Camera lifecycle — starts ONLY after the user taps "Enable camera" (camStarted),
+  // so the permission prompt reliably appears on every device/browser. Also re-runs
+  // on flip or retry.
   useEffect(() => {
-    if (step !== "face") { stopStream(); return; }
+    if (step !== "face" || !camStarted) { stopStream(); return; }
     let active = true;
     (async () => {
       setCamError(null);
+      setCamLive(false);
       try {
         stopStream();
         if (!navigator.mediaDevices?.getUserMedia) {
@@ -225,6 +236,8 @@ export default function SignPage() {
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => {});
         }
+        if (active) setCamLive(true); // video is now live → timer may start
+
         // Show the flip control only when more than one camera exists (mobiles).
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();
@@ -244,7 +257,16 @@ export default function SignPage() {
       }
     })();
     return () => { active = false; stopStream(); };
-  }, [step, facing, camAttempt]);
+  }, [step, facing, camAttempt, camStarted]);
+
+  // Start the 30s session countdown ONLY once the camera is live AND face models
+  // are ready — never while "Loading face verification…" is still showing. This
+  // stops the timer from burning down before the candidate can even see themselves.
+  useEffect(() => {
+    if (step === "face" && camLive && faceStatus === "ready" && !sessionActiveRef.current && sessionSecsLeft === 0) {
+      startCountdown();
+    }
+  }, [step, camLive, faceStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tab-switch guard: switching away from the page after OTP forces re-verification.
   useEffect(() => {
@@ -284,21 +306,44 @@ export default function SignPage() {
       canvas.height = video.videoHeight;
       canvas.getContext("2d")!.drawImage(video, 0, 0);
       const { faces, result } = await detectFromImage(canvas);
+
       if (!result) {
-        setFaceResult({ pass: false, similarity: 0, distance: 1, checks: [{ label: "Face detected in frame", pass: false }] });
+        setFaceResult({ pass: false, similarity: 0, distance: 1, checks: [{ label: "A face is clearly visible", pass: false }] });
         setFaceStatus("ready");
         setFaceFails((n) => n + 1);
         return;
       }
+
+      // Full quality/anti-spoof suite (single, frontal, size, sharp, no
+      // mask/glasses/hat, plain background) — same checks as the KYC selfie.
+      const q = assessQuality(canvas, result, faces);
+      const qChecks = q.checks.map((c) => ({ label: c.label, pass: c.pass }));
+
+      // No reference photo → can't match identity, but still REQUIRE a clean,
+      // single, live face. No silent skip-forward in production.
       if (refMissing || !refDescRef.current) {
-        stopStream();
-        setStep("sign");
+        setFaceResult({ pass: q.pass, similarity: 0, distance: 1, checks: qChecks });
+        setFaceStatus("ready");
+        if (q.pass) {
+          stopCountdown();
+          setTimeout(() => { stopStream(); setStep("sign"); }, 700);
+        } else {
+          setFaceFails((n) => n + 1);
+        }
         return;
       }
+
+      // Reference exists → identity match AND quality must both pass.
       const verdict = verifyAgainst(refDescRef.current, result, canvas.width * canvas.height, faces);
-      setFaceResult(verdict);
+      const merged: FaceVerdict = {
+        similarity: verdict.similarity,
+        distance: verdict.distance,
+        checks: [verdict.checks[0], ...qChecks], // "Same person…" + quality checks
+        pass: verdict.pass && q.pass,
+      };
+      setFaceResult(merged);
       setFaceStatus("ready");
-      if (verdict.pass) {
+      if (merged.pass) {
         stopCountdown();
         setTimeout(() => { stopStream(); setStep("sign"); }, 900);
       } else {
@@ -536,15 +581,25 @@ export default function SignPage() {
                 </div>
               )}
 
-              {refMissing ? (
+              {!camStarted ? (
                 <div className="space-y-3">
-                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-400">
-                    No profile photo is on file for you, so face matching is skipped. You can continue to sign.
+                  <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {refMissing
+                      ? "We'll capture a clear, live photo of your face to confirm you're really here before you sign."
+                      : "We'll match a live photo of your face to your profile photo on file."}{" "}
+                    Tap below and <strong>allow camera access</strong> when your browser asks.
                   </div>
-                  <Button className="w-full" onClick={() => { stopCountdown(); stopStream(); setStep("sign"); }}>Continue</Button>
+                  <Button className="w-full" onClick={() => { setCamError(null); setCamStarted(true); }}>
+                    <Camera size={15} /> Enable camera
+                  </Button>
                 </div>
               ) : (
                 <>
+                  {refMissing && !faceResult && (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-400">
+                      No profile photo is on file — we'll still confirm a clear, single, live face before you continue.
+                    </div>
+                  )}
                   <div className="relative overflow-hidden rounded-xl border border-border bg-black aspect-[4/3]">
                     <video
                       ref={videoRef}

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, getDashboardForRole, type Role } from "@/components/layout/AuthProvider";
+import { isPayrollInternOnly, PAYROLL_INTERN_HOME } from "@/lib/payroll-access";
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -14,9 +15,12 @@ export default function Home() {
       router.replace("/login");
       return;
     }
+    // Payroll-intern accounts are scoped to the internship module only.
+    if (isPayrollInternOnly(user.email)) {
+      router.replace(PAYROLL_INTERN_HOME);
+      return;
+    }
     // Root page just routes to the role's dashboard.
-    // Onboarding is only triggered from the login page right after a fresh sign-in,
-    // not on every visit to "/", so existing sessions always land on the dashboard.
     router.replace(getDashboardForRole(user.role as Role));
   }, [user, loading, router]);
 

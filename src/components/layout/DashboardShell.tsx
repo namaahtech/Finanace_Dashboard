@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { GlobalAttendanceWidget } from "./GlobalAttendanceWidget";
 import { ChangePasswordModal } from "./ChangePasswordModal";
+import { isPayrollInternOnly, isPayrollInternPathAllowed, PAYROLL_INTERN_HOME } from "@/lib/payroll-access";
 import {
   SidebarInset,
   SidebarProvider,
@@ -111,6 +112,15 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [user, loading, router]);
+
+  // Payroll-intern accounts may ONLY be on the internship pages — bounce them
+  // back to the internship home from anywhere else (hard scope, independent of role).
+  useEffect(() => {
+    if (loading || !user) return;
+    if (isPayrollInternOnly(user.email) && !isPayrollInternPathAllowed(pathname)) {
+      router.replace(PAYROLL_INTERN_HOME);
+    }
+  }, [user, loading, pathname, router]);
 
   // Real-time permission guard
   useEffect(() => {
