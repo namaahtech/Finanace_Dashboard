@@ -153,9 +153,8 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
         faceDetected: true,
         qualityPass: q.pass,
         noSunglassesMask: noSun,
-        eyesVisible: q.checks.find((c) => c.key === "frontal")?.pass ?? true,
+        eyesVisible: q.checks.find((c) => c.key === "eyes")?.pass ?? true,
         livenessPass: doneRef.current,
-        headMovement: challengesRef.current.some((c) => c.type === "turn_left" || c.type === "turn_right"),
         identityMatch: null, // registration selfie has no prior reference
       });
       const finalPass = q.pass && risk.pass;
