@@ -774,7 +774,8 @@ function fmtStamp(at?: string | null) {
 }
 
 const DOC_TYPE_LABEL: Record<string, string> = {
-  face_photo: "Passport-size Photo",
+  profile_photo: "Profile Photo (for ID Card)",
+  face_photo: "Face Verification Selfie",
   aadhaar: "Aadhaar Card",
   pan: "PAN Card",
   other: "Supporting Document",

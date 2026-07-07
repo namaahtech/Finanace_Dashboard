@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { CandidateAvatar } from "@/components/onboarding/CandidateAvatar";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -91,9 +91,6 @@ interface ClaimedRow {
   creator?: { name?: string; employee_id?: string } | null;
 }
 
-function initials(name: string) {
-  return (name || "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-}
 
 const FILTERS: { key: string; label: string; match: (s: OnboardingStatus) => boolean }[] = [
   { key: "all", label: "All", match: () => true },
@@ -413,9 +410,12 @@ export default function OnboardingHubPage() {
                     className="p-0 cursor-pointer transition-colors hover:border-primary/40"
                   >
                     <CardContent className="p-4 flex items-center gap-4">
-                      <Avatar className="h-9 w-9">
-                        <AvatarFallback className="text-[11px] font-semibold">{initials(p.candidate_name)}</AvatarFallback>
-                      </Avatar>
+                      <CandidateAvatar
+                        email={p.candidate_email}
+                        name={p.candidate_name}
+                        className="h-9 w-9"
+                        fallbackClassName="text-[11px] font-semibold"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-foreground truncate">{p.candidate_name}</p>
                         <p className="text-xs text-muted-foreground truncate">{p.candidate_email}</p>
@@ -528,9 +528,12 @@ export default function OnboardingHubPage() {
                         already ? "cursor-not-allowed" : "hover:border-primary/40"
                       )}
                     >
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="text-[10px] font-semibold">{initials(c.name)}</AvatarFallback>
-                      </Avatar>
+                      <CandidateAvatar
+                        email={c.email}
+                        name={c.name}
+                        className="h-8 w-8"
+                        fallbackClassName="text-[10px] font-semibold"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
                         <p className="text-xs text-muted-foreground truncate">{c.email}</p>

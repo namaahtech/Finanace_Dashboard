@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import {
   Loader2, CheckCircle2, AlertTriangle, ShieldCheck, UploadCloud,
-  Camera, CreditCard, Fingerprint, FileText, X, Mail, Lock, Check, Info, Scissors,
+  Camera, CreditCard, Fingerprint, FileText, X, Mail, Lock, Check, Info, Scissors, Contact,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,13 +13,18 @@ import { cn } from "@/lib/utils";
 import { validatePhotoLocally } from "@/lib/photo-validate-client";
 import { SelfieCapture } from "@/components/onboarding/SelfieCapture";
 
+// Face images that get on-device quality/anti-spoof checks after selection.
+const PHOTO_DOCS = new Set(["face_photo", "profile_photo"]);
+
 // ── Crop config per document type ─────────────────────────────────────────────
 const CROP_ASPECT: Record<string, number | null> = {
+  profile_photo: 7 / 9, // 3.5 cm × 4.5 cm — passport/ID portrait, used as the DP
   face_photo: 7 / 9,    // 3.5 cm × 4.5 cm — Indian passport standard (portrait)
   aadhaar:  856 / 540,  // 85.6 mm × 54 mm — standard ID card (landscape)
   pan:      856 / 540,  // 85.6 mm × 54 mm — standard ID card (landscape)
 };
 const CROP_HINT: Record<string, string> = {
+  profile_photo: "3.5 × 4.5 cm · Clear, front-facing — this becomes your ID-card photo",
   face_photo: "3.5 × 4.5 cm · Face must fill 70–80% of the frame",
   aadhaar:    "85.6 × 54 mm — align all four card corners inside the box",
   pan:        "85.6 × 54 mm — align all four card corners inside the box",
@@ -27,7 +32,7 @@ const CROP_HINT: Record<string, string> = {
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
 const DOC_ICON: Record<string, any> = {
-  face_photo: Camera, aadhaar: Fingerprint, pan: CreditCard, other: FileText,
+  profile_photo: Contact, face_photo: Camera, aadhaar: Fingerprint, pan: CreditCard, other: FileText,
 };
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -54,7 +59,7 @@ export default function DocumentsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const [photoCheck, setPhotoCheck] = useState<PhotoCheck>({ loading: false, result: null });
+  const [photoChecks, setPhotoChecks] = useState<Record<string, PhotoCheck>>({});
 
   // Crop modal state
   const [cropModal, setCropModal] = useState<{ docType: string; rawFile: File } | null>(null);
@@ -82,10 +87,10 @@ export default function DocumentsPage() {
     })();
   }, [token]);
 
-  async function validatePhoto(file: File) {
-    setPhotoCheck({ loading: true, result: null });
+  async function validatePhoto(docType: string, file: File) {
+    setPhotoChecks((p) => ({ ...p, [docType]: { loading: true, result: null } }));
     const result = await validatePhotoLocally(file);
-    setPhotoCheck({ loading: false, result });
+    setPhotoChecks((p) => ({ ...p, [docType]: { loading: false, result } }));
   }
 
   function pickFile(docType: string, file: File | null) {
@@ -97,26 +102,28 @@ export default function DocumentsPage() {
     } else {
       setPreviews((p) => { const n = { ...p }; delete n[docType]; return n; });
     }
-    if (docType === "face_photo") {
-      if (file.type.startsWith("image/")) validatePhoto(file);
-      else setPhotoCheck({ loading: false, result: { ok: true, pass: false, reason: "Please upload an image (not a PDF) for your photo.", checks: [] } });
+    if (PHOTO_DOCS.has(docType)) {
+      if (file.type.startsWith("image/")) validatePhoto(docType, file);
+      else setPhotoChecks((p) => ({ ...p, [docType]: { loading: false, result: { ok: true, pass: false, reason: "Please upload an image (not a PDF) for your photo.", checks: [] } } }));
     }
   }
 
   function clearFile(docType: string) {
     setFiles((p) => { const n = { ...p }; delete n[docType]; return n; });
     setPreviews((p) => { const n = { ...p }; delete n[docType]; return n; });
-    if (docType === "face_photo") setPhotoCheck({ loading: false, result: null });
+    if (PHOTO_DOCS.has(docType)) setPhotoChecks((p) => { const n = { ...p }; delete n[docType]; return n; });
   }
 
   async function submit() {
     setErr(null);
     const missing = requiredDocs.find((d) => !files[d]);
     if (missing) return setErr(`Please upload your ${labels[missing] || missing}.`);
-    if (requiredDocs.includes("face_photo")) {
-      if (photoCheck.loading) return setErr("Please wait — your photo is still being checked.");
-      if (photoCheck.result?.ok === true && photoCheck.result?.pass === false)
-        return setErr("Your profile photo didn't pass the checks. Please upload a clearer, front-facing photo.");
+    for (const d of requiredDocs) {
+      if (!PHOTO_DOCS.has(d)) continue;
+      const pc = photoChecks[d];
+      if (pc?.loading) return setErr("Please wait — your photo is still being checked.");
+      if (pc?.result?.ok === true && pc.result?.pass === false)
+        return setErr(`Your ${labels[d] || "photo"} didn't pass the checks. Please upload a clearer, front-facing photo.`);
     }
     setSubmitting(true);
     try {
@@ -249,6 +256,17 @@ export default function DocumentsPage() {
                     )}
                   </div>
 
+                  {docType === "profile_photo" && !file && (
+                    <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+                      <p className="mb-0.5 flex items-center gap-1.5 text-[11px] font-medium text-primary">
+                        <Info size={12} className="flex-shrink-0" /> This is your profile photo:
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        Upload a clear, front-facing passport-style photo. This becomes your display picture and ID-card photo across the company — so pick one you’re happy with. A crop tool opens so you can frame it perfectly.
+                      </p>
+                    </div>
+                  )}
+
                   {docType === "face_photo" && !file && (
                     <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
                       <p className="mb-0.5 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
@@ -256,7 +274,7 @@ export default function DocumentsPage() {
                       </p>
                       <p className="text-[11px] leading-relaxed text-muted-foreground">
                         Remove glasses, mask, and any cap/hat · face the camera in good light · use a plain background.
-                        Your live photo is checked on your device (single face, sharp, uncovered) and becomes your verification photo for e-signing.
+                        Your live photo is checked on your device (single face, sharp, uncovered) and is used only to verify it’s really you when you e-sign.
                       </p>
                     </div>
                   )}
@@ -267,7 +285,7 @@ export default function DocumentsPage() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={preview} alt="preview"
-                          className={cn("rounded-md object-cover", docType === "face_photo" ? "h-14 w-11" : "h-10 w-16")}
+                          className={cn("rounded-md object-cover", PHOTO_DOCS.has(docType) ? "h-14 w-11" : "h-10 w-16")}
                         />
                       ) : (
                         <div className="flex h-12 w-12 items-center justify-center rounded-md bg-card text-muted-foreground">
@@ -277,6 +295,7 @@ export default function DocumentsPage() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium text-foreground">{file.name}</p>
                         <p className="text-[11px] text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB · {docType === "face_photo" ? "live selfie" : "cropped"}</p>
+                        {docType === "profile_photo" && <p className="text-[10px] text-primary">Used as your display picture</p>}
                       </div>
                       <div className="flex items-center gap-2">
                         <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
@@ -315,7 +334,7 @@ export default function DocumentsPage() {
                     </div>
                   )}
 
-                  {docType === "face_photo" && file && <PhotoChecklist state={photoCheck} />}
+                  {PHOTO_DOCS.has(docType) && file && <PhotoChecklist state={photoChecks[docType] || { loading: false, result: null }} />}
                 </CardContent>
               </Card>
             );
@@ -343,7 +362,7 @@ export default function DocumentsPage() {
           </p>
           <Button
             onClick={submit}
-            disabled={submitting || (requiredDocs.includes("face_photo") && (photoCheck.loading || (photoCheck.result?.ok === true && photoCheck.result?.pass === false)))}
+            disabled={submitting || requiredDocs.some((d) => PHOTO_DOCS.has(d) && (photoChecks[d]?.loading || (photoChecks[d]?.result?.ok === true && photoChecks[d]?.result?.pass === false)))}
             className="sm:min-w-[170px]"
           >
             {submitting ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
@@ -450,7 +469,7 @@ function CropperModal({
     ctx.stroke();
 
     // 4. Document-type guide
-    if (docType === "face_photo") {
+    if (docType === "face_photo" || docType === "profile_photo") {
       // Oval face guide with dashed indigo border
       ctx.save();
       ctx.strokeStyle = "rgba(129,140,248,0.85)";
@@ -606,7 +625,7 @@ function CropperModal({
         <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-foreground">
-              {docType === "face_photo" ? "Passport-size Photo" : docType === "aadhaar" ? "Aadhaar Card" : docType === "pan" ? "PAN Card" : "Crop Image"}
+              {docType === "profile_photo" ? "Profile Photo" : docType === "face_photo" ? "Passport-size Photo" : docType === "aadhaar" ? "Aadhaar Card" : docType === "pan" ? "PAN Card" : "Crop Image"}
             </p>
             {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
           </div>

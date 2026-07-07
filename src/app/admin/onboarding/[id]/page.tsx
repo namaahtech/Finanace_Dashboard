@@ -29,7 +29,8 @@ import { buildTemplateData } from "@/lib/onboarding/templateData";
 import { STATUS_META, type ConfigCategory, type OnboardingConfig, type OnboardingPacket, type OnboardingStatus } from "@/lib/onboarding/types";
 
 const CANDIDATE_DOC_LABELS: Record<string, string> = {
-  face_photo: "Passport-size Photo",
+  profile_photo: "Profile Photo (for ID Card)",
+  face_photo: "Face Verification Selfie",
   aadhaar: "Aadhaar Card",
   pan: "PAN Card",
   other: "Supporting Document",
@@ -496,14 +497,18 @@ export default function OnboardingBuilderPage() {
                     </Button>
                   </div>
                   {(() => {
-                    const facePhotoUrl = candidateDocs?.find((d: any) => d.document_type === "face_photo")?.url;
-                    return facePhotoUrl ? (
+                    // Display picture = the candidate's profile photo (falls back to
+                    // the verification selfie for candidates who uploaded before it).
+                    const dpUrl =
+                      candidateDocs?.find((d: any) => d.document_type === "profile_photo")?.url ??
+                      candidateDocs?.find((d: any) => d.document_type === "face_photo")?.url;
+                    return dpUrl ? (
                       <div className="flex items-center gap-3">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={facePhotoUrl} alt="" className="h-14 w-14 rounded-full object-cover border border-border flex-shrink-0" />
+                        <img src={dpUrl} alt="" className="h-14 w-14 rounded-full object-cover border border-border flex-shrink-0" />
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-foreground truncate">{form.candidate_name || "Candidate"}</p>
-                          <p className="text-[10px] text-muted-foreground">Photo from uploaded documents</p>
+                          <p className="text-[10px] text-muted-foreground">Profile photo from uploaded documents</p>
                         </div>
                       </div>
                     ) : null;
