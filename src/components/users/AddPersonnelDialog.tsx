@@ -240,6 +240,8 @@ export function AddPersonnelDialog({ open, onOpenChange, prefill, onSuccess }: P
         salary_slab_id: isSales && form.linkSlab ? form.salary_slab_id || null : null,
         create_zoho_mail: form.create_zoho_mail,
         source: prefill ? "onboarding" : "direct",
+        // From onboarding: copy the candidate's Profile Photo (looked up by email) as the DP.
+        avatar_from_email: prefill?.email || undefined,
       };
       const res = await fetch("/api/users", {
         method: "POST",

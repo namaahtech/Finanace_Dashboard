@@ -10,12 +10,32 @@ let landmarkerMod: any = null;
 let landmarker: any = null;
 let loading: Promise<void> | null = null;
 
+// MediaPipe's TFLite/WASM runtime prints benign INFO/GL lines through console.error
+// (e.g. "INFO: Created TensorFlow Lite XNNPACK delegate for CPU."). Next.js's dev
+// overlay treats ANY console.error as a red "Console Error", so we filter just those
+// known-harmless lines. Everything else passes through untouched. Runs once, client-only.
+let consolePatched = false;
+function silenceMediapipeNoise(): void {
+  if (consolePatched || typeof window === "undefined") return;
+  consolePatched = true;
+  const benign = /XNNPACK|TensorFlow Lite|Created TensorFlow|TfLite|GL version|OpenGL|gl_context|feedback manager|Graph successfully|InferenceCalculator|landmark_projection|NORM_RECT|delegate for (CPU|GPU)/i;
+  const wrap = (orig: (...a: any[]) => void) => (...args: any[]) => {
+    if (typeof args[0] === "string" && benign.test(args[0])) return;
+    orig(...args);
+  };
+  const origErr = console.error.bind(console);
+  const origWarn = console.warn.bind(console);
+  console.error = wrap(origErr);
+  console.warn = wrap(origWarn);
+}
+
 async function getVision(): Promise<any> {
   if (!landmarkerMod) landmarkerMod = await import("@mediapipe/tasks-vision");
   return landmarkerMod;
 }
 
 export async function loadFaceLandmarker(): Promise<void> {
+  silenceMediapipeNoise();
   if (landmarker) return;
   if (loading) return loading;
   loading = (async () => {
@@ -44,12 +64,13 @@ export interface FrameSignals {
   blink: number;   // 0..1, high = eyes closed
   smile: number;   // 0..1
   yaw: number;     // <0 turned one way, >0 the other (image space, normalized)
+  gaze: number;    // eye gaze from iris/eye-look blendshapes: >0 = looking to their right, <0 = their left
   box: { x: number; y: number; width: number; height: number } | null; // normalized 0..1
 }
 
 /** One frame → normalized liveness signals. Call inside a requestAnimationFrame/interval loop. */
 export function detectFrame(video: HTMLVideoElement, tsMs: number): FrameSignals {
-  const none: FrameSignals = { present: false, faceCount: 0, blink: 0, smile: 0, yaw: 0, box: null };
+  const none: FrameSignals = { present: false, faceCount: 0, blink: 0, smile: 0, yaw: 0, gaze: 0, box: null };
   if (!landmarker || !video.videoWidth) return none;
   let res: any;
   try { res = landmarker.detectForVideo(video, tsMs); } catch { return none; }
@@ -62,6 +83,13 @@ export function detectFrame(video: HTMLVideoElement, tsMs: number): FrameSignals
   const blink = (bs("eyeBlinkLeft") + bs("eyeBlinkRight")) / 2;
   const smile = (bs("mouthSmileLeft") + bs("mouthSmileRight")) / 2;
 
+  // Eye gaze from the iris-aware eye-look blendshapes. These are ANATOMICAL (named
+  // for the actual eye, not image space), so they're immune to the mirrored selfie
+  // preview: a person looking to their own right raises (inLeft + outRight).
+  const gazeRight = (bs("eyeLookInLeft") + bs("eyeLookOutRight")) / 2;
+  const gazeLeft = (bs("eyeLookOutLeft") + bs("eyeLookInRight")) / 2;
+  const gaze = gazeRight - gazeLeft;
+
   let minx = 1, miny = 1, maxx = 0, maxy = 0;
   for (const p of pts) { if (p.x < minx) minx = p.x; if (p.x > maxx) maxx = p.x; if (p.y < miny) miny = p.y; if (p.y > maxy) maxy = p.y; }
   const box = { x: minx, y: miny, width: maxx - minx, height: maxy - miny };
@@ -72,17 +100,23 @@ export function detectFrame(video: HTMLVideoElement, tsMs: number): FrameSignals
   const dr = Math.hypot(nose.x - re.x, nose.y - re.y);
   const yaw = (dr - dl) / ((dl + dr) || 1);
 
-  return { present: true, faceCount: faces.length, blink, smile, yaw, box };
+  return { present: true, faceCount: faces.length, blink, smile, yaw, gaze, box };
 }
 
 // ── Randomized challenge sequence ────────────────────────────────────────────
-export type ChallengeType = "blink" | "turn_left" | "turn_right" | "smile";
+export type ChallengeType = "blink" | "turn_left" | "turn_right" | "smile" | "gaze_left" | "gaze_right";
 export interface Challenge { type: ChallengeType; label: string; target: number }
 
 export function makeChallengeSequence(): Challenge[] {
-  // Kept intentionally light: a single blink is enough to prove a live person
-  // (a printed photo / static screen can't blink) without a tiring multi-step flow.
-  return [{ type: "blink", label: "Blink once to confirm you're live", target: 1 }];
+  // A single blink proves a live person (a printed photo / static screen can't
+  // blink), then ONE randomized eye-gaze step (from the iris-aware eye-look
+  // blendshapes) proves a responsive live subject — a replayed clip can't follow
+  // a direction chosen at random. Kept to two quick steps to stay low-friction.
+  const blink: Challenge = { type: "blink", label: "Blink once to confirm you're live", target: 1 };
+  const gaze: Challenge = Math.random() < 0.5
+    ? { type: "gaze_right", label: "Now glance to your right (eyes only)", target: 1 }
+    : { type: "gaze_left", label: "Now glance to your left (eyes only)", target: 1 };
+  return [blink, gaze];
 }
 
 // Per-challenge progress tracker. Feed frames; returns updated internal state.
@@ -104,6 +138,8 @@ export function stepChallenge(ch: Challenge, s: FrameSignals, p: ChallengeProgre
     case "turn_left":  if (s.yaw < -0.28) p.done = true; break;
     case "turn_right": if (s.yaw > 0.28) p.done = true; break;
     case "smile":      if (s.smile > 0.5) p.done = true; break;
+    case "gaze_left":  if (s.gaze < -0.32) p.done = true; break;
+    case "gaze_right": if (s.gaze > 0.32) p.done = true; break;
   }
   return p;
 }
@@ -127,7 +163,7 @@ export function scoreRisk(i: RiskInput): RiskResult {
     { label: "Image quality", got: i.qualityPass ? 10 : 0, of: 10 },
     { label: "Nothing on face (no glasses/mask)", got: i.noSunglassesMask ? 10 : 0, of: 10 },
     { label: "Eyes visible", got: i.eyesVisible ? 10 : 0, of: 10 },
-    { label: "Live blink", got: i.livenessPass ? 10 : 0, of: 10 },
+    { label: "Liveness (blink + gaze)", got: i.livenessPass ? 10 : 0, of: 10 },
   ];
   if (i.identityMatch != null) rows.push({ label: "Face match", got: i.identityMatch ? 15 : 0, of: 15 });
   const score = rows.reduce((s, r) => s + r.got, 0);

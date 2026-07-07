@@ -68,7 +68,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 // POST /api/sign/[token] — submit the candidate's e-signature.
 export async function POST(req: NextRequest, { params }: Ctx) {
   const { token } = await params;
-  const { image_base64, typed_name, agreed } = await req.json().catch(() => ({}));
+  const { image_base64, typed_name, agreed, verify_token } = await req.json().catch(() => ({}));
 
   if (!agreed) return NextResponse.json({ error: "Please confirm the acknowledgement." }, { status: 400 });
   if (!typed_name?.trim()) return NextResponse.json({ error: "Please type your full name." }, { status: 400 });
@@ -86,6 +86,25 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
   if (isExpired(packet)) return NextResponse.json({ error: "This signing link has expired." }, { status: 410 });
 
+  // ── Server-side identity enforcement ────────────────────────────────────────
+  // A signature is only accepted with a valid, unexpired, single-use proof token
+  // that /verify issued AFTER server-checked OTP + passed liveness/face. Without
+  // this, the client-side gate could be skipped by POSTing here directly.
+  const proofOk =
+    !!verify_token &&
+    !!packet.sign_verify_token &&
+    verify_token === packet.sign_verify_token &&
+    !!packet.sign_verify_expires_at &&
+    new Date(packet.sign_verify_expires_at).getTime() > Date.now() &&
+    !!packet.sign_otp_verified_at &&
+    !!packet.sign_face_verified_at;
+  if (!proofOk) {
+    return NextResponse.json(
+      { error: "verification_required", message: "Please verify your identity again before signing." },
+      { status: 403 }
+    );
+  }
+
   const ip = (req.headers.get("x-forwarded-for")?.split(",")[0] || req.headers.get("x-real-ip") || "").trim();
   const signature = {
     image_base64: image_base64 || undefined,
@@ -93,11 +112,22 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     signed_at: new Date().toISOString(),
     ip: ip || undefined,
     user_agent: req.headers.get("user-agent") || undefined,
+    // Bind the recorded identity-verification evidence to the signature itself.
+    verification: packet.sign_verification ?? undefined,
   };
 
   await supabase
     .from("onboarding_packets")
-    .update({ signature, status: "signed", signed_at: signature.signed_at })
+    .update({
+      signature,
+      status: "signed",
+      signed_at: signature.signed_at,
+      // Consume the proof (single-use) and clear the OTP stamp so a fresh
+      // verification is required for any future action on this packet.
+      sign_verify_token: null,
+      sign_verify_expires_at: null,
+      sign_otp_verified_at: null,
+    })
     .eq("id", packet.id);
 
   await logAudit({

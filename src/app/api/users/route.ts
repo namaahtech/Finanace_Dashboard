@@ -6,6 +6,36 @@ import { getActiveToken } from "@/lib/zoho-mail";
 import { getActor } from "@/lib/onboarding/server";
 import { logAudit } from "@/lib/audit";
 
+// Resolve a candidate's uploaded Profile Photo (falls back to the verification
+// selfie) as a data URL, so it can be copied onto the new employee's record.
+async function resolveProfilePhotoDataUrl(supabase: any, email: string): Promise<string | null> {
+  const { data: reqs } = await supabase
+    .from("candidate_document_requests")
+    .select("id")
+    .ilike("candidate_email", email);
+  const ids = (reqs || []).map((r: any) => r.id);
+  if (!ids.length) return null;
+  for (const type of ["profile_photo", "face_photo"]) {
+    const { data: doc } = await supabase
+      .from("candidate_documents")
+      .select("file_share_id")
+      .eq("document_type", type)
+      .in("request_id", ids)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (doc?.file_share_id) {
+      const { data: share } = await supabase
+        .from("mail_file_shares")
+        .select("storage_url")
+        .eq("id", doc.file_share_id)
+        .maybeSingle();
+      if (typeof share?.storage_url === "string" && share.storage_url.startsWith("data:")) return share.storage_url;
+    }
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = getSupabaseAdmin();
@@ -122,6 +152,16 @@ export async function POST(req: Request) {
     // Set source separately — column added by migration 20260702100000; non-fatal if column not yet applied
     const empSource = source === "onboarding" ? "onboarding" : "direct";
     try { await supabase.from("employees").update({ source: empSource }).eq("id", user.id); } catch { /* column not yet migrated */ }
+
+    // Copy the candidate's onboarding Profile Photo onto the employee record as their
+    // display picture (migration 113). Non-fatal if the column/photo is unavailable.
+    try {
+      let avatarUrl: string | null = typeof body.avatar_url === "string" && body.avatar_url.startsWith("data:") ? body.avatar_url : null;
+      if (!avatarUrl && typeof body.avatar_from_email === "string" && body.avatar_from_email) {
+        avatarUrl = await resolveProfilePhotoDataUrl(supabase, body.avatar_from_email);
+      }
+      if (avatarUrl) await supabase.from("employees").update({ avatar_url: avatarUrl }).eq("id", user.id);
+    } catch { /* column not yet migrated / no photo — non-fatal */ }
 
     {
       const actor = await getActor();
