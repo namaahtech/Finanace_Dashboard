@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Loader2, CheckCircle2, ShieldCheck, AlertTriangle, PenTool, FileSignature, Mail, Lock, Camera, ScanFace, RefreshCw, RotateCcw, Check, X, Clock } from "lucide-react";
+import { Loader2, CheckCircle2, ShieldCheck, AlertTriangle, PenTool, FileSignature, Mail, Lock, Camera, ScanFace, RefreshCw, RotateCcw, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -77,12 +77,11 @@ export default function SignPage() {
   const tsRef = useRef(0);
 
   // ── Session security ────────────────────────────────────────────────────────
-  // After OTP verification: 30-second window to complete face capture.
-  // Tab switch at any post-OTP step resets back to OTP gate.
-  const sessionTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sessionActiveRef = useRef(false);
-  const [sessionSecsLeft, setSessionSecsLeft] = useState(0);
-  const [sessionMsg,      setSessionMsg]      = useState<string | null>(null);
+  // There is deliberately NO time limit — the candidate may take as long as they
+  // need to read the offer, NDA, and handbook. Security comes from the exit guard
+  // below: leaving or switching away from this tab after the OTP resets everything
+  // back to the very start (email OTP + face) so the session can't be handed off.
+  const [sessionMsg, setSessionMsg] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -167,8 +166,8 @@ export default function SignPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Verification failed.");
       setSessionMsg(null);
-      // Enter face step but DON'T start the timer yet — it starts only once the
-      // camera is live + models ready (see the camLive effect). Camera starts on tap.
+      // Enter the face step. The camera starts on an explicit tap (see the camLive
+      // effect) so the permission prompt reliably appears on every device/browser.
       setCamStarted(false);
       setCamLive(false);
       setStep("face");
@@ -275,15 +274,6 @@ export default function SignPage() {
     return () => { active = false; stopStream(); };
   }, [step, facing, camAttempt, camStarted]);
 
-  // Start the 30s session countdown ONLY once the camera is live AND face models
-  // are ready — never while "Loading face verification…" is still showing. This
-  // stops the timer from burning down before the candidate can even see themselves.
-  useEffect(() => {
-    if (step === "face" && camLive && faceStatus === "ready" && !sessionActiveRef.current && sessionSecsLeft === 0) {
-      startCountdown();
-    }
-  }, [step, camLive, faceStatus]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Randomized liveness loop: once the camera is live, run a fresh challenge
   // sequence (blink / turn / smile) via MediaPipe. Capture is gated on completing
   // it — a photo or replayed clip can't satisfy a random live sequence.
@@ -327,31 +317,28 @@ export default function SignPage() {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = null; };
   }, [step, camLive]);
 
-  // Tab-switch guard: switching away from the page after OTP forces re-verification.
+  // Exit guard: once past the OTP gate, switching away from or leaving this tab
+  // (tab switch, minimize, app switch, screen lock, closing the tab) fully resets
+  // the session — the candidate must verify their email AND face again from the
+  // very start. This is the ONLY thing that interrupts signing (no time limit).
   useEffect(() => {
     if (step === "gate") return;
     function onHide() {
       if (!document.hidden) return;
-      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-      sessionTimerRef.current = null;
-      sessionActiveRef.current = false;
-      setSessionSecsLeft(0);
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       setFaceResult(null); setFaceFails(0); setRefMissing(false);
       setOtp(""); setOtpSent(false); setSecondsLeft(0);
       setSigImage(null); setAgreed(false);
       setStep("gate");
-      setSessionMsg("You left this tab — please verify your email again to continue signing.");
+      setSessionMsg("You left this page — please verify your email and face again to continue signing.");
     }
     document.addEventListener("visibilitychange", onHide);
     return () => document.removeEventListener("visibilitychange", onHide);
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Cleanup countdown on unmount.
-  useEffect(() => () => {
-    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-  }, []);
+  // Stop the camera if the component unmounts mid-flow.
+  useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
   async function captureVerify() {
     const video = videoRef.current;
@@ -398,7 +385,6 @@ export default function SignPage() {
       setFaceResult({ pass, similarity: verdict?.similarity ?? 0, distance: verdict?.distance ?? 1, checks });
       setFaceStatus("ready");
       if (pass) {
-        stopCountdown();
         setTimeout(() => { stopStream(); setStep("sign"); }, 800);
       } else {
         setFaceFails((n) => n + 1);
@@ -410,7 +396,6 @@ export default function SignPage() {
   }
 
   function restartFromOtp() {
-    stopCountdown();
     stopStream();
     setFaceResult(null);
     setFaceFails(0);
@@ -418,41 +403,6 @@ export default function SignPage() {
     setOtp("");
     setOtpSent(false);
     setStep("gate");
-  }
-
-  function stopCountdown() {
-    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-    sessionTimerRef.current = null;
-    sessionActiveRef.current = false;
-    setSessionSecsLeft(0);
-  }
-
-  function startCountdown() {
-    stopCountdown();
-    sessionActiveRef.current = true;
-    setSessionSecsLeft(30);
-    sessionTimerRef.current = setInterval(() => {
-      setSessionSecsLeft((prev) => {
-        const next = prev - 1;
-        if (next <= 0 && sessionActiveRef.current) {
-          sessionActiveRef.current = false;
-          // Defer state resets outside the setState callback
-          setTimeout(() => {
-            if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-            sessionTimerRef.current = null;
-            streamRef.current?.getTracks().forEach((t) => t.stop());
-            streamRef.current = null;
-            setFaceResult(null); setFaceFails(0); setRefMissing(false);
-            setOtp(""); setOtpSent(false); setSecondsLeft(0);
-            setSigImage(null); setAgreed(false);
-            setStep("gate");
-            setSessionMsg("Session timed out — please verify your email again to continue.");
-          }, 0);
-          return 0;
-        }
-        return Math.max(0, next);
-      });
-    }, 1000);
   }
 
   // ── Loading / terminal states ────────────────────────────────────────────
@@ -603,44 +553,21 @@ export default function SignPage() {
               <div className="flex flex-col items-center text-center gap-2">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><ScanFace size={22} /></div>
                 <h1 className="text-lg font-bold text-foreground">Face verification</h1>
-                <p className="text-sm text-muted-foreground">Look into the camera and capture a photo — we&apos;ll match it to your profile photo on file.</p>
+                <p className="text-sm text-muted-foreground">Look into the camera and capture a photo — we&apos;ll match it to your verification selfie on file.</p>
               </div>
 
-              {/* Session countdown */}
-              {sessionSecsLeft > 0 && (
-                <div className={cn(
-                  "rounded-lg border px-3 py-2.5 text-xs",
-                  sessionSecsLeft <= 10
-                    ? "border-rose-500/40 bg-rose-500/5 text-rose-600 dark:text-rose-400"
-                    : "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400",
-                )}>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <Clock size={12} />
-                      {sessionSecsLeft <= 10 ? "Session expiring soon!" : "Session time remaining"}
-                    </span>
-                    <span className={cn("font-mono font-bold tabular-nums text-sm", sessionSecsLeft <= 10 && "animate-pulse")}>
-                      0:{String(sessionSecsLeft).padStart(2, "0")}
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cn("h-full rounded-full transition-all duration-1000", sessionSecsLeft <= 10 ? "bg-rose-500" : "bg-amber-500")}
-                      style={{ width: `${(sessionSecsLeft / 30) * 100}%` }}
-                    />
-                  </div>
-                  {sessionSecsLeft <= 10 && (
-                    <p className="mt-1.5 text-[11px] opacity-80">You&apos;ll be redirected back to email verification when this reaches zero.</p>
-                  )}
-                </div>
-              )}
+              {/* Exit-guard notice — no timer; only leaving/switching the tab resets. */}
+              <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+                <ShieldCheck size={13} className="mt-0.5 shrink-0" />
+                <span>Take your time — there&apos;s no countdown. Just keep this tab open: if you switch away or leave the page, you&apos;ll need to verify your email and face again.</span>
+              </div>
 
               {!camStarted ? (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
                     {refMissing
                       ? "We'll capture a clear, live photo of your face to confirm you're really here before you sign."
-                      : "We'll match a live photo of your face to your profile photo on file."}{" "}
+                      : "We'll match a live photo of your face to your verification selfie on file."}{" "}
                     Tap below and <strong>allow camera access</strong> when your browser asks.
                   </div>
                   <Button className="w-full" onClick={() => { setCamError(null); setCamStarted(true); }}>

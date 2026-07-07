@@ -17,7 +17,8 @@ export interface MailContext {
 
 /** Document-type → human label, used in emails and the upload page. */
 export const DOC_LABELS: Record<string, string> = {
-  face_photo: "Passport-size Photo",
+  profile_photo: "Profile Photo (for ID Card)",
+  face_photo: "Face Verification Selfie",
   aadhaar: "Aadhaar Card",
   pan: "PAN Card",
   other: "Supporting Document",

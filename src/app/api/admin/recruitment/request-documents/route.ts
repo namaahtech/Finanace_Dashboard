@@ -6,7 +6,7 @@ import { baseUrlFrom } from "@/lib/base-url";
 import { getActor } from "@/lib/onboarding/server";
 import { logAudit } from "@/lib/audit";
 
-const DOCS = ["face_photo", "aadhaar", "pan"];
+const DOCS = ["profile_photo", "face_photo", "aadhaar", "pan"];
 
 // Send a candidate (already in the system as an accepted application) a secure
 // link to upload their KYC documents.

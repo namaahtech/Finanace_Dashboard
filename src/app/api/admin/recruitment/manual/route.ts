@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { getMailContext, sendRecruitmentMail, greetingHtml, requestDocsHtml } from "@/lib/recruitment-mail";
 import { baseUrlFrom } from "@/lib/base-url";
 
-const DOCS = ["face_photo", "aadhaar", "pan"];
+const DOCS = ["profile_photo", "face_photo", "aadhaar", "pan"];
 
 // Manual entry for candidates interviewed on a 3rd-party panel.
 // Sends the accept/reject greeting and, if requested, a second document-request email.
