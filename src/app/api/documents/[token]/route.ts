@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getMailContext, getCompanyName, sendRecruitmentMail, hrReturnHtml, DOC_LABELS, type MailAttachment } from "@/lib/recruitment-mail";
+import { logAudit } from "@/lib/audit";
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB per document
 
@@ -24,6 +25,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   if (r.status !== "submitted" && !r.viewed_at && !isExpired(r)) {
     await supabase.from("candidate_document_requests").update({ viewed_at: new Date().toISOString() }).eq("id", r.id);
   }
+
+  // Capture candidate IP address and log view event
+  const forwarded = _req.headers.get("x-forwarded-for");
+  const ip = forwarded ? forwarded.split(",")[0].trim() : _req.headers.get("x-real-ip") || null;
+  await logAudit({
+    actorId: null,
+    actorName: r.candidate_name,
+    actorRole: "candidate",
+    action: "documents.view",
+    section: "Documents",
+    summary: `${r.candidate_name} opened document request link`,
+    targetType: "candidate_document_request",
+    targetId: r.id,
+    ip,
+  });
 
   const companyName = await getCompanyName();
 
@@ -127,6 +143,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       .from("candidate_document_requests")
       .update({ status: "submitted", submitted_at: new Date().toISOString(), candidate_message: message })
       .eq("id", r.id);
+
+    // Capture candidate IP address and log submit event
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded ? forwarded.split(",")[0].trim() : req.headers.get("x-real-ip") || null;
+    await logAudit({
+      actorId: null,
+      actorName: r.candidate_name,
+      actorRole: "candidate",
+      action: "documents.submit",
+      section: "Documents",
+      summary: `${r.candidate_name} uploaded requested documents`,
+      targetType: "candidate_document_request",
+      targetId: r.id,
+      ip,
+    });
 
     return NextResponse.json({ success: true });
   } catch (e: any) {

@@ -14,6 +14,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { getPresenceSessionId } from "@/lib/log-ui";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -102,7 +103,10 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
       fetch("/api/presence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: pathname || (typeof window !== "undefined" ? window.location.pathname : null) }),
+        body: JSON.stringify({
+          path: pathname || (typeof window !== "undefined" ? window.location.pathname : null),
+          device_id: getPresenceSessionId(),
+        }),
       }).catch(() => {});
     ping();
     const t = setInterval(ping, 30000);
