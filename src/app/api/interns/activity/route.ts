@@ -31,7 +31,7 @@ export async function GET() {
 
   const { data: events, error } = await supabase
     .from("audit_logs")
-    .select("id, action, section, summary, target_type, target_id, actor_name, created_at")
+    .select("id, action, section, summary, target_type, target_id, actor_name, actor_emp_id, actor_role, created_at")
     .in("user_id", ids)
     .order("created_at", { ascending: false })
     .limit(300);
