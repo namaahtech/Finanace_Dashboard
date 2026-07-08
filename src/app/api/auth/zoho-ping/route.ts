@@ -18,6 +18,8 @@ import { getSupabaseAdmin } from "@/lib/supabase";
  */
 export async function POST(req: NextRequest) {
   try {
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded ? forwarded.split(",")[0].trim() : req.headers.get("x-real-ip") || null;
     const session = await getSession();
     if (!session?.userId) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -50,6 +52,7 @@ export async function POST(req: NextRequest) {
         zoho_user_id: emp.zoho_user_id,
         note: "User signed in using company Zoho mail ID"
       },
+      ip_address:  ip,
     }).then(undefined, () => {});
 
     // Check/verify the Zoho mailbox status (non-blocking verification)

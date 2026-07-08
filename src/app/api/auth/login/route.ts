@@ -20,6 +20,8 @@ const LoginSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded ? forwarded.split(",")[0].trim() : req.headers.get("x-real-ip") || null;
     const body = await req.json();
     const { email, password } = LoginSchema.parse(body);
 
@@ -103,6 +105,7 @@ export async function POST(req: NextRequest) {
         record_id:   emp.id,
         target_type: "login",
         new_values:  { email, method: "supabase_auth", identity_type: identityType, details: logDetails },
+        ip_address:  ip,
       });
 
       // Trigger Zoho Mailbox activation in real-time if a Zoho mailbox is provisioned
@@ -120,6 +123,7 @@ export async function POST(req: NextRequest) {
             record_id:   emp.id,
             target_type: "mailbox",
             new_values:  { zoho_user_id: emp.zoho_user_id, email: emp.zoho_email, reason: "Login activation trigger" },
+            ip_address:  ip,
           });
         } catch (activateErr: any) {
           console.error(`[Zoho Login Activation Error] Failed to activate Zoho mailbox:`, activateErr.message);
@@ -182,6 +186,7 @@ export async function POST(req: NextRequest) {
         record_id:   "unknown",
         target_type: "login",
         new_values:  { email },
+        ip_address:  ip,
       });
     } catch (_) {}
 
