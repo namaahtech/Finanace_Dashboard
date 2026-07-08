@@ -74,6 +74,7 @@ const SECTIONS = [
       { key: "hr_dashboard",       label: "HR Hub",                       desc: "/hr — landing for HR role" },
       { key: "accounts_dashboard", label: "Accounts Hub",                 desc: "/accounts — landing for Accounts role" },
       { key: "manager_dashboard",  label: "Manager Dashboard",            desc: "/manager/dashboard — department overview" },
+      { key: "lead_dashboard",     label: "Team Lead Dashboard",          desc: "/team-lead/dashboard — team lead overview" },
       { key: "my_dashboard",       label: "Employee Dashboard",           desc: "/dashboard — personal home for staff" },
       { key: "projects",           label: "Projects",                     desc: "Project Kanban, tasks, delegation" },
       { key: "employees",          label: "Employees (User Management)",  desc: "Add, edit, view all staff profiles" },
@@ -126,6 +127,7 @@ const SECTIONS = [
       { key: "kpi_kra",         label: "KPI / KRA Performance",   desc: "Score cards, auto-calculation, history" },
       { key: "payroll",            label: "Payroll Engine",            desc: "Monthly payroll, payslip generation" },
       { key: "payroll_internship", label: "Internship Stipend",        desc: "Intern roster + monthly stipend cycles + payment tracking" },
+      { key: "payslips_management", label: "Payslips",                 desc: "Generate & manage employee payslip PDFs (/admin/payslips)" },
       { key: "incentives",      label: "Incentives",              desc: "Performance-based incentive management" },
       { key: "claims",          label: "Claims & Expenses",       desc: "Approve/reject employee expense claims" },
       { key: "reimbursements",  label: "Reimbursements",          desc: "Process and approve reimbursement requests" },
@@ -472,6 +474,7 @@ export default function PermissionsPage() {
 
   return (
     <DashboardShell
+      moduleKey="permissions_control"
       title="Security & Permissions"
       subtitle="Manage role-based access control and module visibility across the organization."
       actions={

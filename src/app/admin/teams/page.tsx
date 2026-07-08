@@ -11,8 +11,7 @@ import {
   X,
   GitMerge,
   Edit2,
-  Trash2,
-  Settings2
+  Trash2
 } from "lucide-react";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue, SelectLabel, SelectSeparator } from "@/components/ui/select";
 import { useState, useEffect, useMemo } from "react";
@@ -45,11 +44,9 @@ export default function TeamsPage() {
   
   // Realtime Supabase Data
   const [teamsData, setTeamsData] = useState<any[]>([]);
-  const [config, setConfig] = useState<any>(null);
-  
+
   // Modals
   const [showForm, setShowForm] = useState(false);
-  const [showConfigForm, setShowConfigForm] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string, name: string } | null>(null);
 
@@ -59,32 +56,14 @@ export default function TeamsPage() {
     name: "", 
     type: "department", 
     parent_id: "none", 
-    head_designation: "" 
-  });
-
-  const [configForm, setConfigForm] = useState({
-    company_name: "",
-    founder_name: "",
-    founder_designation: ""
+    head_designation: ""
   });
 
   async function fetchData() {
     try {
       setLoading(true);
-      const [teamsRes, configRes] = await Promise.all([
-        axios.get('/api/teams'),
-        supabase.from('system_config').select('*').limit(1).single()
-      ]);
-      
+      const teamsRes = await axios.get('/api/teams');
       if (teamsRes.data.teams) setTeamsData(teamsRes.data.teams);
-      if (configRes.data) {
-        setConfig(configRes.data);
-        setConfigForm({
-          company_name: configRes.data.company_name || "",
-          founder_name: configRes.data.founder_name || "",
-          founder_designation: configRes.data.founder_designation || ""
-        });
-      }
     } catch (e: any) {
       console.error("Fetch Fault:", e);
     } finally {
@@ -96,7 +75,6 @@ export default function TeamsPage() {
     fetchData();
     const channel = supabase.channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config' }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -196,22 +174,6 @@ export default function TeamsPage() {
     }
   }
 
-  async function handleUpdateConfig() {
-    try {
-      const { error } = await supabase
-        .from('system_config')
-        .update(configForm)
-        .eq('id', config.id);
-      
-      if (error) throw error;
-      toast.success("Root Identity recalibrated.");
-      setShowConfigForm(false);
-      fetchData();
-    } catch (e: any) {
-      toast.error("Config Fail: " + e.message);
-    }
-  }
-
   return (
     <DashboardShell
       moduleKey="teams"
@@ -219,9 +181,6 @@ export default function TeamsPage() {
       subtitle="Administrative management of the enterprise-grade organizational tree."
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowConfigForm(true)}>
-            <Settings2 size={14} className="mr-1.5" /> Root Node
-          </Button>
           {canCreate && (
             <Button variant="default" size="sm" onClick={() => { setEditingItem(null); setForm({ id: "", type: 'department', name: "", head_designation: "", parent_id: "none" }); setShowForm(true); }}>
               <Plus size={14} className="mr-1" /> Add
@@ -456,55 +415,6 @@ export default function TeamsPage() {
             <Button size="sm" onClick={handleSaveEntity}>
               {editingItem ? "Save Changes" : "Create Unit"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* COMPANY CONFIG DIALOG */}
-      <Dialog open={showConfigForm} onOpenChange={setShowConfigForm}>
-        <DialogContent className="sm:max-w-lg p-0 overflow-hidden gap-0">
-          <DialogHeader className="flex-row items-center gap-3 space-y-0 border-b border-border px-6 py-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
-              <Settings2 size={16} />
-            </div>
-            <div className="flex-1 text-left">
-              <DialogTitle className="text-sm font-semibold">Company Configuration</DialogTitle>
-              <DialogDescription className="text-xs">Edit major company profile metadata.</DialogDescription>
-            </div>
-          </DialogHeader>
-
-          <div className="px-6 py-5 space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Company Name</Label>
-              <Input
-                type="text"
-                value={configForm.company_name}
-                onChange={(e) => setConfigForm({ ...configForm, company_name: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Founder / CEO</Label>
-                <Input
-                  type="text"
-                  value={configForm.founder_name}
-                  onChange={(e) => setConfigForm({ ...configForm, founder_name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Designation</Label>
-                <Input
-                  type="text"
-                  value={configForm.founder_designation}
-                  onChange={(e) => setConfigForm({ ...configForm, founder_designation: e.target.value })}
-                />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="!mx-0 !mb-0 !rounded-none flex-row items-center sm:justify-end gap-2 border-t border-border bg-background px-6 py-4">
-            <Button variant="outline" size="sm" onClick={() => setShowConfigForm(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleUpdateConfig}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

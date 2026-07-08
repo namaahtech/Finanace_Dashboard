@@ -152,7 +152,7 @@ export default function AdminPayslipsPage() {
 
   return (
     <DashboardShell
-      moduleKey="payroll"
+      moduleKey="payslips_management"
       title="Payroll & Payslips"
       subtitle="Generate, approve, and release employee payslips with auto-linked earnings."
       actions={

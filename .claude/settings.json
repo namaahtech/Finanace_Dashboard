@@ -105,7 +105,9 @@
       "Bash(python -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('intern modules:',len\\(d\\),'| can_view=true:',sum\\(1 for x in d if x['can_view']\\)\\)\")",
       "Bash(cp node_modules/@mediapipe/tasks-vision/wasm/* public/mediapipe/wasm/)",
       "Bash(curl -sL -o public/mediapipe/face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('hex'\\)\\)\")",
+      "Bash(git check-ignore *)"
     ]
   }
 }

@@ -217,7 +217,7 @@ export default function InternshipManagePage() {
   }
 
   return (
-    <DashboardShell>
+    <DashboardShell moduleKey="payroll_internship">
       <div className="space-y-5">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">

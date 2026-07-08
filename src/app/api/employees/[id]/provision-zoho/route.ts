@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActiveToken } from "@/lib/zoho-mail";
 import { provisionZohoMailbox, generateTempPassword, checkMailboxLicense } from "@/lib/zoho-provisioning";
+import { decryptSecret } from "@/lib/crypto/secretbox";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -31,7 +32,7 @@ export async function POST(_req: Request, { params }: Ctx) {
   const supabase = getSupabaseAdmin();
   const { data: emp } = await supabase
     .from("employees")
-    .select("id, name, designation, department, zoho_email, zoho_account_id")
+    .select("id, name, designation, department, zoho_email, zoho_account_id, pwd_vault")
     .eq("id", id)
     .maybeSingle();
 
@@ -67,13 +68,18 @@ export async function POST(_req: Request, { params }: Ctx) {
     );
   }
 
+  // Use the employee's CURRENT password (from the encrypted vault) so the new
+  // mailbox is created with the same password they already log in with — no reset
+  // needed. Falls back to a fresh temp password if the vault/key isn't available.
+  const currentPassword = decryptSecret((emp as any).pwd_vault) || generateTempPassword();
+
   try {
     const result = await provisionZohoMailbox({
       employeeId:   emp.id,
       name:         emp.name,
       designation:  emp.designation || "",
       department:   emp.department  || "",
-      tempPassword: generateTempPassword(),
+      tempPassword: currentPassword,
       preferredEmail: emp.zoho_email || undefined,
     });
 

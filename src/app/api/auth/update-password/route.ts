@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { updateZohoPassword } from "@/lib/zoho-provisioning";
+import { encryptSecret } from "@/lib/crypto/secretbox";
 
 // Zoho password requirements: At least 8 characters, uppercase, lowercase, number, and symbol.
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
@@ -82,6 +83,14 @@ export async function POST(req: NextRequest) {
       .from("employees")
       .update({ must_change_password: false })
       .eq("id", userId);
+
+    // 5b. Keep the encrypted password vault current, so a company mailbox that gets
+    // provisioned LATER is created with this exact password (Supabase stores only a
+    // hash, so it can't be recovered otherwise). Non-fatal if column/key missing.
+    try {
+      const enc = encryptSecret(newPassword);
+      if (enc) await supabase.from("employees").update({ pwd_vault: enc }).eq("id", userId);
+    } catch { /* column not migrated / no key — non-fatal */ }
 
     // 6. Audit Log entry
     await supabase.from("audit_logs").insert({

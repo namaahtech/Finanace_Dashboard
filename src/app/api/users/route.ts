@@ -4,7 +4,9 @@ import nodemailer from "nodemailer";
 import { provisionZohoMailbox, generateTempPassword } from "@/lib/zoho-provisioning";
 import { getActiveToken } from "@/lib/zoho-mail";
 import { getActor } from "@/lib/onboarding/server";
+import { requireModule } from "@/lib/authz";
 import { logAudit } from "@/lib/audit";
+import { encryptSecret } from "@/lib/crypto/secretbox";
 
 // Resolve a candidate's uploaded Profile Photo (falls back to the verification
 // selfie) as a data URL, so it can be copied onto the new employee's record.
@@ -38,6 +40,10 @@ async function resolveProfilePhotoDataUrl(supabase: any, email: string): Promise
 
 export async function POST(req: Request) {
   try {
+    // Only admin (bypass) or a role granted the Employees module may create staff.
+    const gate = await requireModule("employees", "can_create");
+    if (!gate.ok) return gate.response;
+
     const supabase = getSupabaseAdmin();
     const body = await req.json();
 
@@ -51,6 +57,11 @@ export async function POST(req: Request) {
     if (!VALID_ROLES.includes(role)) {
       return NextResponse.json({ error: `Invalid role "${role}". Must be one of: ${VALID_ROLES.join(", ")}` }, { status: 400 });
     }
+
+    // When "Auto-create Zoho Mail" is OFF, NO company address is generated — the
+    // person logs in with their PERSONAL email and works from it until (if ever) a
+    // mailbox is provisioned later. When ON, we mint firstname.lastname@domain.
+    const wantsCompanyEmail = !!create_zoho_mail;
 
     // Build professional email address: firstname.lastname@domain
     const parts       = name.trim().toLowerCase().split(/\s+/);
@@ -66,9 +77,10 @@ export async function POST(req: Request) {
     }
 
     // Deduplicate: if firstname.lastname already exists, append random 4-digit suffix
+    // (only when we're actually assigning a company address).
     let localPart = baseLocal;
     let attempt = 0;
-    while (true) {
+    while (wantsCompanyEmail) {
       const candidate = `${localPart}@${mailDomain}`;
       const { data: existing } = await supabase
         .from("employees")
@@ -84,13 +96,15 @@ export async function POST(req: Request) {
     }
 
     const professionalEmail = `${localPart}@${mailDomain}`;
+    // The canonical login identity + Supabase Auth email. Personal until provisioned.
+    const loginEmail = wantsCompanyEmail ? professionalEmail : email;
 
     // 1. Generate an automated temporary password (avoid sequential characters)
     const generatedPassword = generateTempPassword();
 
     // 2. Map robust Auth user via Backend Service Role
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: professionalEmail,
+      email: loginEmail,
       password: generatedPassword,
       email_confirm: true,
       user_metadata: { role, full_name: name, department }
@@ -108,9 +122,9 @@ export async function POST(req: Request) {
     const insertData: any = {
       id: user.id,   // Mapped to strict auth.user (RLS)
       name,
-      email: professionalEmail, // Primary login identity matches Supabase Auth email
+      email: loginEmail, // Primary login identity (company address, or personal until a mailbox is provisioned)
       personal_email: email, // Store personal email in personal_email column
-      zoho_email: professionalEmail, // Store professional email in zoho_email column
+      zoho_email: wantsCompanyEmail ? professionalEmail : null, // No company address until a mailbox is created
       employee_id: body.employee_id || employee_id_gen,
       role,
       department,
@@ -152,6 +166,13 @@ export async function POST(req: Request) {
     // Set source separately — column added by migration 20260702100000; non-fatal if column not yet applied
     const empSource = source === "onboarding" ? "onboarding" : "direct";
     try { await supabase.from("employees").update({ source: empSource }).eq("id", user.id); } catch { /* column not yet migrated */ }
+
+    // Vault the current password (encrypted) so a mailbox provisioned LATER can be
+    // created with this same password. Non-fatal if the column/key isn't available.
+    try {
+      const enc = encryptSecret(generatedPassword);
+      if (enc) await supabase.from("employees").update({ pwd_vault: enc }).eq("id", user.id);
+    } catch { /* column not yet migrated / no key — non-fatal */ }
 
     // Copy the candidate's onboarding Profile Photo onto the employee record as their
     // display picture (migration 113). Non-fatal if the column/photo is unavailable.
@@ -228,6 +249,25 @@ export async function POST(req: Request) {
         }
       });
 
+      // The "future login" guidance differs when no company mailbox is created:
+      // the person simply keeps using their personal email until (if ever) one is
+      // provisioned — at which point the same password carries over automatically.
+      const step3Html = wantsCompanyEmail
+        ? `<div style="margin-bottom: 16px; padding: 16px; border-left: 4px solid #10b981; background-color: #ecfdf5; border-radius: 8px;">
+                  <strong style="color: #047857; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px; letter-spacing: 1px;">Step 3: Future Logins (Professional Email Only)</strong>
+                  After completing onboarding, access using your personal email will be permanently blocked. Moving forward, you must log in using your official <b>Professional Email</b>: <span style="font-family: monospace; font-weight: bold; color: #0f172a; background: #d1fae5; padding: 2px 6px; border-radius: 4px;">${professionalEmail}</span> with your newly updated password.
+                </div>`
+        : `<div style="margin-bottom: 16px; padding: 16px; border-left: 4px solid #10b981; background-color: #ecfdf5; border-radius: 8px;">
+                  <strong style="color: #047857; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px; letter-spacing: 1px;">Step 3: Keep Using This Email</strong>
+                  Continue logging in with your <b>personal email</b> above and your new password. If the company later assigns you an official mailbox, we'll notify you — and your <b>same password will work there automatically</b>, no reset needed.
+                </div>`;
+      const futureLoginRow = wantsCompanyEmail
+        ? `<div style="margin-bottom: 12px; display: flex; align-items: center;">
+                  <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">Future Login Email</strong>
+                  <span style="color: #0f172a; font-weight: 600;">${professionalEmail}</span>
+                </div>`
+        : "";
+
       const mailOptions = {
         from: `"${config.company_name || "Namaah Nexus"}" <${config.smtp_user}>`,
         to: email,
@@ -253,10 +293,7 @@ export async function POST(req: Request) {
                   Once logged in, a <b>Change Password</b> modal will prompt you. Enter your new password and sign the Onboarding Consent Form to initialize your identity profile.
                 </div>
 
-                <div style="margin-bottom: 16px; padding: 16px; border-left: 4px solid #10b981; background-color: #ecfdf5; border-radius: 8px;">
-                  <strong style="color: #047857; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px; letter-spacing: 1px;">Step 3: Future Logins (Professional Email Only)</strong>
-                  After completing onboarding, access using your personal email will be permanently blocked. Moving forward, you must log in using your official <b>Professional Email</b>: <span style="font-family: monospace; font-weight: bold; color: #0f172a; background: #d1fae5; padding: 2px 6px; border-radius: 4px;">${professionalEmail}</span> with your newly updated password.
-                </div>
+                ${step3Html}
               </div>
 
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 24px; border-radius: 8px; margin: 24px 0;">
@@ -268,10 +305,7 @@ export async function POST(req: Request) {
                   <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">1st Login Email</strong>
                   <span style="color: #0f172a; font-weight: 600;">${email}</span>
                 </div>
-                <div style="margin-bottom: 12px; display: flex; align-items: center;">
-                  <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">Future Login Email</strong>
-                  <span style="color: #0f172a; font-weight: 600;">${professionalEmail}</span>
-                </div>
+                ${futureLoginRow}
                 <div style="display: flex; align-items: center;">
                   <strong style="width: 180px; color: #64748b; font-size: 12px; text-transform: uppercase;">Temporary Pass</strong>
                   <code style="background:#e2e8f0; color: #0f172a; padding:4px 8px; border-radius:4px; font-family: monospace; font-size: 14px; font-weight: 700;">${generatedPassword}</code>

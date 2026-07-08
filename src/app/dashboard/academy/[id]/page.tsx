@@ -34,10 +34,10 @@ export default function CoursePlayerPage() {
   // DashboardShell. Manually enforce my_academy view permission.
   useEffect(() => {
     if (authLoading || !user || !permissions) return;
-    const perm = permissions["my_academy"];
-    if (perm && !perm.can_view) {
-      router.replace(getDashboardForRole(user.role as Role));
-    }
+    // Accessible via either academy key; a MISSING or false permission both mean
+    // no access (blocks direct-URL entry, not just a hidden link). Admin always allowed.
+    const canView = user.role === "admin" || !!permissions["my_academy"]?.can_view || !!permissions["training_academy"]?.can_view;
+    if (!canView) router.replace(getDashboardForRole(user.role as Role));
   }, [authLoading, user, permissions, router]);
   const [course, setCourse] = useState<any>(null);
   const [activeLesson, setActiveLesson] = useState<any>(null);

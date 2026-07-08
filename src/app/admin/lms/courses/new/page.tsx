@@ -118,6 +118,7 @@ export default function NewCoursePage() {
 
   return (
     <DashboardShell
+      moduleKey="lms_courses"
       title="Create New Course"
       subtitle="Design a comprehensive learning path for your teams."
       actions={

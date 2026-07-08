@@ -1,5 +1,57 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+
+// ── Auto-audit ────────────────────────────────────────────────────────────────
+// Every state-changing API call (POST/PATCH/PUT/DELETE) is recorded to the Master
+// Log Sheet with the actor, the page it came from, and the endpoint — so ALL roles'
+// create/edit/delete activity across the whole workspace is captured centrally, not
+// just the handful of routes that call logAudit() manually. GET (page views) are NOT
+// logged here — live "who's on what module" is covered by presence instead.
+const AUDIT_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+const AUDIT_SKIP = [
+  // Pure infrastructure / high-frequency noise
+  "/api/presence", "/api/auth", "/api/health", "/api/admin/master-log", "/api/messages",
+  // Already richly logged via logAudit() (with before/after) — skip to avoid duplicates
+  "/api/onboarding", "/api/sign", "/api/permissions", "/api/users", "/api/admin/recruitment",
+];
+
+function pagePathFromReferer(referer: string | null, fallback: string): string {
+  if (!referer) return fallback;
+  try { return new URL(referer).pathname || fallback; } catch { return fallback; }
+}
+
+async function writeAuditLog(req: NextRequest, userId: string): Promise<void> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return;
+  const apiPath = req.nextUrl.pathname;
+  const method = req.method.toUpperCase();
+  const pagePath = pagePathFromReferer(req.headers.get("referer"), apiPath);
+  const ip = (req.headers.get("x-forwarded-for")?.split(",")[0] || req.headers.get("x-real-ip") || "").trim() || null;
+  try {
+    await fetch(`${url}/rest/v1/audit_logs`, {
+      method: "POST",
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        action: `api.${method.toLowerCase()}`,
+        table_name: "api_request",
+        record_id: userId, // valid uuid — satisfies the legacy not-null column
+        target_type: "api",
+        target_id: apiPath,
+        path: pagePath,
+        summary: `${method} ${apiPath}`,
+        ip_address: ip,
+        metadata: { auto: true, method },
+      }),
+    });
+  } catch { /* never break the request over an audit write */ }
+}
 
 // Edge auth gate.
 //   - Unauthenticated users hitting any protected route are redirected to /login
@@ -40,7 +92,7 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
-export async function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest, event: NextFetchEvent) {
   const { pathname } = req.nextUrl;
 
   // /onboarding is permanently retired — redirect to root which routes by role
@@ -102,6 +154,17 @@ export async function middleware(req: NextRequest) {
     redirectUrl.pathname = "/login";
     if (pathname !== "/") redirectUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(redirectUrl);
+  }
+
+  // Auto-audit every state-changing API call (fire-and-forget, never blocks the
+  // request). Captures who + what + which page/module, workspace-wide.
+  if (
+    AUDIT_METHODS.has(req.method.toUpperCase()) &&
+    pathname.startsWith("/api/") &&
+    !AUDIT_SKIP.some((p) => pathname.startsWith(p)) &&
+    session.user?.id
+  ) {
+    event.waitUntil(writeAuditLog(req, session.user.id));
   }
 
   return response;
