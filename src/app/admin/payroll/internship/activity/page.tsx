@@ -14,11 +14,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft, Activity, Wallet, CalendarDays, RefreshCw, Radio,
-  CheckCircle2, PencilLine, IndianRupee, Clock,
+  Clock, ArrowRight, ShieldCheck, ScrollText,
 } from "lucide-react";
 import dayjs from "dayjs";
-import relativeTime from "dayjs/plugin/relativeTime";
-dayjs.extend(relativeTime);
+import {
+  relTime, fullTime, roleClass, prettyRole, sectionForAction,
+} from "@/lib/log-ui";
 
 interface Event {
   id: string;
@@ -28,9 +29,11 @@ interface Event {
   target_type: string | null;
   target_id: string | null;
   actor_name: string | null;
+  actor_emp_id: string | null;
+  actor_role: string | null;
   created_at: string;
 }
-interface Account { id: string; name: string; email: string; employee_id: string }
+interface Account { id: string; name: string; email: string; employee_id: string; role: string }
 interface Presence {
   user_id: string;
   last_seen: string;
@@ -42,27 +45,6 @@ function initials(name?: string | null) {
   return (name || "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
-function actionMeta(action: string) {
-  if (action.includes("payment")) return { icon: Wallet, cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20", label: "Payment" };
-  if (action === "internship.cycle.update") return { icon: PencilLine, cls: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20", label: "Cycle" };
-  if (action === "attendance.check_in" || action === "attendance.check_out") {
-    return { icon: CheckCircle2, cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20", label: "Attendance" };
-  }
-  if (action === "attendance.pause" || action === "attendance.resume") {
-    return { icon: RefreshCw, cls: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20", label: "Attendance" };
-  }
-  if (action === "intern.became_inactive" || action === "intern.idle") {
-    return { icon: Radio, cls: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20", label: "Idle" };
-  }
-  if (action === "intern.active") {
-    return { icon: Activity, cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20", label: "Active" };
-  }
-  if (action === "intern.login" || action === "intern.logout") {
-    return { icon: RefreshCw, cls: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20", label: "Session" };
-  }
-  return { icon: Activity, cls: "bg-muted text-muted-foreground border-border", label: "Action" };
-}
-
 export default function InternActivityPage() {
   const [account, setAccount] = useState<Account | null>(null);
   const [presence, setPresence] = useState<Presence | null>(null);
@@ -71,7 +53,14 @@ export default function InternActivityPage() {
   const [loading, setLoading] = useState(true);
   const [live, setLive] = useState(false);
   const [selectedIntern, setSelectedIntern] = useState<string | null>(null);
+  const [serverNow, setServerNow] = useState(Date.now());
   const acctRef = useRef<Account | null>(null);
+
+  // Live wall-clock tick for relative timestamps
+  useEffect(() => {
+    const t = setInterval(() => setServerNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const load = useCallback(async (spinner = false) => {
     if (spinner) setLoading(true);
@@ -120,7 +109,6 @@ export default function InternActivityPage() {
   const internNames = useMemo(() => {
     const names = new Set<string>();
     events.forEach((e) => {
-      // Find patterns like "for Name"
       const match = e.summary.match(/for\s+([^"]+?)(?:\s+NAM\d+|$)/i);
       if (match && match[1]) {
         names.add(match[1].trim());
@@ -321,33 +309,52 @@ export default function InternActivityPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <Table className="text-xs">
-                  <TableHeader>
-                    <TableRow className="bg-muted/10">
-                      <TableHead className="w-[160px] py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Timestamp</TableHead>
-                      <TableHead className="w-[110px] py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">Type</TableHead>
-                      <TableHead className="py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Details / Summary</TableHead>
+                <Table className="w-full text-left">
+                  <TableHeader className="sticky top-0 bg-muted/60 backdrop-blur border-b border-border">
+                    <TableRow className="text-[10px] uppercase tracking-wide text-muted-foreground border-b hover:bg-transparent">
+                      <TableHead className="px-4 py-2.5 font-semibold">When</TableHead>
+                      <TableHead className="px-4 py-2.5 font-semibold">User</TableHead>
+                      <TableHead className="px-4 py-2.5 font-semibold">Role</TableHead>
+                      <TableHead className="px-4 py-2.5 font-semibold">Section</TableHead>
+                      <TableHead className="px-4 py-2.5 font-semibold">Action &amp; details</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody className="divide-y">
+                  <TableBody>
                     {filteredEvents.map((e) => {
-                      const meta = actionMeta(e.action);
-                      const Icon = meta.icon;
                       return (
-                        <TableRow key={e.id} className="hover:bg-muted/10 transition-colors">
-                          <TableCell className="py-2 font-mono text-muted-foreground whitespace-nowrap">
-                            {dayjs(e.created_at).format("DD MMM YYYY, hh:mm:ss A")}
+                        <TableRow key={e.id} className="border-b border-border/60 hover:bg-muted/30 align-top">
+                          <TableCell className="px-4 py-3 whitespace-nowrap">
+                            <div className="text-xs font-medium text-foreground tabular-nums">{relTime(e.created_at, serverNow)}</div>
+                            <div className="text-[10px] text-muted-foreground tabular-nums">{fullTime(e.created_at)}</div>
                           </TableCell>
-                          <TableCell className="py-2 text-center">
-                            <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold border", meta.cls)}>
-                              <Icon className="h-3 w-3 shrink-0" />
-                              {meta.label}
-                            </span>
+                          <TableCell className="px-4 py-3">
+                            <div className="text-xs font-medium text-foreground">{e.actor_name || account?.name || "System"}</div>
+                            {(e.actor_emp_id || account?.employee_id) && <div className="text-[10px] text-muted-foreground">{e.actor_emp_id || account?.employee_id}</div>}
                           </TableCell>
-                          <TableCell className="py-2 font-medium leading-relaxed break-words">
-                            {renderSummary(e.summary, (name) => {
-                              setSelectedIntern(name);
-                            })}
+                          <TableCell className="px-4 py-3">
+                            {e.actor_role || account?.role ? (
+                              <Badge variant="outline" className={cn("text-[9px] capitalize", roleClass(e.actor_role || account?.role))}>
+                                {prettyRole(e.actor_role || account?.role)}
+                              </Badge>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <Badge variant="secondary" className="text-[10px]">
+                              {sectionForAction(e.action, e.section)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="px-4 py-3 leading-relaxed">
+                            <div className="text-xs text-foreground">
+                              {renderSummary(e.summary, (name) => {
+                                setSelectedIntern(name);
+                              })}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                              {e.action}
+                              {e.target_id ? " · " + e.target_id : ""}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
