@@ -44,6 +44,21 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       .eq("id", packet.id);
   }
 
+  // Capture candidate IP address and log view event
+  const forwarded = _req.headers.get("x-forwarded-for");
+  const ip = forwarded ? forwarded.split(",")[0].trim() : _req.headers.get("x-real-ip") || null;
+  await logAudit({
+    actorId: null,
+    actorName: packet.candidate_name,
+    actorRole: "candidate",
+    action: "esign.view",
+    section: "E-Sign",
+    summary: `${packet.candidate_name} viewed their offer letter & NDA`,
+    targetType: "onboarding_packet",
+    targetId: packet.id,
+    ip,
+  });
+
   const data = buildTemplateData({
     candidate: packet,
     config: packet.config,

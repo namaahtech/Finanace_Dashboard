@@ -125,11 +125,19 @@ export default function SessionsPage() {
                   <tbody>
                     {allSessions.map(({ p, st }) => {
                       const isOffline = st.key === "offline";
+                      const key = (p as any).device_id ? `${p.user_id}-${(p as any).device_id}` : p.user_id;
                       return (
-                        <tr key={p.user_id} className={cn("border-b border-border/60 hover:bg-muted/30", isOffline && "opacity-60")}>
+                        <tr key={key} className={cn("border-b border-border/60 hover:bg-muted/30", isOffline && "opacity-60")}>
                           <td className="px-3 py-2.5">
                             <div className="text-xs font-medium text-foreground">{p.emp?.name || "Unknown"}</div>
-                            {p.emp?.employee_id && <div className="text-[10px] text-muted-foreground">{p.emp.employee_id}</div>}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {p.emp?.employee_id && <span className="text-[10px] text-muted-foreground">{p.emp.employee_id}</span>}
+                              {(p as any).device_name && (
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-muted-foreground/30 text-muted-foreground font-mono">
+                                  {(p as any).device_name}
+                                </Badge>
+                              )}
+                            </div>
                           </td>
                           <td className="px-3 py-2.5">
                             {p.emp?.role

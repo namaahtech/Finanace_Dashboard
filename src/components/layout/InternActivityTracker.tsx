@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { isPayrollInternOnly } from "@/lib/payroll-access";
-import { pathSection } from "@/lib/log-ui";
+import { pathSection, getPresenceSessionId } from "@/lib/log-ui";
 import { useAuth } from "./AuthProvider";
 
 export function InternActivityTracker() {
@@ -34,8 +34,10 @@ export function InternActivityTracker() {
     fetch("/api/presence", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "available" }),
+      body: JSON.stringify({ status: "available", device_id: getPresenceSessionId() }),
     }).catch(() => {});
+
+    logActivity(`${prefix}.active`, "Opened portal / active in workspace");
 
     // 1. Setup global click tracker
     const handleClick = (e: MouseEvent) => {
@@ -128,7 +130,7 @@ export function InternActivityTracker() {
         fetch("/api/presence", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "available" }),
+          body: JSON.stringify({ status: "available", device_id: getPresenceSessionId() }),
         }).catch(() => {});
         
         isInactiveRef.current = false;
@@ -152,7 +154,7 @@ export function InternActivityTracker() {
         fetch("/api/presence", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "idle" }),
+          body: JSON.stringify({ status: "idle", device_id: getPresenceSessionId() }),
         }).catch(() => {});
       }
     }, 10000);

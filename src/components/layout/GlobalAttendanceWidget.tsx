@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
+import { getPresenceSessionId } from "@/lib/log-ui";
 
 type AttSession = {
   employee_id: string;
@@ -80,7 +81,7 @@ function postPresenceStatus(status: string) {
   fetch("/api/presence", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, device_id: getPresenceSessionId() }),
   }).catch(() => {});
 }
 

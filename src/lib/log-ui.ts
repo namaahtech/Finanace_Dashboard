@@ -332,3 +332,13 @@ export function toCSV(rows: LogRow[]): string {
   ].map(esc).join(","));
   return [head.map(esc).join(","), ...lines].join("\r\n");
 }
+
+export function getPresenceSessionId(): string {
+  if (typeof window === "undefined") return "default";
+  let id = sessionStorage.getItem("np_presence_session_id");
+  if (!id) {
+    id = Math.random().toString(36).substring(2, 15);
+    sessionStorage.setItem("np_presence_session_id", id);
+  }
+  return id;
+}
