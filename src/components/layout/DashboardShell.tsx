@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { GlobalAttendanceWidget } from "./GlobalAttendanceWidget";
 import { ChangePasswordModal } from "./ChangePasswordModal";
+import { InternActivityTracker } from "./InternActivityTracker";
 import { isPayrollInternOnly, isPayrollInternPathAllowed, PAYROLL_INTERN_HOME } from "@/lib/payroll-access";
 import {
   SidebarInset,
@@ -186,6 +187,7 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
   return (
     <>
     <ChangePasswordModal />
+    {isPayrollIntern && <InternActivityTracker />}
     <SidebarProvider>
       <Sidebar />
       <SidebarInset className="bg-background overflow-x-hidden min-w-0">
