@@ -132,11 +132,15 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
   useEffect(() => {
     if (!moduleKey || !user || !permissions) return;
     if (user.role === "admin") return; // admin is the apex role — always allowed
+    const isPayrollIntern = isPayrollInternOnly(user.email);
     const keys = Array.isArray(moduleKey) ? moduleKey : [moduleKey];
     if (!keys.length) return;
-    const canView = keys.some((k) => !!permissions[k]?.can_view);
+    const canView = keys.some((k) => {
+      if (isPayrollIntern && k === "payroll_internship") return true;
+      return !!permissions[k]?.can_view;
+    });
     if (canView) return;
-    const home = getDashboardForRole(user.role as Role);
+    const home = isPayrollIntern ? PAYROLL_INTERN_HOME : getDashboardForRole(user.role as Role);
     if (pathname !== home) router.replace(home);
   }, [permissions, moduleKey, user, router, pathname]);
 
@@ -156,13 +160,18 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
   // permissions are already loaded, so this is reliable. We never block a user's own
   // role home (pathname === home) to avoid a blank-screen loop.
   const gateKeys = moduleKey ? (Array.isArray(moduleKey) ? moduleKey : [moduleKey]) : [];
-  const homePath = getDashboardForRole(user.role as Role);
+  const isPayrollIntern = user ? isPayrollInternOnly(user.email) : false;
+  const homePath = isPayrollIntern ? PAYROLL_INTERN_HOME : getDashboardForRole(user?.role as Role);
   const accessDenied =
+    user &&
     user.role !== "admin" && // admin always allowed
     gateKeys.length > 0 &&
     !!permissions &&
     pathname !== homePath &&
-    !gateKeys.some((k) => !!permissions[k]?.can_view);
+    !gateKeys.some((k) => {
+      if (isPayrollIntern && k === "payroll_internship") return true;
+      return !!permissions[k]?.can_view;
+    });
   if (accessDenied) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
