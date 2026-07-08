@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { headers } from "next/headers";
 
 export interface AuditChange { from: any; to: any; }
 
@@ -36,6 +37,15 @@ export function diffObjects(before?: Record<string, any> | null, after?: Record<
 export async function logAudit(opts: LogAuditOpts): Promise<void> {
   try {
     const supabase = getSupabaseAdmin();
+
+    let ip = opts.ip ?? null;
+    if (!ip) {
+      try {
+        const headerList = await headers();
+        const forwarded = headerList.get("x-forwarded-for");
+        ip = forwarded ? forwarded.split(",")[0].trim() : headerList.get("x-real-ip") || null;
+      } catch {}
+    }
 
     let name = opts.actorName ?? null;
     let role = opts.actorRole ?? null;
@@ -81,7 +91,7 @@ export async function logAudit(opts: LogAuditOpts): Promise<void> {
       section: opts.section,
       summary: opts.summary,
       changes,
-      ip_address: opts.ip ?? null,
+      ip_address: ip,
       metadata: {},
     });
   } catch (e: any) {

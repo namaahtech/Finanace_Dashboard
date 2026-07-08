@@ -103,6 +103,8 @@ async function handleSAMLRequest(req: NextRequest) {
   }
 
   // Log audit event for this professional login (non-blocking)
+  const forwarded = req.headers.get("x-forwarded-for");
+  const ip = forwarded ? forwarded.split(",")[0].trim() : req.headers.get("x-real-ip") || null;
   supabase.from("audit_logs").insert({
     actor_id:    user.id,
     user_id:     user.id,
@@ -115,6 +117,7 @@ async function handleSAMLRequest(req: NextRequest) {
       method:   "professional_email_saml_sso",
       note:     "User signed in using company Zoho mail ID — SAML SSO flow triggered",
     },
+    ip_address:  ip,
   }).then(undefined, () => {});
 
   // 4. If user has no Zoho email, skip SAML and redirect directly
