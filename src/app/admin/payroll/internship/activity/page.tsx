@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
@@ -10,9 +10,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft, Activity, Wallet, CalendarDays, RefreshCw, Radio,
-  CheckCircle2, PencilLine, IndianRupee,
+  CheckCircle2, PencilLine, IndianRupee, Clock,
 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -41,24 +43,24 @@ function initials(name?: string | null) {
 }
 
 function actionMeta(action: string) {
-  if (action.includes("payment")) return { icon: Wallet, cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400", label: "Payment" };
-  if (action === "internship.cycle.update") return { icon: PencilLine, cls: "bg-blue-500/15 text-blue-700 dark:text-blue-400", label: "Cycle" };
+  if (action.includes("payment")) return { icon: Wallet, cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20", label: "Payment" };
+  if (action === "internship.cycle.update") return { icon: PencilLine, cls: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20", label: "Cycle" };
   if (action === "attendance.check_in" || action === "attendance.check_out") {
-    return { icon: CheckCircle2, cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400", label: "Attendance" };
+    return { icon: CheckCircle2, cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20", label: "Attendance" };
   }
   if (action === "attendance.pause" || action === "attendance.resume") {
-    return { icon: RefreshCw, cls: "bg-blue-500/15 text-blue-700 dark:text-blue-400", label: "Attendance" };
+    return { icon: RefreshCw, cls: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20", label: "Attendance" };
   }
   if (action === "intern.became_inactive" || action === "intern.idle") {
-    return { icon: Radio, cls: "bg-amber-500/15 text-amber-700 dark:text-amber-400", label: "Idle" };
+    return { icon: Radio, cls: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20", label: "Idle" };
   }
   if (action === "intern.active") {
-    return { icon: Activity, cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400", label: "Active" };
+    return { icon: Activity, cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20", label: "Active" };
   }
   if (action === "intern.login" || action === "intern.logout") {
-    return { icon: RefreshCw, cls: "bg-purple-500/15 text-purple-700 dark:text-purple-400", label: "Session" };
+    return { icon: RefreshCw, cls: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20", label: "Session" };
   }
-  return { icon: Activity, cls: "bg-muted text-muted-foreground", label: "Action" };
+  return { icon: Activity, cls: "bg-muted text-muted-foreground border-border", label: "Action" };
 }
 
 export default function InternActivityPage() {
@@ -68,6 +70,7 @@ export default function InternActivityPage() {
   const [stats, setStats] = useState({ total: 0, payments: 0, holidays: 0 });
   const [loading, setLoading] = useState(true);
   const [live, setLive] = useState(false);
+  const [selectedIntern, setSelectedIntern] = useState<string | null>(null);
   const acctRef = useRef<Account | null>(null);
 
   const load = useCallback(async (spinner = false) => {
@@ -89,10 +92,7 @@ export default function InternActivityPage() {
 
   useEffect(() => { load(true); }, [load]);
 
-  // Realtime: subscribe to new audit rows (audit_logs is in the supabase_realtime
-  // publication). Refetch on ANY audit insert — cheap, and avoids missing rows if
-  // acctRef isn't populated yet. Also subscribe to user_presence changes to update
-  // active/inactive presence markers in real-time.
+  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel("intern-activity")
@@ -115,6 +115,25 @@ export default function InternActivityPage() {
       document.removeEventListener("visibilitychange", onFocus);
     };
   }, [load]);
+
+  // Extract unique intern names mentioned in the events summaries
+  const internNames = useMemo(() => {
+    const names = new Set<string>();
+    events.forEach((e) => {
+      // Find patterns like "for Name"
+      const match = e.summary.match(/for\s+([^"]+?)(?:\s+NAM\d+|$)/i);
+      if (match && match[1]) {
+        names.add(match[1].trim());
+      }
+    });
+    return Array.from(names).sort();
+  }, [events]);
+
+  // Filter events based on selected intern
+  const filteredEvents = useMemo(() => {
+    if (!selectedIntern) return events;
+    return events.filter((e) => e.summary.toLowerCase().includes(selectedIntern.toLowerCase()));
+  }, [events, selectedIntern]);
 
   const getPresenceStatus = () => {
     if (!presence) {
@@ -174,9 +193,34 @@ export default function InternActivityPage() {
     { label: "Holidays Set", value: stats.holidays, icon: CalendarDays },
   ];
 
+  // Helper to render log summaries and highlight intern names clickable
+  function renderSummary(summary: string, onNameClick: (name: string) => void) {
+    const match = summary.match(/(.*?for\s+)([^"]+?)(?:\s+NAM\d+\/INT|\s+NAM\d+|$)(.*)/i);
+    
+    if (match) {
+      const prefix = match[1];
+      const name = match[2].trim();
+      const suffix = summary.slice(prefix.length + name.length);
+      
+      return (
+        <span>
+          {prefix}
+          <button
+            onClick={() => onNameClick(name)}
+            className="text-primary hover:underline font-semibold focus:outline-none cursor-pointer p-0 bg-transparent border-none inline"
+          >
+            {name}
+          </button>
+          {suffix}
+        </span>
+      );
+    }
+    return <span>{summary}</span>;
+  }
+
   return (
     <DashboardShell moduleKey="payroll_internship">
-      <div className="space-y-5">
+      <div className="space-y-4">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -184,8 +228,8 @@ export default function InternActivityPage() {
               <Button variant="ghost" size="sm" className="text-muted-foreground"><ArrowLeft className="h-4 w-4" /> Stipend</Button>
             </Link>
             <div>
-              <h1 className="text-xl font-semibold flex items-center gap-2"><Activity className="h-5 w-5 text-primary" /> Intern Activity</h1>
-              <p className="text-sm text-muted-foreground">
+              <h1 className="text-lg font-semibold flex items-center gap-2"><Activity className="h-4.5 w-4.5 text-primary" /> Intern Activity</h1>
+              <p className="text-xs text-muted-foreground">
                 Everything the internship-payroll helper has done{account ? ` — ${account.name}` : ""}.
               </p>
             </div>
@@ -194,82 +238,123 @@ export default function InternActivityPage() {
             <Badge variant="outline" className={cn("gap-1.5", live ? "text-emerald-600 border-emerald-500/30" : "text-muted-foreground")}>
               <Radio className={cn("h-3 w-3", live && "animate-pulse")} /> {live ? "Live" : "Polling"}
             </Badge>
-            <Button variant="outline" size="sm" onClick={() => load(true)}><RefreshCw className="h-3.5 w-3.5" /> Refresh</Button>
+            <Button variant="outline" size="sm" onClick={() => load(true)} className="h-8"><RefreshCw className="h-3 w-3" /> Refresh</Button>
           </div>
         </div>
 
         {/* Account card */}
         {account && (
-          <Card>
-            <CardContent className="flex items-center gap-3 py-4">
-              <Avatar className="h-10 w-10"><AvatarFallback>{initials(account.name)}</AvatarFallback></Avatar>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-foreground leading-tight">{account.name}</span>
-                  <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border", statusInfo.color)}>
+          <Card className="shadow-sm">
+            <CardContent className="flex items-center gap-3 py-3">
+              <Avatar className="h-9 w-9"><AvatarFallback>{initials(account.name)}</AvatarFallback></Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-foreground text-sm leading-none">{account.name}</span>
+                  <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold border", statusInfo.color)}>
                     <span className={cn("h-1.5 w-1.5 rounded-full", statusInfo.dot)} />
                     {statusInfo.label}
                   </span>
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5">{account.email} · {account.employee_id}</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">{account.email} · {account.employee_id}</div>
                 {presence && dayjs().diff(dayjs(presence.last_seen), "second") <= 60 && presence.current_path && (
-                  <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1 font-medium">
-                    <span className="font-semibold text-foreground">Current Screen:</span>
+                  <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                    <span className="font-semibold text-theme-fg">Current Screen:</span>
                     <span>{presence.current_path.includes("manage") ? "Holidays & Payments" : "Internship Stipend"}</span>
                   </div>
                 )}
               </div>
-              <Badge variant="secondary" className="ml-auto">Scoped: Internship only</Badge>
+              <Badge variant="secondary" className="text-[10px]">Scoped: Internship only</Badge>
             </CardContent>
           </Card>
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-3">
           {statCards.map((s) => (
-            <Card key={s.label}>
-              <CardContent className="flex items-center gap-3 py-4">
-                <div className="rounded-lg bg-primary/10 p-2.5"><s.icon className="h-5 w-5 text-primary" /></div>
-                <div>
-                  <div className="text-2xl font-bold tabular-nums">{s.value}</div>
-                  <div className="text-xs text-muted-foreground">{s.label}</div>
+            <Card key={s.label} className="shadow-sm">
+              <CardContent className="flex items-center gap-3 py-2.5">
+                <div className="rounded-lg bg-primary/10 p-2 shrink-0"><s.icon className="h-4 w-4 text-primary" /></div>
+                <div className="min-w-0">
+                  <div className="text-lg font-bold tabular-nums leading-none">{s.value}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{s.label}</div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        {/* Timeline */}
-        <Card>
+        {/* Filter Dropdown */}
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/20 border rounded-lg px-4 py-2 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-muted-foreground">Filter by Intern:</span>
+            <Select value={selectedIntern || "all"} onValueChange={(v) => setSelectedIntern(v === "all" ? null : v)}>
+              <SelectTrigger className="w-[180px] h-7 text-xs bg-background">
+                <SelectValue placeholder="All Interns" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Interns</SelectItem>
+                {internNames.map(name => (
+                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedIntern && (
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIntern(null)} className="h-7 text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 py-0 text-xs">
+                Clear Filter
+              </Button>
+            )}
+          </div>
+          <span className="text-[11px] text-muted-foreground font-mono">
+            Showing {filteredEvents.length} of {events.length} logs
+          </span>
+        </div>
+
+        {/* Logs Table */}
+        <Card className="shadow-sm">
           <CardContent className="p-0">
             {loading ? (
-              <div className="p-5 space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
-            ) : events.length === 0 ? (
-              <div className="py-16 text-center text-muted-foreground">
-                <Activity className="h-8 w-8 mx-auto mb-3 opacity-40" />
-                No activity yet. Actions the intern takes on the stipend pages will appear here in realtime.
+              <div className="p-4 space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+            ) : filteredEvents.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground text-xs">
+                <Activity className="h-6 w-6 mx-auto mb-2 opacity-40 animate-pulse" />
+                {selectedIntern ? `No logs found for "${selectedIntern}"` : "No activity recorded yet."}
               </div>
             ) : (
-              <ol className="divide-y divide-border">
-                {events.map((e) => {
-                  const meta = actionMeta(e.action);
-                  const Icon = meta.icon;
-                  return (
-                    <li key={e.id} className="flex items-start gap-3 px-5 py-3.5">
-                      <div className={cn("rounded-full p-1.5 mt-0.5 shrink-0", meta.cls)}><Icon className="h-3.5 w-3.5" /></div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-foreground leading-snug">{e.summary}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{meta.label}</Badge>
-                          <span className="text-[11px] text-muted-foreground" title={dayjs(e.created_at).format("DD MMM YYYY, HH:mm:ss")}>
-                            {dayjs(e.created_at).fromNow()}
-                          </span>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
+              <div className="overflow-x-auto">
+                <Table className="text-xs">
+                  <TableHeader>
+                    <TableRow className="bg-muted/10">
+                      <TableHead className="w-[160px] py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Timestamp</TableHead>
+                      <TableHead className="w-[110px] py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">Type</TableHead>
+                      <TableHead className="py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Details / Summary</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="divide-y">
+                    {filteredEvents.map((e) => {
+                      const meta = actionMeta(e.action);
+                      const Icon = meta.icon;
+                      return (
+                        <TableRow key={e.id} className="hover:bg-muted/10 transition-colors">
+                          <TableCell className="py-2 font-mono text-muted-foreground whitespace-nowrap">
+                            {dayjs(e.created_at).format("DD MMM YYYY, hh:mm:ss A")}
+                          </TableCell>
+                          <TableCell className="py-2 text-center">
+                            <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold border", meta.cls)}>
+                              <Icon className="h-3 w-3 shrink-0" />
+                              {meta.label}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-2 font-medium leading-relaxed break-words">
+                            {renderSummary(e.summary, (name) => {
+                              setSelectedIntern(name);
+                            })}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
