@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActor, isAdmin } from "@/lib/onboarding/server";
 import { PAYROLL_INTERN_EMAILS } from "@/lib/payroll-access";
+import { logAudit } from "@/lib/audit";
 
 // GET /api/interns/activity
 //
@@ -36,6 +37,12 @@ export async function GET() {
     .limit(300);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Fetch presence
+  const { data: presences } = await supabase
+    .from("user_presence")
+    .select("user_id, last_seen, current_path, status")
+    .in("user_id", ids);
+
   const list = events ?? [];
   const stats = {
     total: list.length,
@@ -45,7 +52,53 @@ export async function GET() {
 
   return NextResponse.json({
     account: accounts?.[0] ?? null,
+    presence: presences?.find((p) => p.user_id === accounts?.[0]?.id) ?? null,
     events: list,
     stats,
   });
+}
+
+// POST /api/interns/activity
+//
+// Scoped payroll intern logging endpoint.
+export async function POST(req: Request) {
+  const actor = await getActor();
+  if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const supabase = getSupabaseAdmin();
+
+  // Retrieve user details from employees table to verify identity
+  const { data: emp } = await supabase
+    .from("employees")
+    .select("email, name, role")
+    .eq("id", actor.userId)
+    .single();
+
+  if (!emp) return NextResponse.json({ error: "Employee profile not found" }, { status: 404 });
+
+  const isIntern = PAYROLL_INTERN_EMAILS.map((e) => e.toLowerCase()).includes(emp.email.toLowerCase());
+  const isSystemAdmin = emp.role === "admin";
+  if (!isIntern && !isSystemAdmin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const { action, summary, section, targetType, targetId } = body;
+
+  if (!action || !summary) {
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  await logAudit({
+    actorId: actor.userId,
+    actorName: emp.name,
+    actorRole: emp.role,
+    action,
+    section: section || "Internship",
+    summary,
+    targetType: targetType || null,
+    targetId: targetId || null,
+  });
+
+  return NextResponse.json({ success: true });
 }
