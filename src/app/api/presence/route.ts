@@ -14,15 +14,24 @@ export async function POST(req: Request) {
     const now = new Date().toISOString();
     const supabase = getSupabaseAdmin();
 
-    // Only include status in the upsert payload when explicitly provided —
-    // otherwise the heartbeat would overwrite check-in / break state on every ping.
-    const payload: Record<string, unknown> = {
+    // Fetch existing presence to avoid overwriting status with null in PostgREST upsert
+    const { data: existing } = await supabase
+      .from("user_presence")
+      .select("status")
+      .eq("user_id", actor.userId)
+      .maybeSingle();
+
+    const finalStatus = status !== undefined && status !== null 
+      ? status 
+      : (existing?.status || "available");
+
+    const payload = {
       user_id: actor.userId,
       last_seen: now,
       current_path: path || null,
+      status: finalStatus,
       updated_at: now,
     };
-    if (status !== undefined && status !== null) payload.status = status;
 
     await supabase
       .from("user_presence")
