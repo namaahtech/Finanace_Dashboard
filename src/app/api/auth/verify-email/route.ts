@@ -10,6 +10,9 @@ const ALLOWED_DOMAINS = new Set([
   "zoho.com", "zoho.in",
   // Outlook / Microsoft
   "outlook.com", "outlook.in", "hotmail.com", "live.com",
+  // Namaah company domains (used as the login identity when a Zoho mailbox
+  // isn't auto-created — the person logs in with this until one is provisioned)
+  "namaah.io", "namaah.in",
 ]);
 
 // Common typo → correct domain
@@ -44,7 +47,7 @@ export async function GET(req: NextRequest) {
   if (!ALLOWED_DOMAINS.has(domain)) {
     return NextResponse.json({
       valid: false,
-      reason: `Only Gmail, Yahoo, Zoho, and Outlook personal emails are allowed. "${domain}" is not accepted.`,
+      reason: `Only Gmail, Yahoo, Zoho, Outlook, or a Namaah (namaah.io / namaah.in) email is allowed. "${domain}" is not accepted.`,
     });
   }
 

@@ -16,6 +16,7 @@ export interface LogRow {
   target_type: string | null;
   target_id: string | null;
   ip_address?: string | null;
+  path?: string | null;
 }
 
 export interface PresenceRow {
@@ -320,12 +321,12 @@ export function lastSeenLabel(iso: string, now: number): string {
 
 // ── CSV export ────────────────────────────────────────────────
 export function toCSV(rows: LogRow[]): string {
-  const head = ["Timestamp", "User", "Employee ID", "Role", "Section", "Action", "Summary", "Target", "IP"];
+  const head = ["Timestamp", "User", "Employee ID", "Role", "Module", "Section", "Action", "Summary", "Path", "Target", "IP"];
   const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = rows.map((l) => [
     fullTime(l.created_at), l.actor_name ?? "", l.actor_emp_id ?? "", l.actor_role ?? "",
-    sectionForAction(l.action, l.section), l.action, l.summary ?? "",
-    `${l.target_type ?? ""} ${l.target_id ?? ""}`.trim(), l.ip_address ?? "",
+    l.path ? screenLabel(l.path) : "", sectionForAction(l.action, l.section), l.action, l.summary ?? "",
+    l.path ?? "", `${l.target_type ?? ""} ${l.target_id ?? ""}`.trim(), l.ip_address ?? "",
   ].map(esc).join(","));
   return [head.map(esc).join(","), ...lines].join("\r\n");
 }

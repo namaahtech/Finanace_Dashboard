@@ -460,6 +460,22 @@ export default function OnboardingBuilderPage() {
                         <span>{parsed.browser}</span>
                       </span>
                     )}
+                    {(() => {
+                      const v: any = packet.signature.verification;
+                      if (!v) return null;
+                      return (
+                        <span
+                          className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                          title={v.device_fp ? `Device fingerprint: ${v.device_fp}` : undefined}
+                        >
+                          <ShieldCheck size={10} className="shrink-0 text-emerald-500" />
+                          <span className="font-medium text-foreground">Identity verified</span>
+                          {v.liveness_pass && <span>· liveness ✓</span>}
+                          {v.ref_present && typeof v.similarity === "number" && <span>· face {Math.round(v.similarity * 100)}%</span>}
+                          {typeof v.risk_score === "number" && <span>· risk {v.risk_score}/{v.risk_max}</span>}
+                        </span>
+                      );
+                    })()}
                   </div>
                 );
               })()}

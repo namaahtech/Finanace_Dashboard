@@ -38,6 +38,7 @@
     "node_modules",
     "src/scripts",
     "scratch",
-    "sales-salary"
+    "sales-salary",
+    "worker"
   ]
 }

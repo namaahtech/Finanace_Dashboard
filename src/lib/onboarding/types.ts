@@ -86,6 +86,20 @@ export interface OnboardingSignature {
   signed_at: string;
   ip?: string;
   user_agent?: string;
+  // Identity-verification evidence recorded server-side before signing (no raw
+  // images) — liveness/face/risk + device-fingerprint hash. See /api/sign/[token]/verify.
+  verification?: {
+    liveness_pass?: boolean;
+    quality_pass?: boolean;
+    ref_present?: boolean;
+    face_matched?: boolean | null;
+    similarity?: number | null;
+    risk_score?: number | null;
+    risk_max?: number | null;
+    device_fp?: string | null;
+    checks?: { label: string; pass: boolean }[];
+    verified_at?: string;
+  };
 }
 
 export interface OnboardingSettings {

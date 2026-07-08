@@ -16,6 +16,7 @@ import {
   loadFaceLandmarker, detectFrame, makeChallengeSequence, newProgress, stepChallenge,
   scoreRisk, type Challenge, type ChallengeProgress,
 } from "@/lib/liveness-client";
+import { computeDeviceFingerprint } from "@/lib/device-fingerprint";
 import type { TemplateData } from "@/lib/onboarding/types";
 
 type SignState = "ready" | "invalid" | "expired" | "signed" | "error";
@@ -44,6 +45,11 @@ export default function SignPage() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [otpErr, setOtpErr] = useState<string | null>(null);
+
+  // Server-issued proof that OTP + liveness + face all passed. The sign POST
+  // requires it, so the biometric gate can't be skipped by calling the API direct.
+  const [verifyToken, setVerifyToken] = useState<string | null>(null);
+  const deviceFpRef = useRef<string>("unknown");
 
   // Live face verification
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -105,19 +111,27 @@ export default function SignPage() {
     })();
   }, [token]);
 
+  // Compute a device fingerprint once for the audit trail.
+  useEffect(() => { computeDeviceFingerprint().then((fp) => { deviceFpRef.current = fp; }); }, []);
+
   async function submit() {
     setErr(null);
     if (!agreed) return setErr("Please tick the acknowledgement to continue.");
     if (!typedName.trim()) return setErr("Please type your full legal name.");
+    if (!verifyToken) { restartFromOtp("Please verify your identity again before signing."); return; }
     setSubmitting(true);
     try {
       const res = await fetch(`/api/sign/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_base64: sigImage, typed_name: typedName, agreed }),
+        body: JSON.stringify({ image_base64: sigImage, typed_name: typedName, agreed, verify_token: verifyToken }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to submit");
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Proof missing/expired → send them back through OTP + face.
+        if (res.status === 403) { restartFromOtp("Your verification expired — please verify your email and face again to sign."); return; }
+        throw new Error(json.error || "Failed to submit");
+      }
       setState("signed");
     } catch (e: any) {
       setErr(e.message || "Failed to submit your signature.");
@@ -328,6 +342,7 @@ export default function SignPage() {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       setFaceResult(null); setFaceFails(0); setRefMissing(false);
+      setVerifyToken(null);
       setOtp(""); setOtpSent(false); setSecondsLeft(0);
       setSigImage(null); setAgreed(false);
       setStep("gate");
@@ -385,7 +400,58 @@ export default function SignPage() {
       setFaceResult({ pass, similarity: verdict?.similarity ?? 0, distance: verdict?.distance ?? 1, checks });
       setFaceStatus("ready");
       if (pass) {
-        setTimeout(() => { stopStream(); setStep("sign"); }, 800);
+        // Record the evidence server-side and obtain the single-use proof token the
+        // sign POST requires. Only advance to signing once we actually hold it.
+        try {
+          const evidence = {
+            livenessPass: doneRef.current,
+            qualityPass: q.pass,
+            refPresent: hasRef,
+            faceMatched: hasRef ? !!verdict?.pass : null,
+            similarity: verdict?.similarity ?? null,
+            riskScore: risk.score,
+            riskMax: risk.max,
+            deviceFingerprint: deviceFpRef.current,
+            checks,
+          };
+          // Downscaled live frame for the optional face-match worker (true server-side
+          // extraction). Small JPEG (~480px) — processed transiently, never stored.
+          const liveImage = (() => {
+            try {
+              const maxW = 480;
+              const scale = Math.min(1, maxW / canvas.width);
+              const w = Math.round(canvas.width * scale), h = Math.round(canvas.height * scale);
+              const oc = document.createElement("canvas");
+              oc.width = w; oc.height = h;
+              oc.getContext("2d")!.drawImage(canvas, 0, 0, w, h);
+              return oc.toDataURL("image/jpeg", 0.85);
+            } catch { return null; }
+          })();
+          const res = await fetch(`/api/sign/${token}/verify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              evidence,
+              // Descriptors for the in-app server-side comparison (not stored in
+              // plaintext — reference is AES-encrypted, live is compared then dropped).
+              refDescriptor: refDescRef.current ? Array.from(refDescRef.current) : null,
+              liveDescriptor: result?.descriptor ? Array.from(result.descriptor) : null,
+              // Live image for the worker tier (true server-side extraction), if configured.
+              liveImage,
+            }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok || !json.token) {
+            if (res.status === 403 && json.error === "otp_required") { restartFromOtp("Please verify your email again to continue."); return; }
+            throw new Error(json.message || json.error || "Couldn't record your verification.");
+          }
+          setVerifyToken(json.token);
+          setTimeout(() => { stopStream(); setStep("sign"); }, 800);
+        } catch (e: any) {
+          setFaceResult({ pass: false, similarity: verdict?.similarity ?? 0, distance: verdict?.distance ?? 1, checks: [...checks, { label: "Secure verification recorded", pass: false }] });
+          setFaceMsg(e.message || "Couldn't record your verification — please retry.");
+          setFaceFails((n) => n + 1);
+        }
       } else {
         setFaceFails((n) => n + 1);
       }
@@ -395,14 +461,16 @@ export default function SignPage() {
     }
   }
 
-  function restartFromOtp() {
+  function restartFromOtp(msg?: string) {
     stopStream();
     setFaceResult(null);
     setFaceFails(0);
     setRefMissing(false);
+    setVerifyToken(null);
     setOtp("");
     setOtpSent(false);
     setStep("gate");
+    if (msg) setSessionMsg(msg);
   }
 
   // ── Loading / terminal states ────────────────────────────────────────────
@@ -671,7 +739,7 @@ export default function SignPage() {
                   )}
 
                   {faceFails >= 2 && !faceResult?.pass && (
-                    <Button variant="ghost" size="sm" className="w-full text-xs" onClick={restartFromOtp}>
+                    <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => restartFromOtp()}>
                       <RotateCcw size={12} /> Start over from email verification
                     </Button>
                   )}

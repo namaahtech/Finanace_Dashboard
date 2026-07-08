@@ -120,7 +120,7 @@ export default function TrainingAcademyPage() {
 
   return (
     <DashboardShell
-      moduleKey="training_academy"
+      moduleKey={["my_academy", "training_academy"]}
       title="Training Academy"
       subtitle="Expand your skills and earn certifications to boost your performance score."
       actions={

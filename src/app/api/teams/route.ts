@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { requireModule } from "@/lib/authz";
 
 export async function GET() {
   try {
@@ -18,6 +19,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const gate = await requireModule("teams", "can_create");
+    if (!gate.ok) return gate.response;
+
     const supabase = getSupabaseAdmin();
     const body = await req.json();
 
@@ -52,6 +56,9 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
+    const gate = await requireModule("teams", "can_edit");
+    if (!gate.ok) return gate.response;
+
     const supabase = getSupabaseAdmin();
     const body = await req.json();
     const { id, ...updates } = body;
@@ -74,6 +81,9 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    const gate = await requireModule("teams", "can_delete");
+    if (!gate.ok) return gate.response;
+
     const supabase = getSupabaseAdmin();
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");

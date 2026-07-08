@@ -64,10 +64,12 @@ export async function POST(req: Request, { params }: Ctx) {
         return NextResponse.json({ error: "Incorrect code. Please try again." }, { status: 400 });
       }
 
-      // Success — consume the code.
+      // Success — consume the code and record that OTP passed server-side. This
+      // stamp is what /verify later requires before it will issue a proof token,
+      // chaining OTP → face → sign so none can be skipped by calling the API direct.
       await supabase
         .from("onboarding_packets")
-        .update({ sign_otp_hash: null, sign_otp_expires_at: null })
+        .update({ sign_otp_hash: null, sign_otp_expires_at: null, sign_otp_verified_at: new Date().toISOString() })
         .eq("id", packet.id);
       return NextResponse.json({ verified: true });
     }

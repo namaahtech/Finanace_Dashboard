@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActor } from "@/lib/onboarding/server";
+import { requireModule } from "@/lib/authz";
 import { logAudit } from "@/lib/audit";
 
 type PermNode = {
@@ -74,9 +75,14 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/permissions — update ROLE defaults (existing behavior).
+// POST /api/permissions — update ROLE defaults. Managing who-can-see-what is an
+// admin-only action; without this gate ANY authenticated user could rewrite the
+// permission map for every role.
 export async function POST(req: NextRequest) {
   try {
+    const gate = await requireModule("permissions_control", "can_edit");
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { role, permissions, updatedBy } = body as {
       role: string;

@@ -1,0 +1,17 @@
+{
+  "name": "namaah-face-match-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Standalone Node service that does TRUE server-side face extraction + matching for the e-sign gate. Runs the face-api CNN under @tensorflow/tfjs-node (native, fast) — deploy on a container host (Cloud Run / Render / Railway / Fly), NOT serverless.",
+  "scripts": {
+    "copy-models": "node copy-models.mjs",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.65",
+    "@tensorflow/tfjs-node": "^4.22.0",
+    "@vladmandic/face-api": "^1.7.15",
+    "express": "^4.21.2"
+  }
+}

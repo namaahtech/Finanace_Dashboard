@@ -31,7 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
@@ -970,6 +970,7 @@ export default function AdminUsersPage() {
                         <TableCell className="pl-4">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-8 w-8">
+                              {(u as any).avatar_url && <AvatarImage src={(u as any).avatar_url} alt="" />}
                               <AvatarFallback className="bg-primary text-primary-foreground text-[10px] font-semibold">
                                 {getInitials(u.name)}
                               </AvatarFallback>
