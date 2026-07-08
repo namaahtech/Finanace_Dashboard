@@ -187,7 +187,7 @@ export function DashboardShell({ children, title, subtitle, actions, moduleKey }
   return (
     <>
     <ChangePasswordModal />
-    {isPayrollIntern && <InternActivityTracker />}
+    {user && <InternActivityTracker />}
     <SidebarProvider>
       <Sidebar />
       <SidebarInset className="bg-background overflow-x-hidden min-w-0">

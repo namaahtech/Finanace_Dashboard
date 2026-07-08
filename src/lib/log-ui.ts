@@ -110,6 +110,8 @@ const SECTION_OF: { test: RegExp; name: string }[] = [
   { test: /workspace/, name: "Workspace" },
   { test: /\/sign\//, name: "E-Sign" },
   { test: /\/documents\//, name: "Documents" },
+  { test: /payroll/, name: "Payroll" },
+  { test: /project/, name: "Projects" },
   { test: /\/admin/, name: "Admin" },
   { test: /\/dashboard/, name: "Dashboard" },
 ];

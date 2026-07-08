@@ -76,12 +76,6 @@ export async function POST(req: Request) {
 
   if (!emp) return NextResponse.json({ error: "Employee profile not found" }, { status: 404 });
 
-  const isIntern = PAYROLL_INTERN_EMAILS.map((e) => e.toLowerCase()).includes(emp.email.toLowerCase());
-  const isSystemAdmin = emp.role === "admin";
-  if (!isIntern && !isSystemAdmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const body = await req.json().catch(() => ({}));
   const { action, summary, section, targetType, targetId } = body;
 
