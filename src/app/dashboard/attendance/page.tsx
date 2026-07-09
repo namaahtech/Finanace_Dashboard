@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { supabase } from "@/lib/supabase";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import { Badge } from "@/components/ui/BadgeLegacy";
 import { Button } from "@/components/ui/ButtonLegacy";
 import { useToast } from "@/components/ui/ToastLegacy";

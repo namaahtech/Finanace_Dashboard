@@ -11,9 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceFeed } from "@/lib/use-workspace-feed";
+import { LogTimeFilters } from "@/components/system/LogTimeFilters";
 import {
   relTime, fullTime, roleClass, prettyRole, screenLabel, presenceStatus, lastSeenLabel,
-  isSessionEvent,
+  isSessionEvent, passesTimeFilter, istYearsOf, DEFAULT_LOG_TIME_FILTER, type LogTimeFilter,
 } from "@/lib/log-ui";
 
 const EIGHT_HOURS = 8 * 60 * 60 * 1000;
@@ -21,6 +22,8 @@ const EIGHT_HOURS = 8 * 60 * 60 * 1000;
 export default function SessionsPage() {
   const { logs, presence, serverNow, loading, refreshing, refresh } = useWorkspaceFeed(500);
   const [q, setQ] = useState("");
+  const [timeF, setTimeF] = useState<LogTimeFilter>(DEFAULT_LOG_TIME_FILTER);
+  const years = useMemo(() => istYearsOf(logs.map((l) => l.created_at)), [logs]);
 
   // All presence rows seen in last 8 h, active rows first, then recently-offline
   const allSessions = useMemo(() => {
@@ -50,8 +53,9 @@ export default function SessionsPage() {
           a.startsWith("employee.")
         );
       })
+      .filter((l) => passesTimeFilter(l.created_at, timeF))
       .filter((l) => !term || [l.actor_name, l.actor_emp_id, l.actor_role, l.action, l.ip_address, l.summary].filter(Boolean).join(" ").toLowerCase().includes(term));
-  }, [logs, q]);
+  }, [logs, q, timeF]);
 
   // Helper to render customized badge based on action name
   function renderEventBadge(action: string) {
@@ -192,9 +196,12 @@ export default function SessionsPage() {
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
               <span className="text-sm font-semibold text-foreground">Login history</span>
-              <div className="relative w-full sm:w-72">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search person, role, IP…" className="pl-9 h-9 text-sm" />
+              <div className="flex flex-wrap items-center gap-2">
+                <LogTimeFilters value={timeF} onChange={setTimeF} years={years} />
+                <div className="relative w-full sm:w-72">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search person, role, IP…" className="pl-9 h-9 text-sm" />
+                </div>
               </div>
             </div>
             <div className="overflow-x-auto">

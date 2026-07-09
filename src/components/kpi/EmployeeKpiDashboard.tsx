@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { cn } from "@/lib/utils";
 import { TrendingUp, Award, Target, AlertCircle, Star, CheckCircle2 } from "lucide-react";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import axios from "axios";
 
 interface KpiMetric {

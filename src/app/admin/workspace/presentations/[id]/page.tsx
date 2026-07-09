@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import axios from "axios";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -13,7 +13,7 @@ import {
   Users, ClipboardCheck, FileText, Wallet, TrendingUp,
   AlertCircle, ArrowRight, Loader2, Crown, Network,
 } from "lucide-react";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 interface ManagerStats {
   teamSize: number;

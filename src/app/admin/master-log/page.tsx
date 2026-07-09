@@ -11,8 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceFeed } from "@/lib/use-workspace-feed";
+import { LogTimeFilters } from "@/components/system/LogTimeFilters";
 import {
   relTime, fullTime, roleClass, prettyRole, short, sectionForAction, toCSV,
+  screenLabel, passesTimeFilter, istYearsOf, DEFAULT_LOG_TIME_FILTER, type LogTimeFilter,
 } from "@/lib/log-ui";
 
 export default function MasterLogPage() {
@@ -20,6 +22,8 @@ export default function MasterLogPage() {
   const [q, setQ] = useState("");
   const [roleF, setRoleF] = useState("all");
   const [sectionF, setSectionF] = useState("all");
+  const [timeF, setTimeF] = useState<LogTimeFilter>(DEFAULT_LOG_TIME_FILTER);
+  const years = useMemo(() => istYearsOf(logs.map((l) => l.created_at)), [logs]);
 
   const sections = useMemo(
     () => Array.from(new Set(logs.map((l) => sectionForAction(l.action, l.section)))).sort(),
@@ -35,11 +39,12 @@ export default function MasterLogPage() {
     return logs.filter((l) => {
       if (roleF !== "all" && (l.actor_role || "") !== roleF) return false;
       if (sectionF !== "all" && sectionForAction(l.action, l.section) !== sectionF) return false;
+      if (!passesTimeFilter(l.created_at, timeF)) return false;
       if (!term) return true;
       return [l.actor_name, l.actor_emp_id, l.actor_role, l.section, l.action, l.summary, l.target_id, l.ip_address]
         .filter(Boolean).join(" ").toLowerCase().includes(term);
     });
-  }, [logs, q, roleF, sectionF]);
+  }, [logs, q, roleF, sectionF, timeF]);
 
   const todayCount = logs.filter(
     (l) => new Date(l.created_at).toDateString() === new Date(serverNow).toDateString(),
@@ -94,6 +99,7 @@ export default function MasterLogPage() {
               <option value="all">All sections</option>
               {sections.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+            <LogTimeFilters value={timeF} onChange={setTimeF} years={years} />
             <Button variant="outline" size="sm" className="h-9" onClick={refresh}><RefreshCw size={13} /> Refresh</Button>
             <Button variant="outline" size="sm" className="h-9" onClick={exportCsv} disabled={filtered.length === 0}><Download size={13} /> Export</Button>
           </CardContent>
@@ -110,14 +116,15 @@ export default function MasterLogPage() {
                     <th className="px-4 py-2.5 font-semibold">User</th>
                     <th className="px-4 py-2.5 font-semibold">Role</th>
                     <th className="px-4 py-2.5 font-semibold">Section</th>
+                    <th className="px-4 py-2.5 font-semibold">Module &amp; path</th>
                     <th className="px-4 py-2.5 font-semibold">Action &amp; details</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={5} className="px-4 py-16 text-center text-muted-foreground"><Loader2 className="animate-spin mx-auto" size={20} /></td></tr>
+                    <tr><td colSpan={6} className="px-4 py-16 text-center text-muted-foreground"><Loader2 className="animate-spin mx-auto" size={20} /></td></tr>
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan={5} className="px-4 py-16 text-center text-sm text-muted-foreground">No activity matches your filters yet.</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-16 text-center text-sm text-muted-foreground">No activity matches your filters yet.</td></tr>
                   ) : (
                     filtered.map((l) => (
                       <tr key={l.id} className="border-b border-border/60 hover:bg-muted/30 align-top">
@@ -136,6 +143,10 @@ export default function MasterLogPage() {
                             : <span className="text-[10px] text-muted-foreground">—</span>}
                         </td>
                         <td className="px-4 py-3"><Badge variant="secondary" className="text-[10px]">{sectionForAction(l.action, l.section)}</Badge></td>
+                        <td className="px-4 py-3">
+                          <div className="text-xs text-foreground">{l.path ? screenLabel(l.path) : "—"}</div>
+                          {l.path && <div className="text-[10px] text-muted-foreground font-mono truncate max-w-[180px]">{l.path}</div>}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="text-xs text-foreground">{l.summary || l.action}</div>
                           <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{l.action}{l.target_id ? " · " + l.target_id : ""}</div>

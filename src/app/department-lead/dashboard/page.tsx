@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/BadgeLegacy";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ProjectModal } from "@/components/projects/ProjectModal";
 import { supabase } from "@/lib/supabase";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import {
   Building2, PieChart, BarChart3, ShieldCheck, TrendingUp, Users, Target, Zap, LayoutGrid, Filter, 
   CalendarDays, ClipboardList, Search, Clock, ArrowRight, UserCheck, AlertCircle, Briefcase, ChevronRight, X, User, CheckCircle2

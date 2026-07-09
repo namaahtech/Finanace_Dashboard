@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   ArrowLeft, Save, Loader2, Settings as SettingsIcon, Info, Calendar, IndianRupee,
 } from "lucide-react";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 interface Settings {
   id: number;

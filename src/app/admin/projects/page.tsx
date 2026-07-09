@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { usePermission } from "@/hooks/usePermission";
 import { DelegationModal } from "@/components/projects/DelegationModal";

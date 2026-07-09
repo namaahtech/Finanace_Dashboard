@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Calendar, ChevronRight, Clock, MapPin, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
 dayjs.extend(relativeTime);

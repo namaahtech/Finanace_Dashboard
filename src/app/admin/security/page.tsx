@@ -11,8 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceFeed } from "@/lib/use-workspace-feed";
+import { LogTimeFilters } from "@/components/system/LogTimeFilters";
 import {
   relTime, fullTime, roleClass, prettyRole, short, isSecurityEvent, severityOf, severityClass, toCSV,
+  passesTimeFilter, istYearsOf, DEFAULT_LOG_TIME_FILTER, type LogTimeFilter,
 } from "@/lib/log-ui";
 
 const SEVERITIES = ["all", "critical", "warning", "info"] as const;
@@ -21,8 +23,10 @@ export default function SecurityAuditPage() {
   const { logs, serverNow, loading, refresh } = useWorkspaceFeed(1000);
   const [q, setQ] = useState("");
   const [sevF, setSevF] = useState<(typeof SEVERITIES)[number]>("all");
+  const [timeF, setTimeF] = useState<LogTimeFilter>(DEFAULT_LOG_TIME_FILTER);
 
   const events = useMemo(() => logs.filter(isSecurityEvent), [logs]);
+  const years = useMemo(() => istYearsOf(events.map((l) => l.created_at)), [events]);
 
   const counts = useMemo(() => {
     const c = { critical: 0, warning: 0, info: 0 };
@@ -34,11 +38,12 @@ export default function SecurityAuditPage() {
     const term = q.trim().toLowerCase();
     return events.filter((l) => {
       if (sevF !== "all" && severityOf(l) !== sevF) return false;
+      if (!passesTimeFilter(l.created_at, timeF)) return false;
       if (!term) return true;
       return [l.actor_name, l.actor_emp_id, l.actor_role, l.action, l.summary, l.ip_address, l.target_id]
         .filter(Boolean).join(" ").toLowerCase().includes(term);
     });
-  }, [events, q, sevF]);
+  }, [events, q, sevF, timeF]);
 
   const exportCsv = () => {
     const blob = new Blob([toCSV(filtered)], { type: "text/csv;charset=utf-8;" });
@@ -85,6 +90,7 @@ export default function SecurityAuditPage() {
             <select value={sevF} onChange={(e) => setSevF(e.target.value as any)} className="h-9 rounded-md border border-border bg-background px-2 text-xs text-foreground capitalize">
               {SEVERITIES.map((s) => <option key={s} value={s}>{s === "all" ? "All severities" : s}</option>)}
             </select>
+            <LogTimeFilters value={timeF} onChange={setTimeF} years={years} />
             <Button variant="outline" size="sm" className="h-9" onClick={refresh}><RefreshCw size={13} /> Refresh</Button>
             <Button variant="outline" size="sm" className="h-9" onClick={exportCsv} disabled={filtered.length === 0}><Download size={13} /> Export</Button>
           </CardContent>

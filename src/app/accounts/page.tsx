@@ -13,7 +13,7 @@ import {
   IndianRupee, FileText, Receipt, CreditCard, PiggyBank, Tag,
   Wallet, Zap, Building2, ArrowRight, Loader2, AlertCircle, TrendingUp,
 } from "lucide-react";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 interface AccountsStats {
   outstandingInvoiceTotal: number;

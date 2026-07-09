@@ -8,7 +8,7 @@ import {
   Presentation, Plus, Search, Pin, Archive, Trash2, MoreVertical, X, Grid3X3, List,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import axios from "axios";
 import { Button } from "@/components/ui/button";

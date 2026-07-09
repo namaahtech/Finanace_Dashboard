@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import axios from "axios";
 import { cn } from "@/lib/utils";
 import { GripHorizontal, Calendar, User, AlertCircle, CheckCircle2, X, Send, ShieldCheck, MessageSquare, ExternalLink, Clock, Plus, ListTodo } from "lucide-react";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useToast } from "@/components/ui/ToastLegacy";
 import { Button } from "@/components/ui/ButtonLegacy";

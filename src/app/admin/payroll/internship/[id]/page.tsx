@@ -18,7 +18,7 @@ import {
   ArrowLeft, Printer, Loader2, CheckCircle2, Clock, AlertCircle,
   Mail, Calendar, IndianRupee, User, Wallet,
 } from "lucide-react";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 interface Intern {
   id: string;

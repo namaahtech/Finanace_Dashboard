@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/ButtonLegacy";
 import { Badge } from "@/components/ui/BadgeLegacy";
 import { formatCurrency, cn } from "@/lib/utils";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import { toast } from "sonner";
 import {
   Mail,
