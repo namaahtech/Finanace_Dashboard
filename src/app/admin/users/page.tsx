@@ -56,7 +56,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/lib/supabase";
 import axios from "axios";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 interface TeamNode { 
   id: string; 

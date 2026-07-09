@@ -19,7 +19,7 @@ import {
   getCompanyMultiplier,
   getEmployeeMultiplier,
 } from "@/lib/incentiveMath";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import {
   IndianRupee,
   Award,

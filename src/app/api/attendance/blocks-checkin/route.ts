@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getApiUserId } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 // GET — check if today's check-in is blocked by an overdue sick-leave certificate.
 // Called by GlobalAttendanceWidget before allowing check-in.

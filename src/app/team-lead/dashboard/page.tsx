@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/BadgeLegacy";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ProjectModal } from "@/components/projects/ProjectModal";
 import { supabase } from "@/lib/supabase";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import {
   Users,
   CheckCircle2,

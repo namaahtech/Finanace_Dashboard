@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import { getPresenceSessionId } from "@/lib/log-ui";
 

@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { Calendar, Users, TrendingUp, ChevronRight } from "lucide-react";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 interface ProjectCardProps {
   id: string;

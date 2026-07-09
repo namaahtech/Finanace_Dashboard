@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePermission } from "@/hooks/usePermission";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 // ─── Types ───────────────────────────────────────────────
 type AttStatus = "present" | "late" | "absent" | "leave" | "holiday" | "half_day" | "on_duty";

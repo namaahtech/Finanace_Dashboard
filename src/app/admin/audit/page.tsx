@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import isToday from "dayjs/plugin/isToday";
 dayjs.extend(isToday);
 

@@ -14,7 +14,7 @@ import {
   Users, UserPlus, Briefcase, Calendar, Cake, GraduationCap,
   TrendingUp, Network, ClipboardCheck, FileText, ArrowRight, Loader2,
 } from "lucide-react";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 interface HRStats {
   totalEmployees: number;

@@ -43,7 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 // ─── Types ───────────────────────────────────────────────
 interface Shift {

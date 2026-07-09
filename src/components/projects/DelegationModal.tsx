@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/ToastLegacy";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Button } from "@/components/ui/ButtonLegacy";
 import { useAuth } from "@/components/layout/AuthProvider";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 interface DelegationModalProps {
   project: any;

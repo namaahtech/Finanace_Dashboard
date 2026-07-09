@@ -16,9 +16,11 @@ import {
   ArrowLeft, Activity, Wallet, CalendarDays, RefreshCw, Radio,
   Clock, ArrowRight, ShieldCheck, ScrollText,
 } from "lucide-react";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
+import { LogTimeFilters } from "@/components/system/LogTimeFilters";
 import {
   relTime, fullTime, roleClass, prettyRole, sectionForAction,
+  passesTimeFilter, istYearsOf, DEFAULT_LOG_TIME_FILTER, type LogTimeFilter,
 } from "@/lib/log-ui";
 
 interface Event {
@@ -53,6 +55,7 @@ export default function InternActivityPage() {
   const [loading, setLoading] = useState(true);
   const [live, setLive] = useState(false);
   const [selectedIntern, setSelectedIntern] = useState<string | null>(null);
+  const [timeF, setTimeF] = useState<LogTimeFilter>(DEFAULT_LOG_TIME_FILTER);
   const [serverNow, setServerNow] = useState(Date.now());
   const acctRef = useRef<Account | null>(null);
 
@@ -117,11 +120,16 @@ export default function InternActivityPage() {
     return Array.from(names).sort();
   }, [events]);
 
-  // Filter events based on selected intern
+  const years = useMemo(() => istYearsOf(events.map((e) => e.created_at)), [events]);
+
+  // Filter events by selected intern + the IST time-of-day / date filter
   const filteredEvents = useMemo(() => {
-    if (!selectedIntern) return events;
-    return events.filter((e) => e.summary.toLowerCase().includes(selectedIntern.toLowerCase()));
-  }, [events, selectedIntern]);
+    return events.filter((e) => {
+      if (!passesTimeFilter(e.created_at, timeF)) return false;
+      if (selectedIntern && !e.summary.toLowerCase().includes(selectedIntern.toLowerCase())) return false;
+      return true;
+    });
+  }, [events, selectedIntern, timeF]);
 
   const getPresenceStatus = () => {
     if (!presence) {
@@ -291,6 +299,8 @@ export default function InternActivityPage() {
                 Clear Filter
               </Button>
             )}
+            <span className="mx-1 h-4 w-px bg-border" />
+            <LogTimeFilters value={timeF} onChange={setTimeF} years={years} />
           </div>
           <span className="text-[11px] text-muted-foreground font-mono">
             Showing {filteredEvents.length} of {events.length} logs

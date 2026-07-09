@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 import { bufferDays, DEFAULT_FREE_HOLIDAYS } from "@/lib/internshipMath";
 import { InternsSummary } from "@/components/interns/InternsSummary";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 interface Intern {

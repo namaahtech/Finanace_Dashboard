@@ -21,7 +21,7 @@ import {
   IndianRupee, Info, CircleDollarSign,
 } from "lucide-react";
 import { DEFAULT_FREE_HOLIDAYS } from "@/lib/internshipMath";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 

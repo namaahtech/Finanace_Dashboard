@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiUserId } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

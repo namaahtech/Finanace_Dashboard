@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   const [logsRes, presenceRes] = await Promise.all([
     supabase
       .from("audit_logs")
-      .select("id, created_at, user_id, actor_name, actor_emp_id, actor_role, action, section, summary, changes, target_type, target_id, ip_address")
+      .select("id, created_at, user_id, actor_name, actor_emp_id, actor_role, action, section, summary, changes, target_type, target_id, ip_address, path")
       .order("created_at", { ascending: false })
       .limit(limit),
     supabase
