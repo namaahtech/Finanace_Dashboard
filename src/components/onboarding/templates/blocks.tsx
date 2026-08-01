@@ -143,16 +143,22 @@ export function buildOfferLetterBlocks(data: TemplateData): React.ReactNode[] {
   const { candidate, config, schema, signatory, signature } = data;
   const staticSections = sliceBlocks(OFFER_BLOCKS, "SECTION 2", "FOR NAMAAH PRIVATE LIMITED");
   const role = val(config, "position");
+  // A direct full-time hire and an internship are different engagements, so the
+  // title, subject and an explicit Engagement Type line all reflect the choice
+  // made in the builder.
+  const isFullTime = data.employmentType === "full_time";
+  const engagementLabel = isFullTime ? "Full-Time Employment" : "Internship";
 
   return [
-    <h1 className="od-title" key="title">INTERNSHIP OFFER LETTER</h1>,
+    <h1 className="od-title" key="title">{isFullTime ? "EMPLOYMENT OFFER LETTER" : "INTERNSHIP OFFER LETTER"}</h1>,
     <div className="od-field" key="date" style={{ textAlign: "right", marginTop: "4pt", marginBottom: "8pt" }}><span className="od-lbl">Date: </span><span className="od-val">{data.offerDate}</span></div>,
     <p className="od-p" key="to" style={{ marginTop: "8pt", marginBottom: "3pt" }}>To,</p>,
     <div className="od-field" key="name"><span className="od-lbl">Name: </span><span className="od-val">{candidate.name}</span></div>,
     ...(candidate.address ? [<div className="od-field" key="addr"><span className="od-lbl">Address: </span><span className="od-val">{candidate.address}</span></div>] : []),
     <div className="od-field" key="email"><span className="od-lbl">Email ID: </span><span className="od-val">{candidate.email}</span></div>,
     ...(candidate.phone ? [<div className="od-field" key="phone"><span className="od-lbl">Phone Number: </span><span className="od-val">{candidate.phone}</span></div>] : []),
-    <div className="od-field" key="subject" style={{ marginTop: "18pt" }}><span className="od-lbl">Subject: </span><span>Internship Offer{role ? ` – ${role}` : ""}</span></div>,
+    <div className="od-field" key="engagement"><span className="od-lbl">Engagement Type: </span><span className="od-val">{isFullTime ? "Full-Time Employee" : "Intern"}</span></div>,
+    <div className="od-field" key="subject" style={{ marginTop: "18pt" }}><span className="od-lbl">Subject: </span><span>{engagementLabel} Offer{role ? ` – ${role}` : ""}</span></div>,
     <p className="od-p" key="dear" style={{ marginTop: "18pt" }}>Dear {candidate.name?.split(" ")[0] || candidate.name},</p>,
     <p className="od-p" key="intro1" style={{ marginTop: "10pt" }}>We are pleased to offer you an internship opportunity with {signatory.companyName} (&ldquo;Company&rdquo;), subject to the terms and conditions contained in this Offer Letter, Company policies, applicable compliance requirements, and supporting agreements executed between the Parties.</p>,
     <p className="od-p" key="intro2" style={{ marginTop: "8pt" }}>The details applicable to your internship engagement are specified below.</p>,

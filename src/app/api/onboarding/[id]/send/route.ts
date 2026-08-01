@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   try {
-    const result = await dispatchOnboarding(id, { req });
+    const result = await dispatchOnboarding(id, { req, actorId: actor.userId });
     await logAudit({
       actorId: actor.userId, action: "onboarding.resend", section: "Onboarding",
       summary: `Re-sent the onboarding e-sign email to ${packet.candidate_email}`,

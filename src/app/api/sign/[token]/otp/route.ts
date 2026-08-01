@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getMailContext, sendRecruitmentMail, otpEmailHtml } from "@/lib/recruitment-mail";
+import { getMailContext, getMailActor, sendRecruitmentMail, otpEmailHtml } from "@/lib/recruitment-mail";
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -15,9 +15,11 @@ export async function POST(req: Request, { params }: Ctx) {
     const { action, otp } = await req.json().catch(() => ({}));
 
     const supabase = getSupabaseAdmin();
+    // Only the columns this route actually reads — `select("*")` also dragged in
+    // the offer config, signature and encrypted face template on every OTP request.
     const { data: packet } = await supabase
       .from("onboarding_packets")
-      .select("*")
+      .select("id, status, token_expires_at, candidate_email, created_by, sign_otp_hash, sign_otp_expires_at, sign_otp_attempts")
       .eq("sign_token", token)
       .maybeSingle();
 
@@ -39,7 +41,8 @@ export async function POST(req: Request, { params }: Ctx) {
         return NextResponse.json({ error: "Verification is temporarily unavailable. Please contact your hiring coordinator." }, { status: 500 });
       }
 
-      const ctx = await getMailContext();
+      // Public route — send the code from the mailbox of whoever created the packet.
+      const ctx = await getMailContext(await getMailActor(packet.created_by));
       await sendRecruitmentMail(ctx, {
         to: packet.candidate_email,
         subject: `Your verification code — ${ctx.companyName}`,

@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   FileSignature, Plus, Settings, Search, Loader2, Trash2,
-  Clock, CheckCircle2, Send, PenTool, Users, ChevronRight, UserPlus, Briefcase,
+  Clock, CheckCircle2, Send, PenTool, Users, ChevronRight, UserPlus, Briefcase, BadgeCheck,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CandidateAvatar } from "@/components/onboarding/CandidateAvatar";
+import { ConvertToFullTimeDialog, type ConvertTarget } from "@/components/onboarding/ConvertToFullTimeDialog";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -42,6 +43,8 @@ interface PacketRow {
   sent_at: string | null;
   viewed_at: string | null;
   signed_at: string | null;
+  converted_to_fulltime_at: string | null;
+  employment_type?: "intern" | "full_time" | null;
   creator?: { name?: string; email?: string } | null;
 }
 
@@ -55,6 +58,14 @@ function StatusHistory({ p }: { p: PacketRow }) {
     { label: "Viewed", at: p.viewed_at },
     { label: "Signed", at: p.signed_at },
     { label: "Completed", at: p.status === "completed" ? p.updated_at : null },
+    // Only shown once it has actually happened — an empty "Converted" row on every
+    // intern would read as a step they're missing rather than an optional one.
+    // A direct full-time hire never had a conversion, so it says so instead.
+    ...(p.employment_type === "full_time"
+      ? [{ label: "Hired as Full-Time", at: p.signed_at ?? p.created_at }]
+      : p.converted_to_fulltime_at
+        ? [{ label: "Converted to Full-Time", at: p.converted_to_fulltime_at }]
+        : []),
   ];
   return (
     <div className="text-left">
@@ -92,12 +103,30 @@ interface ClaimedRow {
 }
 
 
-const FILTERS: { key: string; label: string; match: (s: OnboardingStatus) => boolean }[] = [
+// A packet is "onboarded" once the offer is signed. From there it's an INTERN
+// until HR converts them, at which point it becomes FULL-TIME. Converted packets
+// stay in the list (and in "All") — the conversion is a state change, not a removal.
+// Not exported: a Next.js page module may only export the framework's own
+// reserved names (default, metadata, …), so these stay file-local.
+const isOnboarded = (p: PacketRow) => p.status === "signed" || p.status === "completed";
+/** Hired straight into a full-time role — never an intern, so never "converted". */
+const isDirectFullTime = (p: PacketRow) => p.employment_type === "full_time";
+/** Started as an intern and was promoted later. */
+const isConverted = (p: PacketRow) => !isDirectFullTime(p) && !!p.converted_to_fulltime_at;
+/** Full-time by either route. */
+const isFullTime = (p: PacketRow) => isDirectFullTime(p) || isConverted(p);
+const isIntern = (p: PacketRow) => isOnboarded(p) && !isFullTime(p);
+
+// Filters receive the whole packet, not just the status, because intern vs
+// full-time is decided by the conversion timestamp rather than the status column.
+const FILTERS: { key: string; label: string; match: (p: PacketRow) => boolean }[] = [
   { key: "all", label: "All", match: () => true },
-  { key: "draft", label: "Drafts", match: (s) => s === "draft" || s === "changes_requested" },
-  { key: "pending", label: "Pending", match: (s) => s === "pending_approval" },
-  { key: "sent", label: "Sent / Viewed", match: (s) => s === "approved" || s === "sent" || s === "viewed" },
-  { key: "signed", label: "Signed", match: (s) => s === "signed" || s === "completed" },
+  { key: "draft", label: "Drafts", match: (p) => p.status === "draft" || p.status === "changes_requested" },
+  { key: "pending", label: "Pending", match: (p) => p.status === "pending_approval" },
+  { key: "sent", label: "Sent / Viewed", match: (p) => p.status === "approved" || p.status === "sent" || p.status === "viewed" },
+  { key: "signed", label: "Signed", match: (p) => isOnboarded(p) },
+  { key: "intern", label: "Intern", match: isIntern },
+  { key: "fulltime", label: "Full-Time", match: isFullTime },
 ];
 
 export default function OnboardingHubPage() {
@@ -116,6 +145,7 @@ export default function OnboardingHubPage() {
   const [showSettings, setShowSettings] = useState(false);
 
   // New-onboarding picker
+  const [convertTarget, setConvertTarget] = useState<ConvertTarget | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState<"interview" | "manual">("interview");
   const [eligible, setEligible] = useState<EligibleCandidate[]>([]);
@@ -294,17 +324,20 @@ export default function OnboardingHubPage() {
   }
 
   const filtered = packets.filter((p) => {
-    const f = FILTERS.find((x) => x.key === filter)!;
-    if (!f.match(p.status)) return false;
+    const f = FILTERS.find((x) => x.key === filter) ?? FILTERS[0];
+    if (!f.match(p)) return false;
     const q = search.toLowerCase();
     return !q || p.candidate_name.toLowerCase().includes(q) || p.candidate_email.toLowerCase().includes(q);
   });
 
+  // Cards double as filters — clicking one jumps to the matching tab.
   const stats = [
-    { label: "In progress", value: packets.filter((p) => ["draft", "changes_requested"].includes(p.status)).length, icon: PenTool, color: "text-zinc-500" },
-    { label: "Pending approval", value: packets.filter((p) => p.status === "pending_approval").length, icon: Clock, color: "text-amber-500" },
-    { label: "Sent", value: packets.filter((p) => ["approved", "sent", "viewed"].includes(p.status)).length, icon: Send, color: "text-violet-500" },
-    { label: "Signed", value: packets.filter((p) => ["signed", "completed"].includes(p.status)).length, icon: CheckCircle2, color: "text-emerald-500" },
+    { key: "draft",    label: "In progress",      value: packets.filter((p) => ["draft", "changes_requested"].includes(p.status)).length, icon: PenTool,      color: "text-zinc-500" },
+    { key: "pending",  label: "Pending approval", value: packets.filter((p) => p.status === "pending_approval").length,                    icon: Clock,        color: "text-amber-500" },
+    { key: "sent",     label: "Sent",             value: packets.filter((p) => ["approved", "sent", "viewed"].includes(p.status)).length,  icon: Send,         color: "text-violet-500" },
+    { key: "signed",   label: "Signed",           value: packets.filter(isOnboarded).length,                                               icon: CheckCircle2, color: "text-emerald-500" },
+    { key: "intern",   label: "Intern",           value: packets.filter(isIntern).length,                                                  icon: Users,        color: "text-sky-500" },
+    { key: "fulltime", label: "Full-Time",        value: packets.filter(isFullTime).length,                                                icon: Briefcase,    color: "text-indigo-500" },
   ];
 
   return (
@@ -336,17 +369,28 @@ export default function OnboardingHubPage() {
       ) : (
         <div className="space-y-5">
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
             {loading
-              ? [...Array(4)].map((_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)
-              : stats.map((s, i) => (
-                  <Card key={i}>
+              ? [...Array(6)].map((_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)
+              : stats.map((s) => (
+                  <Card
+                    key={s.key}
+                    onClick={() => setFilter(s.key)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFilter(s.key); } }}
+                    className={cn(
+                      "cursor-pointer transition-colors hover:border-primary/40",
+                      filter === s.key && "border-primary/60 bg-primary/[0.03]"
+                    )}
+                    title={`Show ${s.label.toLowerCase()}`}
+                  >
                     <CardContent className="p-4 flex items-center gap-4">
                       <div className={cn("p-2 rounded-lg bg-muted", s.color)}>
                         <s.icon size={18} />
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">{s.label}</p>
+                      <div className="min-w-0">
+                        <p className="text-xs text-muted-foreground truncate">{s.label}</p>
                         <p className="text-lg font-bold text-foreground tabular-nums">{s.value}</p>
                       </div>
                     </CardContent>
@@ -437,11 +481,45 @@ export default function OnboardingHubPage() {
                               </Badge>
                             </span>
                           </TooltipTrigger>
-                          <TooltipContent side="bottom" align="end" className="w-60 flex-col items-stretch gap-0 p-3">
+                          <TooltipContent side="bottom" align="end" className="w-72 flex-col items-stretch gap-0 p-3">
                             <StatusHistory p={p} />
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
+                      {/* Intern → full-time, once the onboarding is finished. The
+                          control swaps to a settled "Full-Time" state in place,
+                          so the row reads as converted at a glance. */}
+                      {isOnboarded(p) && (
+                        isFullTime(p) ? (
+                          <span
+                            className="hidden h-7 shrink-0 items-center gap-1.5 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 sm:inline-flex"
+                            title={
+                              isDirectFullTime(p)
+                                ? "Hired directly as a full-time employee"
+                                : `Converted to full-time on ${new Date(p.converted_to_fulltime_at!).toLocaleString()}`
+                            }
+                          >
+                            <BadgeCheck size={12} /> {isDirectFullTime(p) ? "Full-Time Hire" : "Full-Time"}
+                          </span>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="hidden h-7 shrink-0 text-[11px] sm:inline-flex"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConvertTarget({
+                                packetId: p.id,
+                                candidateName: p.candidate_name,
+                                candidateEmail: p.candidate_email,
+                              });
+                            }}
+                            title="Convert this intern to a full-time employee"
+                          >
+                            <Briefcase size={12} /> Convert to Full-Time
+                          </Button>
+                        )
+                      )}
                       {["draft", "changes_requested"].includes(p.status) && (
                         <button
                           onClick={(e) => deletePacket(p.id, e)}
@@ -460,6 +538,16 @@ export default function OnboardingHubPage() {
           )}
         </div>
       )}
+
+      {/* Intern → full-time conversion */}
+      <ConvertToFullTimeDialog
+        target={convertTarget}
+        onClose={() => setConvertTarget(null)}
+        onConverted={() => {
+          toast.success("Converted to full-time");
+          fetchPackets();
+        }}
+      />
 
       {/* New onboarding — From Interview (pipeline) or Manual entry */}
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>

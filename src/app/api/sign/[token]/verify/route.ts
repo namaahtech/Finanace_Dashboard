@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { logAudit } from "@/lib/audit";
 import { encryptTemplate, decryptTemplate, euclidean, cosine, biometricKeyConfigured, FACE_MATCH_MAX_DISTANCE } from "@/lib/crypto/biometric";
 import { faceMatchWorkerConfigured, matchViaWorker } from "@/lib/face-match-worker";
+import { readStoredFileAsDataUrl } from "@/lib/file-storage";
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -33,10 +34,11 @@ async function getSelfieDataUrl(supabase: any, email: string): Promise<string | 
   if (!doc?.file_share_id) return null;
   const { data: share } = await supabase
     .from("mail_file_shares")
-    .select("storage_url")
+    .select("storage_path, storage_url, file_type")
     .eq("id", doc.file_share_id)
     .maybeSingle();
-  return typeof share?.storage_url === "string" && share.storage_url.startsWith("data:") ? share.storage_url : null;
+  // Works for both Storage-backed rows and legacy inline base64 rows.
+  return readStoredFileAsDataUrl(share);
 }
 
 const isLinkExpired = (p: any) => !!p.token_expires_at && new Date(p.token_expires_at).getTime() < Date.now();
@@ -61,7 +63,7 @@ export async function POST(req: Request, { params }: Ctx) {
     const supabase = getSupabaseAdmin();
     const { data: packet } = await supabase
       .from("onboarding_packets")
-      .select("*")
+      .select("id, status, token_expires_at, candidate_email, candidate_name, sign_otp_verified_at, sign_face_template")
       .eq("sign_token", token)
       .maybeSingle();
 

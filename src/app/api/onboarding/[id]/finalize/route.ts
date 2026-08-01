@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   try {
-    const result = await dispatchOnboarding(id, { final: true, req });
+    const result = await dispatchOnboarding(id, { final: true, req, actorId: actor.userId });
     await logAudit({
       actorId: actor.userId, action: "onboarding.finalize", section: "Onboarding",
       summary: `Accepted the signed offer and emailed the counter-signed documents`,

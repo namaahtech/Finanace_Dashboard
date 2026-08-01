@@ -4,20 +4,48 @@
 // loads during SSR.
 
 let faceapiMod: any = null;
-let modelsLoaded = false;
+let detectLoad: Promise<void> | null = null;      // detector + landmarks (~550 KB)
+let recogLoad: Promise<void> | null = null;       // recognition net (~6.4 MB)
 
 async function getFaceApi(): Promise<any> {
   if (!faceapiMod) faceapiMod = await import("@vladmandic/face-api");
   return faceapiMod;
 }
 
-export async function loadFaceModels(): Promise<void> {
+/**
+ * Load the face models. The recognition net is 6.4 MB of the ~7 MB total and is
+ * ONLY needed to produce identity embeddings — the enrolment selfie just runs
+ * quality checks, so it passes `recognition: false` and skips that download
+ * entirely. Nets load in parallel and each load is memoised, so repeated calls
+ * (and both call sites on a page) share one in-flight promise.
+ */
+export async function loadFaceModels(opts: { recognition?: boolean } = {}): Promise<void> {
+  const wantRecognition = opts.recognition !== false;
   const faceapi = await getFaceApi();
-  if (modelsLoaded) return;
-  await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
-  await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
-  await faceapi.nets.faceRecognitionNet.loadFromUri("/models");
-  modelsLoaded = true;
+
+  if (!detectLoad) {
+    detectLoad = Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri("/models"),
+      faceapi.nets.faceLandmark68Net.loadFromUri("/models"),
+    ]).then(() => undefined);
+  }
+  if (wantRecognition && !recogLoad) {
+    recogLoad = faceapi.nets.faceRecognitionNet.loadFromUri("/models").then(() => undefined);
+  }
+
+  try {
+    await (wantRecognition ? Promise.all([detectLoad, recogLoad]) : detectLoad);
+  } catch (e) {
+    // Let a later attempt retry rather than caching a rejected promise forever.
+    detectLoad = null;
+    if (wantRecognition) recogLoad = null;
+    throw e;
+  }
+}
+
+/** Kick off model downloads early (e.g. on page mount) without blocking the UI. */
+export function warmFaceModels(opts: { recognition?: boolean } = {}): void {
+  loadFaceModels(opts).catch(() => { /* warm-up is best-effort */ });
 }
 
 export interface FaceResult {
@@ -27,20 +55,89 @@ export interface FaceResult {
   landmarks: any;
 }
 
-export async function detectFromImage(
+// Inference runs on a downscaled copy — TinyFaceDetector resizes to `inputSize`
+// internally anyway, so handing it a full 1280×720 frame only costs us the tensor
+// upload. Results are mapped back to the original canvas so the pixel-level
+// quality checks below keep working in the source resolution.
+const DETECT_MAX_DIM = 640;
+
+// Escalation ladder. Stage 1 is the fast common case; stage 2 is a slower, far more
+// permissive sweep that rescues soft-focus / uneven-light frames that the strict
+// pass misses. Previously there was only a single strict pass at threshold 0.5,
+// which is why perfectly visible faces were being rejected outright.
+const DETECT_STAGES = [
+  { inputSize: 416, scoreThreshold: 0.45 },
+  { inputSize: 512, scoreThreshold: 0.22 },
+];
+
+function sourceDims(input: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement): { w: number; h: number } {
+  if (typeof HTMLVideoElement !== "undefined" && input instanceof HTMLVideoElement)
+    return { w: input.videoWidth, h: input.videoHeight };
+  if (typeof HTMLImageElement !== "undefined" && input instanceof HTMLImageElement)
+    return { w: input.naturalWidth || input.width, h: input.naturalHeight || input.height };
+  return { w: (input as HTMLCanvasElement).width, h: (input as HTMLCanvasElement).height };
+}
+
+function toDetectCanvas(
   input: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement
+): { canvas: HTMLCanvasElement; origW: number; origH: number } | null {
+  const { w, h } = sourceDims(input);
+  if (!w || !h) return null;
+  const scale = Math.min(1, DETECT_MAX_DIM / Math.max(w, h));
+  const dw = Math.max(1, Math.round(w * scale));
+  const dh = Math.max(1, Math.round(h * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = dw;
+  canvas.height = dh;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(input, 0, 0, dw, dh);
+  return { canvas, origW: w, origH: h };
+}
+
+export async function detectFromImage(
+  input: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement,
+  opts: { descriptor?: boolean } = {}
 ): Promise<{ faces: number; result: FaceResult | null }> {
   const faceapi = await getFaceApi();
-  const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 });
-  const all = await faceapi.detectAllFaces(input, opts).withFaceLandmarks().withFaceDescriptors();
-  if (!all.length) return { faces: 0, result: null };
-  const best = all
-    .slice()
-    .sort((a: any, b: any) => b.detection.box.width * b.detection.box.height - a.detection.box.width * a.detection.box.height)[0];
-  return {
-    faces: all.length,
-    result: { descriptor: best.descriptor, score: best.detection.score, box: best.detection.box, landmarks: best.landmarks },
-  };
+  const wantDescriptor = opts.descriptor !== false;
+  const prepared = toDetectCanvas(input);
+  if (!prepared) return { faces: 0, result: null };
+  const { canvas, origW, origH } = prepared;
+
+  for (const stage of DETECT_STAGES) {
+    const detOpts = new faceapi.TinyFaceDetectorOptions(stage);
+    const chain = faceapi.detectAllFaces(canvas, detOpts).withFaceLandmarks();
+    const all = await (wantDescriptor ? chain.withFaceDescriptors() : chain);
+    if (!all.length) continue;
+
+    // Map detections from the downscaled inference canvas back to source pixels.
+    const scaled = faceapi.resizeResults(all, { width: origW, height: origH });
+    const best = scaled
+      .slice()
+      .sort((a: any, b: any) => b.detection.box.width * b.detection.box.height - a.detection.box.width * a.detection.box.height)[0];
+    return {
+      faces: scaled.length,
+      result: {
+        descriptor: best.descriptor ?? new Float32Array(0),
+        score: best.detection.score,
+        box: best.detection.box,
+        landmarks: best.landmarks,
+      },
+    };
+  }
+  return { faces: 0, result: null };
+}
+
+/**
+ * Detection WITHOUT the 128-D descriptor — used by the enrolment selfie, which
+ * only needs box + landmarks for the quality checks. Skipping descriptors means
+ * the 6.4 MB recognition net never has to be downloaded or run.
+ */
+export function detectForQuality(
+  input: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement
+): Promise<{ faces: number; result: FaceResult | null }> {
+  return detectFromImage(input, { descriptor: false });
 }
 
 // Fast box-only detection for the live camera oval guide (no landmarks/descriptors
@@ -126,8 +223,62 @@ export function verifyAgainst(ref: Float32Array, live: FaceResult, frameArea: nu
 // (glasses / mask / hat) are heuristic — tuned to block clear cases without
 // rejecting normal selfies; thresholds live here for easy tuning.
 
-export interface QualityCheck { key: string; label: string; pass: boolean }
-export interface QualityResult { pass: boolean; checks: QualityCheck[]; sharpness: number }
+export interface QualityCheck { key: string; label: string; pass: boolean; hint?: string }
+export interface QualityResult {
+  pass: boolean;
+  checks: QualityCheck[];
+  sharpness: number;
+  /** Headline explanation of the first thing that failed, shown prominently. */
+  reason?: string;
+  /** Actionable one-liner telling the candidate how to fix `reason`. */
+  hint?: string;
+}
+
+// What to tell the candidate for each failed check. Written as instructions
+// ("do this") rather than diagnoses ("this is wrong") so the fix is obvious.
+const QUALITY_HINTS: Record<string, { reason: string; hint: string }> = {
+  face:      { reason: "We couldn't detect your face",        hint: "Center your face in the oval, hold the phone at arm's length, and make sure the light is on your face — not behind you." },
+  single:    { reason: "More than one person is in frame",    hint: "Make sure you're the only person visible before capturing." },
+  eyes:      { reason: "Your eyes aren't clearly visible",    hint: "Look straight at the camera with both eyes open, and remove anything covering them." },
+  size:      { reason: "Your face is too far from the camera", hint: "Move a little closer until your face comfortably fills the oval." },
+  toobig:    { reason: "Your face is too close to the camera", hint: "Hold the phone about an arm's length away so your whole head fits with a little space around it." },
+  sharp:     { reason: "The photo came out blurry",           hint: "Hold the phone steady, tap the screen to focus, then capture again." },
+  nomask:    { reason: "Your face looks partly covered",      hint: "Please remove any mask, scarf, or anything covering your mouth and chin." },
+  noglasses: { reason: "Something is covering your eyes",     hint: "Please remove glasses, sunglasses, or any cap shadowing your eyes." },
+  plainbg:   { reason: "The background is too busy",          hint: "Stand facing a plain wall so the background is a single, even colour." },
+  dark:      { reason: "The photo is too dark",               hint: "Move somewhere brighter, or face a window or light source." },
+  bright:    { reason: "The photo is over-exposed",           hint: "Move out of direct light and avoid having a bright window behind you." },
+};
+
+export function hintFor(key: string): { reason: string; hint: string } {
+  return QUALITY_HINTS[key] || { reason: "The photo didn't pass our checks", hint: "Please retake it in even light with a plain background." };
+}
+
+/**
+ * Explains WHY no face was found, using the live MediaPipe box (which tracks the
+ * face even when face-api's detector misses it) plus overall exposure. Without
+ * this the candidate only saw "A face is clearly visible ✗" on a frame where
+ * their face was plainly visible — accurate about the detector, useless as advice.
+ */
+export function diagnoseNoFace(
+  canvas: HTMLCanvasElement,
+  hintBox?: { x: number; y: number; width: number; height: number } | null
+): { key: string; reason: string; hint: string } {
+  // The live tracker saw a face — so the problem is framing, not presence.
+  if (hintBox) {
+    if (hintBox.width > 0.55) return { key: "toobig", ...hintFor("toobig") };
+    if (hintBox.width < 0.22) return { key: "size", ...hintFor("size") };
+  }
+  try {
+    const W = canvas.width, H = canvas.height;
+    const stat = regionStat(canvas.getContext("2d")!.getImageData(0, 0, W, H).data, W, H, 0, 0, W, H);
+    const luma = 0.299 * stat.r + 0.587 * stat.g + 0.114 * stat.b;
+    if (luma < 55) return { key: "dark", ...hintFor("dark") };
+    if (luma > 215) return { key: "bright", ...hintFor("bright") };
+    if (laplacianVar(canvas) < 25) return { key: "sharp", ...hintFor("sharp") };
+  } catch { /* fall through to the generic message */ }
+  return { key: "face", ...hintFor("face") };
+}
 
 /** Sharpness via Laplacian variance on a downscaled copy — low = blurry. */
 export function laplacianVar(src: HTMLCanvasElement): number {
@@ -240,8 +391,16 @@ export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, fac
     const re = result.landmarks.getRightEye?.() || [];
     earOpen = (eyeEAR(le) + eyeEAR(re)) / 2 > 0.15;
   } catch { /* keep true if landmarks unavailable */ }
-  const sizeOk  = (fw * fh) / (W * H) > 0.05;
-  const sharp   = laplacianVar(canvas) > 45;
+  const faceRatio = (fw * fh) / (W * H);
+  const sizeOk  = faceRatio > 0.05;
+  // A face filling most of the frame is the single most common cause of a failed
+  // capture (the detector loses it entirely), so it's now an explicit check rather
+  // than a mystery rejection further down the line.
+  const notTooBig = fw / W < 0.72;
+  // laplacianVar walks every pixel — compute it ONCE and reuse (it used to be
+  // called twice per capture, doubling the cost of the slowest check).
+  const sharpness = laplacianVar(canvas);
+  const sharp   = sharpness > 45;
   const baseEdge  = Math.max(4, skin.edge);
   const noMask    = colorDist(mouth, skin) < 62;            // mask = colour block over mouth/chin
   // Glasses: require BOTH elevated bridge edges AND a lens reflection, so a bare
@@ -257,10 +416,20 @@ export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, fac
     { key: "single",    label: "Only one person in frame",         pass: single },
     { key: "eyes",      label: "Eyes open, looking at camera",     pass: earOpen && frontal },
     { key: "size",      label: "Face close enough to the camera",  pass: sizeOk },
+    { key: "toobig",    label: "Face not too close to the camera", pass: notTooBig },
     { key: "sharp",     label: "Photo is sharp (not blurry)",      pass: sharp },
     { key: "nomask",    label: "Face uncovered — no mask",         pass: noMask },
     { key: "noglasses", label: "Nothing on the face — no glasses", pass: noGlasses },
     { key: "plainbg",   label: "Plain single-colour background",   pass: plainBg },
-  ];
-  return { pass: checks.every((c) => c.pass), checks, sharpness: laplacianVar(canvas) };
+  ].map((c) => ({ ...c, hint: hintFor(c.key).hint }));
+
+  const failed = checks.find((c) => !c.pass);
+  const headline = failed ? hintFor(failed.key) : null;
+  return {
+    pass: !failed,
+    checks,
+    sharpness,
+    reason: headline?.reason,
+    hint: headline?.hint,
+  };
 }

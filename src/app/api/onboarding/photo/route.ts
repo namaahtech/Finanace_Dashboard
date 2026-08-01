@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getActor } from "@/lib/onboarding/server";
+import { readStoredFile } from "@/lib/file-storage";
 
 // Serve a candidate's display picture by email for internal onboarding views.
 // Prefers the dedicated profile_photo; falls back to the verification selfie so
@@ -38,15 +39,19 @@ export async function GET(req: NextRequest) {
 
   const { data: share } = await supabase
     .from("mail_file_shares")
-    .select("storage_url")
+    .select("storage_path, storage_url, file_type")
     .eq("id", fileShareId)
     .maybeSingle();
 
-  const m = (share?.storage_url || "").match(/^data:([^;]+);base64,([\s\S]*)$/);
-  if (!m) return NextResponse.json({ error: "Unavailable" }, { status: 404 });
+  const file = await readStoredFile(share);
+  if (!file) return NextResponse.json({ error: "Unavailable" }, { status: 404 });
 
-  const buffer = Buffer.from(m[2], "base64");
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: { "Content-Type": m[1] || "image/jpeg", "Cache-Control": "private, max-age=300" },
+  return new NextResponse(new Uint8Array(file.buffer), {
+    headers: {
+      "Content-Type": file.contentType || "image/jpeg",
+      // Avatars are re-rendered on every admin list view — an hour of private
+      // caching removes almost all repeat reads of the same photo.
+      "Cache-Control": "private, max-age=3600",
+    },
   });
 }

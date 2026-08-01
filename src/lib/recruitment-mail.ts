@@ -13,6 +13,18 @@ export interface MailContext {
   accountId: string;
   fromAddress: string;
   companyName: string;
+  /** True when the mail is going out from the acting user's own mailbox. */
+  sentAsActor?: boolean;
+  /** Display name of the acting user, for sign-offs. */
+  actorName?: string | null;
+}
+
+/** The employee whose mailbox should appear in the From line. */
+export interface MailActor {
+  name: string;
+  email: string;
+  zoho_email: string | null;
+  zoho_account_id: string | null;
 }
 
 /** Document-type → human label, used in emails and the upload page. */
@@ -35,30 +47,102 @@ export async function getCompanyName(): Promise<string> {
   }
 }
 
+/** Every address a Zoho account object can be known by, lower-cased. */
+function accountAddresses(a: any): string[] {
+  const out: string[] = [];
+  if (a?.primaryEmailAddress) out.push(String(a.primaryEmailAddress));
+  if (a?.mailboxAddress) out.push(String(a.mailboxAddress));
+  if (Array.isArray(a?.emailAddress)) {
+    for (const e of a.emailAddress) if (e?.mailId) out.push(String(e.mailId));
+  }
+  if (Array.isArray(a?.sendMailDetails)) {
+    for (const s of a.sendMailDetails) if (s?.fromAddress) out.push(String(s.fromAddress));
+  }
+  return out.map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
 /**
- * Resolve the company Zoho mailbox (same path the onboarding dispatch + system
- * mailer use): the shared admin token + admin/default account. All recruitment
- * mail sends from this professional mailbox — never raw SMTP.
+ * Resolve the Zoho mailbox to send from.
+ *
+ * Pass the ACTING user (see `getMailActor`) and mail goes out from THEIR mailbox
+ * — so an offer sent by an HR user arrives from the HR address, not from admin@.
+ * Previously this always resolved the admin/default account, so every automated
+ * mail appeared to come from admin@ regardless of who performed the action.
+ *
+ * Resolution order, first match wins:
+ *   1. the employee's stored `zoho_account_id`
+ *   2. a Zoho account matching their `zoho_email`
+ *   3. a Zoho account matching their login `email`
+ *   4. a Zoho account matching <local-part>@ZOHO_MAIL_DOMAIN
+ *      (covers talent@namaah.io → talent@mail.namaah.io)
+ *   5. the configured admin account / Zoho default — the previous behaviour
+ *
+ * Falling back is deliberate: a user without a provisioned mailbox must still be
+ * able to trigger mail rather than hitting an error mid-flow.
  */
-export async function getMailContext(): Promise<MailContext> {
+export async function getMailContext(actor?: MailActor | null): Promise<MailContext> {
   const token = await getZohoToken();
   if (!token) throw new Error("Zoho Mail is not connected. Connect it in Mail Config first.");
 
   const supabase = getSupabaseAdmin();
   const { data: config } = await supabase.from("zoho_config").select("admin_account_id").maybeSingle();
 
-  let accountId: string | null = config?.admin_account_id ? String(config.admin_account_id) : null;
+  const adminAccountId: string | null = config?.admin_account_id ? String(config.admin_account_id) : null;
+  let accountId: string | null = null;
   let fromAddress: string | null = null;
+  let sentAsActor = false;
+
   try {
     const accts = await zohoGet(token, "/accounts");
     const list: any[] = accts?.data || [];
-    const target =
-      (accountId && list.find((a) => String(a.accountId) === accountId)) ||
-      list.find((a) => a.isDefaultAccount || a.isPrimary) ||
-      list[0];
+
+    // ── 1–4: try to send as the acting user ─────────────────────────────────
+    let target: any = null;
+    if (actor) {
+      const domain = (process.env.ZOHO_MAIL_DOMAIN || "").trim().toLowerCase();
+      const candidates = [
+        actor.zoho_email,
+        actor.email,
+        domain && actor.email ? `${actor.email.split("@")[0]}@${domain}` : null,
+      ]
+        .filter(Boolean)
+        .map((s) => String(s).trim().toLowerCase());
+
+      if (actor.zoho_account_id) {
+        target = list.find((a) => String(a.accountId) === String(actor.zoho_account_id)) || null;
+      }
+      if (!target) {
+        for (const want of candidates) {
+          target = list.find((a) => accountAddresses(a).includes(want)) || null;
+          if (target) {
+            // Prefer the address we matched on, so the From line is the one the
+            // recipient expects to see.
+            fromAddress = want;
+            break;
+          }
+        }
+      }
+      if (target) sentAsActor = true;
+    }
+
+    // ── 5: fall back to the admin / default company mailbox ─────────────────
+    if (!target) {
+      fromAddress = null;
+      target =
+        (adminAccountId && list.find((a) => String(a.accountId) === adminAccountId)) ||
+        list.find((a) => a.isDefaultAccount || a.isPrimary) ||
+        list[0];
+      if (actor) {
+        console.warn(
+          `[mail] no Zoho mailbox found for ${actor.email || actor.name || "actor"} — sending from the company default instead.`
+        );
+      }
+    }
+
     if (target) {
       accountId = String(target.accountId);
       fromAddress =
+        fromAddress ||
         target.primaryEmailAddress ||
         target.mailboxAddress ||
         (Array.isArray(target.emailAddress) ? target.emailAddress[0]?.mailId : null);
@@ -68,7 +152,41 @@ export async function getMailContext(): Promise<MailContext> {
   }
   if (!accountId || !fromAddress) throw new Error("Could not resolve the company Zoho mailbox.");
 
-  return { token, accountId, fromAddress, companyName: await getCompanyName() };
+  return {
+    token,
+    accountId,
+    fromAddress,
+    companyName: await getCompanyName(),
+    sentAsActor,
+    actorName: actor?.name || null,
+  };
+}
+
+/**
+ * The signed-in employee to send mail as. Resolved from the request session; when
+ * there is no session (public candidate routes such as the document upload or the
+ * e-sign OTP) pass the employee who OWNS the record instead, so the candidate
+ * still hears from the person handling them rather than from admin@.
+ */
+export async function getMailActor(employeeId?: string | null): Promise<MailActor | null> {
+  if (!employeeId) return null;
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase
+      .from("employees")
+      .select("name, email, zoho_email, zoho_account_id")
+      .eq("id", employeeId)
+      .maybeSingle();
+    if (!data) return null;
+    return {
+      name: (data as any).name ?? "",
+      email: (data as any).email ?? "",
+      zoho_email: (data as any).zoho_email ?? null,
+      zoho_account_id: (data as any).zoho_account_id ?? null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 interface ZohoAttachmentDescriptor { storeName: string; attachmentName: string; attachmentPath: string; }
@@ -167,6 +285,60 @@ export function greetingHtml(name: string, accepted: boolean, companyName: strin
        <p style="margin:0;">Thank you again, and we wish you all the very best.</p>
        ${signoff("Talent Acquisition Team", companyName)}`;
   return shell(companyName, inner);
+}
+
+/**
+ * Intern → full-time conversion offer. Same house style as every other
+ * recruitment mail (shell + signoff), so it reads as one voice.
+ */
+export function fullTimeConversionHtml(opts: {
+  name: string;
+  companyName: string;
+  designation?: string | null;
+  department?: string | null;
+  effectiveDate?: string | null;
+  annualCtc?: number | null;
+  message?: string | null;
+}): string {
+  const n = esc(opts.name);
+  const co = esc(opts.companyName);
+
+  const rows: string[] = [];
+  if (opts.designation) rows.push(["Role", esc(opts.designation)] as any);
+  if (opts.department) rows.push(["Department", esc(opts.department)] as any);
+  if (opts.effectiveDate) rows.push(["Effective from", esc(opts.effectiveDate)] as any);
+  if (opts.annualCtc && opts.annualCtc > 0) {
+    rows.push(["Annual CTC", `₹${Number(opts.annualCtc).toLocaleString("en-IN")}`] as any);
+  }
+
+  const detailTable = rows.length
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:22px 0;border:1px solid #eef0f2;border-radius:8px;background:#fafbfc;">
+        ${(rows as unknown as [string, string][])
+          .map(
+            ([k, v], i) =>
+              `<tr>
+                 <td style="padding:11px 16px;font-size:13px;color:#6b7280;${i ? "border-top:1px solid #eef0f2;" : ""}">${k}</td>
+                 <td style="padding:11px 16px;font-size:13px;font-weight:600;color:#0f172a;text-align:right;${i ? "border-top:1px solid #eef0f2;" : ""}">${v}</td>
+               </tr>`
+          )
+          .join("")}
+       </table>`
+    : "";
+
+  const note = opts.message?.trim()
+    ? `<p style="margin:0 0 16px;padding:14px 16px;background:#f8fafc;border-left:3px solid #0f172a;border-radius:4px;color:#374151;">${esc(opts.message.trim()).replace(/\n/g, "<br/>")}</p>`
+    : "";
+
+  const inner = `<p style="margin:0 0 16px;">Dear ${n},</p>
+    <p style="margin:0 0 16px;">Thank you for everything you have contributed during your internship with ${co}. Your work, attitude and consistency have not gone unnoticed.</p>
+    <p style="margin:0 0 16px;">We are delighted to offer you a <strong>full-time position</strong> with us.</p>
+    ${detailTable}
+    ${note}
+    <p style="margin:0 0 16px;">Our HR team will follow up shortly with your formal employment documents and joining formalities. If you have any questions in the meantime, simply reply to this email — we're glad to help.</p>
+    <p style="margin:0;">Congratulations, and thank you for choosing to grow with us.</p>
+    ${signoff("Human Resources", opts.companyName)}`;
+
+  return shell(opts.companyName, inner);
 }
 
 /** Request-documents email with the candidate's unique upload link. */

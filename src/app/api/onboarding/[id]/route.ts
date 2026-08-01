@@ -75,6 +75,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   for (const k of ["candidate_name", "candidate_email", "candidate_phone", "candidate_address", "config"]) {
     if (k in body) patch[k] = body[k];
   }
+  // Engagement type is constrained at the database level; validate here too so a
+  // bad value returns a clear 400 rather than a constraint violation.
+  if ("employment_type" in body) {
+    if (!["intern", "full_time"].includes(body.employment_type)) {
+      return NextResponse.json({ error: "employment_type must be 'intern' or 'full_time'." }, { status: 400 });
+    }
+    patch.employment_type = body.employment_type;
+  }
   if (Object.keys(patch).length === 0) return NextResponse.json({ ok: true });
 
   const { error } = await supabase.from("onboarding_packets").update(patch).eq("id", id);

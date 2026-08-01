@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-
-const BUCKET = "mail-files";
+import { uploadToStorage, deleteFromStorage } from "@/lib/file-storage";
 
 function guessContentType(fileName: string): string {
   const ext = (fileName.split(".").pop() || "").toLowerCase();
@@ -26,6 +25,16 @@ function guessContentType(fileName: string): string {
   return map[ext] || "application/octet-stream";
 }
 
+// Shape an uploaded row for the client. `storage_url` is rebuilt as a short link
+// to the streaming endpoint instead of carrying the file's bytes, so the existing
+// UI (thumbnails, preview, download) keeps working unchanged while the listing
+// payload drops from megabytes to a few hundred bytes per row.
+const toUploadRow = (f: any) => ({
+  ...f,
+  storage_url: `/api/mail/files/open?id=${f.id}`,
+  source: "upload",
+});
+
 // scope: all | mine | shared | trash
 export async function GET(req: NextRequest) {
   const supabase   = getSupabaseAdmin();
@@ -34,9 +43,16 @@ export async function GET(req: NextRequest) {
   const userEmail  = req.nextUrl.searchParams.get("email") || "";
 
   // ── 1. Manual uploads ─────────────────────────────────────────
+  // NOTE: `storage_url` is deliberately NOT selected. It holds the entire file as
+  // a base64 data URL on legacy rows, so `select("*")` here shipped every file in
+  // the system out of the database on every page load (~17 MB per request, which
+  // was essentially the whole egress bill). Each row instead gets a tiny pointer
+  // to /api/mail/files/open, and bytes are fetched only for what's actually shown.
   let query = supabase
     .from("mail_file_shares")
-    .select("*, sharer:employees!mail_file_shares_shared_by_fkey(id,name,designation)")
+    .select(
+      "id, filename, file_size, file_type, storage_path, shared_by, shared_with, expiry_at, download_count, is_active, created_at, external_from, sharer:employees!mail_file_shares_shared_by_fkey(id,name,designation)"
+    )
     .order("created_at", { ascending: false });
 
   if (scope === "trash") {
@@ -45,7 +61,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({
-      data: (data || []).map((f: any) => ({ ...f, source: "upload" })),
+      data: (data || []).map(toUploadRow),
     });
   }
 
@@ -56,7 +72,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({
-      data: (data || []).map((f: any) => ({ ...f, source: "upload" })),
+      data: (data || []).map(toUploadRow),
     });
   }
 
@@ -71,7 +87,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const uploadedFiles = (data || []).map((f: any) => ({ ...f, source: "upload" }));
+  const uploadedFiles = (data || []).map(toUploadRow);
 
   // ── 2. Email attachments from mail_messages.body ───────────────
   const emailFiles: any[] = [];
@@ -196,11 +212,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Convert to base64 data URL — stored directly in DB, no Supabase Storage bucket used.
-  // Works exactly like email attachment links: the URL IS the binary content.
+  // Bytes go to Supabase Storage; the row keeps only the object path. Files used
+  // to be inlined here as base64 data URLs, which charged the database quota ~1.33×
+  // the file size and made every listing read ship the contents.
   const mimeType = file.type || guessContentType(file.name);
   const buffer   = Buffer.from(await file.arrayBuffer());
-  const dataUrl  = `data:${mimeType};base64,${buffer.toString("base64")}`;
+  const storagePath = await uploadToStorage(buffer, file.name, mimeType, "file-share");
 
   const { data, error } = await supabase
     .from("mail_file_shares")
@@ -209,12 +226,15 @@ export async function POST(req: NextRequest) {
       filename:     file.name,
       file_size:    file.size,
       file_type:    mimeType,
-      storage_path: "",     // no bucket used; empty string satisfies NOT NULL constraint
-      storage_url:  dataUrl,
+      storage_path: storagePath || "",
+      // Fall back to the legacy inline form only if Storage is unavailable, so an
+      // upload never hard-fails on a bucket misconfiguration.
+      storage_url:  storagePath ? null : `data:${mimeType};base64,${buffer.toString("base64")}`,
       shared_with:  sharedWith ? JSON.parse(sharedWith) : null,
       expiry_at:    expiryAt || null,
     })
-    .select().single();
+    .select("id, filename, file_size, file_type, storage_path, shared_by, shared_with, expiry_at, download_count, is_active, created_at")
+    .single();
 
   if (error) {
     const friendly = error.message?.includes("not-null")
@@ -224,7 +244,9 @@ export async function POST(req: NextRequest) {
         : "Upload failed. Please try again.";
     return NextResponse.json({ error: friendly }, { status: 500 });
   }
-  return NextResponse.json({ data, url: dataUrl });
+  // Return the streaming link rather than the file's bytes.
+  const url = `/api/mail/files/open?id=${data.id}`;
+  return NextResponse.json({ data: { ...data, storage_url: url, source: "upload" }, url });
 }
 
 // PATCH — restore a soft-deleted file
@@ -252,9 +274,11 @@ export async function DELETE(req: NextRequest) {
   if (permanent) {
     const { data: file } = await supabase
       .from("mail_file_shares").select("storage_path").eq("id", id).single();
-    if (file?.storage_path) {
-      await supabase.storage.from(BUCKET).remove([file.storage_path]);
-    }
+    // Was removing from a bucket named "mail-files", which does not exist in this
+    // project — so the object was never actually deleted. Files now live in the
+    // shared FILE_BUCKET; legacy inline rows have no object and the DB row delete
+    // below is what reclaims their space.
+    await deleteFromStorage(file?.storage_path);
     const { error } = await supabase.from("mail_file_shares").delete().eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true });

@@ -11,10 +11,10 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { DocumentPreview } from "@/components/onboarding/DocumentPreview";
 import { SignaturePad } from "@/components/onboarding/SignaturePad";
-import { loadFaceModels, detectFromImage, verifyAgainst, assessQuality, type FaceVerdict } from "@/lib/face-verify-client";
+import { loadFaceModels, warmFaceModels, detectFromImage, verifyAgainst, assessQuality, diagnoseNoFace, type FaceVerdict } from "@/lib/face-verify-client";
 import {
   loadFaceLandmarker, detectFrame, makeChallengeSequence, newProgress, stepChallenge,
-  scoreRisk, type Challenge, type ChallengeProgress,
+  scoreRisk, type Challenge, type ChallengeProgress, type FrameSignals,
 } from "@/lib/liveness-client";
 import { computeDeviceFingerprint } from "@/lib/device-fingerprint";
 import type { TemplateData } from "@/lib/onboarding/types";
@@ -59,6 +59,10 @@ export default function SignPage() {
   const [faceStatus, setFaceStatus] = useState<"init" | "ready" | "verifying">("init");
   const [faceMsg, setFaceMsg] = useState("");
   const [faceResult, setFaceResult] = useState<FaceVerdict | null>(null);
+  // Headline reason + fix for a failed capture, shown above the checklist.
+  const [faceReason, setFaceReason] = useState<{ reason: string; hint: string } | null>(null);
+  const [framing, setFraming] = useState<"none" | "far" | "close" | "off" | "ok">("none");
+  const lastSignalsRef = useRef<FrameSignals | null>(null);
   const [refMissing, setRefMissing] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
   const [faceFails, setFaceFails] = useState(0);
@@ -113,6 +117,11 @@ export default function SignPage() {
 
   // Compute a device fingerprint once for the audit trail.
   useEffect(() => { computeDeviceFingerprint().then((fp) => { deviceFpRef.current = fp; }); }, []);
+
+  // Start fetching the face models as soon as the page opens, so they're already
+  // cached by the time the candidate finishes the email OTP. Previously the ~7 MB
+  // download only began when the face step mounted, and they watched it load.
+  useEffect(() => { warmFaceModels(); loadFaceLandmarker().catch(() => {}); }, []);
 
   async function submit() {
     setErr(null);
@@ -313,10 +322,15 @@ export default function SignPage() {
       lastRun = now;
       tsRef.current = Math.max(tsRef.current + 1, Math.round(now));
       const s = detectFrame(v, tsRef.current);
+      lastSignalsRef.current = s;
+      // Upper bound tightened to 0.58 — beyond that the capture detector loses the
+      // face, so the candidate is guided back before capturing rather than rejected.
       if (s.present && s.faceCount === 1 && s.box) {
         const cx = s.box.x + s.box.width / 2, cy = s.box.y + s.box.height / 2;
-        setCentered(cx > 0.34 && cx < 0.66 && cy > 0.24 && cy < 0.74 && s.box.width > 0.24 && s.box.width < 0.85);
-      } else setCentered(false);
+        const inFrame = cx > 0.34 && cx < 0.66 && cy > 0.24 && cy < 0.74;
+        setFraming(!inFrame ? "off" : s.box.width < 0.24 ? "far" : s.box.width > 0.58 ? "close" : "ok");
+        setCentered(inFrame && s.box.width >= 0.24 && s.box.width <= 0.58);
+      } else { setCentered(false); setFraming("none"); }
       if (doneRef.current || !s.present || s.faceCount !== 1) return;
       const ch = challengesRef.current[idxRef.current];
       if (!ch) return;
@@ -341,7 +355,7 @@ export default function SignPage() {
       if (!document.hidden) return;
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
-      setFaceResult(null); setFaceFails(0); setRefMissing(false);
+      setFaceResult(null); setFaceReason(null); setFaceFails(0); setRefMissing(false);
       setVerifyToken(null);
       setOtp(""); setOtpSent(false); setSecondsLeft(0);
       setSigImage(null); setAgreed(false);
@@ -360,6 +374,7 @@ export default function SignPage() {
     if (!video || !video.videoWidth) return;
     setFaceStatus("verifying");
     setFaceResult(null);
+    setFaceReason(null);
     setFaceMsg("");
     try {
       const canvas = document.createElement("canvas");
@@ -369,7 +384,11 @@ export default function SignPage() {
       const { faces, result } = await detectFromImage(canvas);
 
       if (!result) {
-        setFaceResult({ pass: false, similarity: 0, distance: 1, checks: [{ label: "A face is clearly visible", pass: false }] });
+        // Say exactly what went wrong (too close / too far / too dark / blurry)
+        // using the live tracker's last reading, not a bare "no face" verdict.
+        const d = diagnoseNoFace(canvas, lastSignalsRef.current?.box ?? null);
+        setFaceReason({ reason: d.reason, hint: d.hint });
+        setFaceResult({ pass: false, similarity: 0, distance: 1, checks: [{ label: d.reason, pass: false }] });
         setFaceStatus("ready");
         setFaceFails((n) => n + 1);
         return;
@@ -396,6 +415,18 @@ export default function SignPage() {
       const checks = hasRef && verdict ? [verdict.checks[0], ...qChecks] : qChecks;
       checks.push({ label: `Security score ${risk.score}/${risk.max}`, pass: risk.pass });
       const pass = risk.pass && q.pass && (!hasRef || !!verdict?.pass);
+
+      // Lead with the actual blocker: a photo-quality problem is fixable advice,
+      // an identity mismatch is a different conversation entirely.
+      if (!pass) {
+        if (!q.pass && q.reason) setFaceReason({ reason: q.reason, hint: q.hint || "" });
+        else if (hasRef && verdict && !verdict.pass)
+          setFaceReason({
+            reason: "We couldn't match you to your verification selfie",
+            hint: "Face the camera straight on in even light, with nothing covering your face. If this keeps failing, contact your hiring coordinator.",
+          });
+        else setFaceReason({ reason: "Verification didn't pass", hint: "Please review the items below and capture again." });
+      }
 
       setFaceResult({ pass, similarity: verdict?.similarity ?? 0, distance: verdict?.distance ?? 1, checks });
       setFaceStatus("ready");
@@ -464,6 +495,7 @@ export default function SignPage() {
   function restartFromOtp(msg?: string) {
     stopStream();
     setFaceResult(null);
+    setFaceReason(null);
     setFaceFails(0);
     setRefMissing(false);
     setVerifyToken(null);
@@ -665,7 +697,11 @@ export default function SignPage() {
                           style={{ width: "54%", height: "82%", borderColor: liveDone ? "#22c55e" : centered ? "#f59e0b" : "#f43f5e" }} />
                         <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center px-3">
                           <span className={cn("rounded-full px-2.5 py-0.5 text-center text-[11px] font-medium text-white", liveDone ? "bg-emerald-600/85" : centered ? "bg-amber-600/90" : "bg-rose-600/85")}>
-                            {!centered ? "Center your face in the oval"
+                            {!centered
+                              ? (framing === "close" ? "Move back a little — you're too close"
+                                : framing === "far" ? "Move a little closer to the camera"
+                                : framing === "off" ? "Center your face in the oval"
+                                : "Position your face inside the oval")
                               : liveDone ? "Liveness confirmed — tap Capture"
                               : challenges[chIdx]
                                 ? (challenges[chIdx].type === "blink" ? `${challenges[chIdx].label} (${chCount}/${challenges[chIdx].target})` : challenges[chIdx].label)
@@ -710,14 +746,17 @@ export default function SignPage() {
 
                   {faceResult && (
                     <div className={cn("rounded-lg border p-3", faceResult.pass ? "border-emerald-500/30 bg-emerald-500/5" : "border-rose-500/30 bg-rose-500/5")}>
-                      <div className="mb-2 flex items-center justify-between">
+                      <div className="mb-2 flex items-center justify-between gap-2">
                         <p className={cn("text-xs font-semibold", faceResult.pass ? "text-emerald-600" : "text-rose-600")}>
-                          {faceResult.pass ? "Identity confirmed" : "Couldn't confirm your identity"}
+                          {faceResult.pass ? "Identity confirmed" : (faceReason?.reason || "Couldn't confirm your identity")}
                         </p>
                         {faceResult.distance < 1 && (
-                          <span className="text-[10px] text-muted-foreground tabular-nums">match {Math.round(faceResult.similarity * 100)}%</span>
+                          <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">match {Math.round(faceResult.similarity * 100)}%</span>
                         )}
                       </div>
+                      {!faceResult.pass && faceReason?.hint && (
+                        <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">{faceReason.hint}</p>
+                      )}
                       <div className="space-y-1">
                         {faceResult.checks.map((c) => (
                           <div key={c.label} className="flex items-center gap-1.5 text-[11px]">

@@ -5,7 +5,7 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
 import {
   Shield, Search, RefreshCw, Mail, LogIn, LogOut,
-  UserPlus, AlertCircle, Calendar, ChevronLeft, ChevronRight,
+  UserPlus, AlertCircle, Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -44,15 +45,16 @@ const ACTION_META: Record<string, { icon: React.ReactNode; color: string; label:
   statutory_events_seeded: { icon: <Calendar className="h-3 w-3" />,    color: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/20",   label: "Events Seeded" },
 };
 
-const PAGE_SIZE = 25;
 
 export default function AuditLogPage() {
   const [logs, setLogs]               = useState<AuditLog[]>([]);
   const [loading, setLoading]         = useState(true);
   const [search, setSearch]           = useState("");
   const [actionFilter, setActionFilter] = useState("");
-  const [page, setPage]               = useState(0);
   const [total, setTotal]             = useState(0);
+  // Server-side paging: only the visible page is ever fetched.
+  const pager = usePagination(`${search}|${actionFilter}`);
+  const { page, pageSize } = pager;
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -61,7 +63,7 @@ export default function AuditLogPage() {
         .from("audit_logs")
         .select("*, employee:employees!audit_logs_user_id_fkey(name,email,employee_id)", { count: "exact" })
         .order("created_at", { ascending: false })
-        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+        .range(page * pageSize, page * pageSize + pageSize - 1);
 
       if (actionFilter) query = query.eq("action", actionFilter);
       if (search)       query = query.or(`action.ilike.%${search}%,target_id.ilike.%${search}%`);
@@ -73,11 +75,9 @@ export default function AuditLogPage() {
       }
     } catch { /* keep last */ }
     setLoading(false);
-  }, [page, search, actionFilter]);
+  }, [page, pageSize, search, actionFilter]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
-
-  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   function formatMetadata(meta: Record<string, unknown>) {
     if (!meta) return null;
@@ -111,12 +111,12 @@ export default function AuditLogPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={search}
-              onChange={e => { setSearch(e.target.value); setPage(0); }}
+              onChange={e => { setSearch(e.target.value); }}
               placeholder="Search actions or targets…"
               className="pl-9"
             />
           </div>
-          <Select value={actionFilter || "all"} onValueChange={(v) => { setActionFilter(v === "all" ? "" : v); setPage(0); }}>
+          <Select value={actionFilter || "all"} onValueChange={(v) => { setActionFilter(v === "all" ? "" : v); }}>
             <SelectTrigger className="w-[220px]"><SelectValue placeholder="All Actions" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Actions</SelectItem>
@@ -212,22 +212,7 @@ export default function AuditLogPage() {
               </TableBody>
             </Table>
 
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t">
-                <span className="text-xs text-muted-foreground">
-                  Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)} className="h-8 w-8 p-0">
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-xs font-medium tabular-nums">{page + 1} / {totalPages}</span>
-                  <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="h-8 w-8 p-0">
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
+            <Pagination {...pager.bind(total, "entry")} className="px-4 py-3" />
           </CardContent>
         </Card>
       </div>

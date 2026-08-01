@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/layout/AuthProvider";
@@ -231,6 +232,9 @@ export default function FilesPage() {
   const [permDeletedEmailIds, setPermDeletedEmailIds] = useState<Set<string>>(loadPermDeleted);
   // Multi-select
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Reset to page 1 whenever the scope/search/sort changes, so filtering never
+  // leaves you staring at an empty page.
+  const pager = usePagination(`${scope}|${search}|${sort}`);
 
   const dismissedIds = new Set(dismissedEmailFiles.map(f => f.id));
 
@@ -457,7 +461,8 @@ export default function FilesPage() {
   }
 
   function selectAll() {
-    setSelectedIds(new Set(displayFiles.map(f => f.id)));
+    // Select every file matching the current filters, not just the visible page.
+    setSelectedIds(new Set(allDisplayFiles.map(f => f.id)));
   }
 
   function deselectAll() {
@@ -466,7 +471,7 @@ export default function FilesPage() {
 
   async function bulkDelete() {
     const ids = [...selectedIds];
-    const selected = displayFiles.filter(f => ids.includes(f.id));
+    const selected = allDisplayFiles.filter(f => ids.includes(f.id));
     const emailFiles  = selected.filter(f => f.source === "email");
     const uploadFiles = selected.filter(f => f.source !== "email");
 
@@ -571,7 +576,11 @@ export default function FilesPage() {
     });
   }
 
-  const displayFiles = applyFilters(isTrash ? trashItems : activeFiles);
+  const allDisplayFiles = applyFilters(isTrash ? trashItems : activeFiles);
+  // Only the current page is rendered. Each card renders a thumbnail that fetches
+  // the real file, so an unbounded grid meant every file in the workspace was
+  // downloaded on every visit.
+  const displayFiles = pager.slice(allDisplayFiles);
 
   // Stats always based on the active (non-trash) view
   const statsBase  = isTrash ? [] : activeFiles;
@@ -876,6 +885,13 @@ export default function FilesPage() {
         </div>
       )}
 
+      {!loading && allDisplayFiles.length > 0 && (
+        <Pagination
+          {...pager.bind(allDisplayFiles.length, "file")}
+          className="mt-5"
+        />
+      )}
+
       {/* Floating multi-select action bar */}
       {selectedIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-background border border-border rounded-2xl shadow-2xl ring-1 ring-primary/10">
@@ -886,9 +902,9 @@ export default function FilesPage() {
           <Button
             variant="ghost" size="sm"
             className="h-7 text-[11px] text-muted-foreground hover:text-foreground px-2"
-            onClick={selectedIds.size === displayFiles.length ? deselectAll : selectAll}
+            onClick={selectedIds.size === allDisplayFiles.length ? deselectAll : selectAll}
           >
-            {selectedIds.size === displayFiles.length ? "Deselect All" : `Select All (${displayFiles.length})`}
+            {selectedIds.size === allDisplayFiles.length ? "Deselect All" : `Select All (${displayFiles.length})`}
           </Button>
 
           <div className="w-px h-5 bg-border mx-1" />
