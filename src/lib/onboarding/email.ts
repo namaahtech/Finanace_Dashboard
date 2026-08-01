@@ -5,9 +5,10 @@ export type EmploymentType = "intern" | "full_time";
 // Wording that changes with the engagement type chosen in the onboarding builder,
 // so a full-time hire is never told they've been offered an internship.
 //
-// NOTE: `handbook` deliberately tracks the ACTUAL document attached. The handbook
-// PDF is still the internship handbook, so we call it a "Company Handbook" for
-// full-time hires rather than claiming a document that doesn't exist yet.
+// These names match the generated documents exactly: the Offer Letter, NDA and
+// Handbook all re-render with employment wording for a full-time hire (see
+// templates/terminology.ts), so the email never names a document the candidate
+// won't recognise when they open the attachment.
 export function engagementWords(type: EmploymentType) {
   const fullTime = type === "full_time";
   return {
@@ -18,7 +19,7 @@ export function engagementWords(type: EmploymentType) {
     offerPhrase: fullTime ? "a full-time employment offer" : "an internship offer",
     /** Name of the offer document. Matches the preview/PDF title. */
     offerDoc: fullTime ? "Employment Offer Letter" : "Internship Offer Letter",
-    handbook: fullTime ? "Company Handbook" : "Internship Handbook",
+    handbook: fullTime ? "Employment Handbook" : "Internship Handbook",
     /** Email subject fragment. */
     subjectOffer: fullTime ? "Your Full-Time Employment Offer" : "Your Internship Offer",
     subjectSigned: fullTime ? "Your Signed Employment Offer & Documents" : "Your Signed Internship Offer & Documents",

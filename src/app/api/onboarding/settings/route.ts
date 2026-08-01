@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getActor, isAdmin, canEditSchema, loadSettings, resolveSchema } from "@/lib/onboarding/server";
+import { getActor, isAdmin, canEditSchema, loadSettings, resolveSchema, resolveSchemaFor, deriveFullTimeSchema } from "@/lib/onboarding/server";
 import { DEFAULT_SCHEMA } from "@/lib/onboarding/schema";
 
 // GET /api/onboarding/settings — current settings + effective schema.
@@ -18,9 +18,16 @@ export async function GET() {
       signatory_signature_url: settings?.signatory_signature_url ?? null,
       company_seal_url: settings?.company_seal_url ?? null,
     },
+    // Intern sheet (the original) …
     schema: resolveSchema(settings),
     isCustomSchema: Array.isArray(settings?.config_schema) && (settings?.config_schema as any[]).length > 0,
     defaultSchema: DEFAULT_SCHEMA,
+    // … and the full-time sheet, which falls back to a wording-adjusted copy of the
+    // intern sheet until an admin customises it.
+    schemaFullTime: resolveSchemaFor(settings, "full_time"),
+    isCustomSchemaFullTime:
+      Array.isArray(settings?.config_schema_full_time) && (settings?.config_schema_full_time as any[]).length > 0,
+    defaultSchemaFullTime: deriveFullTimeSchema(resolveSchema(settings)),
     isAdmin: isAdmin(actor),
     canEditSchema: await canEditSchema(actor),
   });
@@ -34,7 +41,7 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const settingsKeys = ["signatory_name", "signatory_designation", "company_name", "company_details", "template_versions", "require_approval", "signatory_signature_url", "company_seal_url"];
   const editsSettings = settingsKeys.some((k) => k in body);
-  const editsSchema = "config_schema" in body;
+  const editsSchema = "config_schema" in body || "config_schema_full_time" in body;
 
   // Signatory/company settings are admin-only; the configuration sheet (form structure)
   // requires full-depth form-builder access (admin or granted onboarding_builder.can_edit).
@@ -46,7 +53,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const patch: Record<string, any> = { id: 1, updated_by: actor.userId, updated_at: new Date().toISOString() };
-  for (const k of [...settingsKeys, "config_schema"]) {
+  for (const k of [...settingsKeys, "config_schema", "config_schema_full_time"]) {
     if (k in body) patch[k] = body[k];
   }
 

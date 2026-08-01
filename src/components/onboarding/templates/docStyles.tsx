@@ -55,7 +55,8 @@ export const DOC_CSS = `
 .od-section { text-align: center; font-size: 12pt; font-weight: 700; color: #1a1a1a; margin: 18pt 0 9pt; page-break-after: avoid; }
 .od-snum { font-size: 11pt; font-weight: 700; color: #1a1a1a; margin: 12pt 0 3pt; page-break-after: avoid; }
 .od-sub  { font-size: 11pt; font-weight: 700; color: #1a1a1a; margin: 9pt 0 3pt; page-break-after: avoid; }
-.od-p    { margin: 0 0 6pt; text-align: justify; }
+.od-p    { margin: 0 0 6pt; text-align: justify; text-justify: inter-word;
+           hyphens: auto; -webkit-hyphens: auto; overflow-wrap: break-word; word-spacing: -0.1pt; }
 .od-ul   { margin: 0 0 7pt; padding-left: 18pt; }
 .od-ul li { margin: 1.5pt 0; }
 .od-cat  { font-weight: 700; color: #1a1a1a; margin: 4pt 0 4pt; font-size: 11pt; }
@@ -69,7 +70,9 @@ export const DOC_CSS = `
 .od-field .od-val { font-weight: 600; color: #1a1a1a; border-bottom: 1px solid #555; padding: 0 4pt; }
 .od-check { display: flex; gap: 7pt; align-items: baseline; margin: 3pt 0; }
 .od-box { font-family: 'Segoe UI Symbol','Arial Unicode MS',sans-serif; font-size: 11pt; line-height: 1; color: #1a1a1a; }
-.od-note { margin: 2pt 0 4pt 18pt; font-size: 10pt; color: #333; text-align: justify; white-space: pre-wrap; }
+.od-note { margin: 2pt 0 4pt 18pt; font-size: 10pt; color: #333; text-align: justify;
+           text-justify: inter-word; hyphens: auto; -webkit-hyphens: auto; overflow-wrap: break-word;
+           white-space: pre-wrap; }
 .od-muted { color: #777; }
 .od-spacer { height: 8pt; }
 .od-sigwrap { margin-top: 24pt; display: flex; justify-content: space-between; align-items: flex-start; gap: 40pt; page-break-inside: avoid; }
@@ -80,7 +83,9 @@ export const DOC_CSS = `
 .od-sigmeta { font-size: 9.5pt; color: #333; }
 .od-sigmeta b { color: #111; }
 .od-ack { margin-top: 14pt; padding-top: 10pt; border-top: 1px dashed #bbb; }
-.od-callout { font-size: 10pt; color: #444; background: #f4f4f5; border-left: 3px solid #bbb; padding: 6pt 8pt; margin: 8pt 0; text-align: justify; }
+.od-callout { font-size: 10pt; color: #444; background: #f4f4f5; border-left: 3px solid #bbb;
+             padding: 6pt 8pt; margin: 8pt 0; text-align: justify; text-justify: inter-word;
+             hyphens: auto; -webkit-hyphens: auto; overflow-wrap: break-word; }
 
 /* ── Per-page candidate signature strip (sits between page body and letterhead footer) ── */
 .od-pagesig {

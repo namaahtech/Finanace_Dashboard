@@ -105,6 +105,8 @@ export interface OnboardingSignature {
 export interface OnboardingSettings {
   id: number;
   config_schema: ConfigCategory[] | null;
+  /** Separate sheet for direct full-time hires; null → derived from config_schema. */
+  config_schema_full_time?: ConfigCategory[] | null;
   signatory_name: string;
   signatory_designation: string;
   company_name: string;

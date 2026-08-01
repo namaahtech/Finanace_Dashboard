@@ -88,6 +88,8 @@ export default function OnboardingBuilderPage() {
   const [canEditSchema, setCanEditSchema] = useState(false);
   const [editSchema, setEditSchema] = useState(false);
   const [schemaDraft, setSchemaDraft] = useState<ConfigCategory[]>([]);
+  // Both configuration sheets, so switching Engagement Type is instant.
+  const [schemaByType, setSchemaByType] = useState<{ intern: ConfigCategory[]; full_time: ConfigCategory[] } | null>(null);
   const [savingSchema, setSavingSchema] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -100,6 +102,16 @@ export default function OnboardingBuilderPage() {
   // Add Employee from completed onboarding
   const [addEmpOpen, setAddEmpOpen] = useState(false);
   const formRef = useRef<FormState | null>(null);
+
+  // Which configuration sheet applies, derived from the Engagement Type dropdown.
+  const activeSchema = useMemo(
+    () => (schemaByType ? schemaByType[form?.employment_type ?? "intern"] : schema),
+    [schemaByType, form?.employment_type, schema]
+  );
+  const previewSchema = useMemo(
+    () => (schemaByType ? schemaByType[previewForm?.employment_type ?? "intern"] : schema),
+    [schemaByType, previewForm?.employment_type, schema]
+  );
 
   const status = packet?.status as OnboardingStatus | undefined;
   const editable =
@@ -124,6 +136,10 @@ export default function OnboardingBuilderPage() {
       }
       setSchema(json.schema);
       setSchemaDraft(json.schema);
+      setSchemaByType({
+        intern: json.schemaIntern ?? json.schema,
+        full_time: json.schemaFullTime ?? json.schema,
+      });
       setSignatory(json.settings);
       setIsAdmin(json.isAdmin);
       setIsOwner(json.isOwner);
@@ -262,7 +278,13 @@ export default function OnboardingBuilderPage() {
       const res = await fetch("/api/onboarding/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config_schema: schemaDraft }),
+        // Write to the sheet matching this candidate's engagement type, so editing
+        // a full-time offer's form doesn't overwrite the intern questionnaire.
+        body: JSON.stringify(
+          form?.employment_type === "full_time"
+            ? { config_schema_full_time: schemaDraft }
+            : { config_schema: schemaDraft }
+        ),
       });
       if (!res.ok) { const j = await res.json(); throw new Error(j.error); }
       toast.success("Form structure saved (applies to all onboardings)");
@@ -291,13 +313,13 @@ export default function OnboardingBuilderPage() {
         ? buildTemplateData({
             candidate: previewForm,
             config: previewForm.config,
-            schema,
+            schema: previewSchema,
             signatory,
             signature: packet?.signature,
             offerDateISO: packet?.sent_at || packet?.approved_at || null,
           })
         : null,
-    [previewForm, schema, signatory, packet?.signature, packet?.sent_at, packet?.approved_at]
+    [previewForm, previewSchema, signatory, packet?.signature, packet?.sent_at, packet?.approved_at]
   );
 
   if (loading || !form || !packet) {
@@ -634,7 +656,7 @@ export default function OnboardingBuilderPage() {
                       <Button
                         variant={editSchema ? "default" : "outline"}
                         size="sm"
-                        onClick={() => { if (!editSchema) setSchemaDraft(schema); setEditSchema((v) => !v); }}
+                        onClick={() => { if (!editSchema) setSchemaDraft(activeSchema); setEditSchema((v) => !v); }}
                       >
                         <Pencil size={12} /> {editSchema ? "Close Editor" : "Edit Form"}
                       </Button>
@@ -651,12 +673,12 @@ export default function OnboardingBuilderPage() {
                         <Button size="sm" onClick={saveSchema} disabled={savingSchema}>
                           {savingSchema ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save Form
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => { setSchemaDraft(schema); setEditSchema(false); }}>Cancel</Button>
+                        <Button variant="ghost" size="sm" onClick={() => { setSchemaDraft(activeSchema); setEditSchema(false); }}>Cancel</Button>
                       </div>
                     </div>
                   ) : (
                     <ConfigForm
-                      schema={schema}
+                      schema={activeSchema}
                       config={form.config}
                       onChange={(config) => updateForm({ ...form, config })}
                     />

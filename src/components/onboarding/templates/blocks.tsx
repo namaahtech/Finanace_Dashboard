@@ -2,6 +2,7 @@ import React from "react";
 import type { TemplateData, ConfigCategory } from "@/lib/onboarding/types";
 import { renderBlocks } from "./docStyles";
 import { sliceBlocks } from "./docModel";
+import { termsFor, mapBlocks } from "./terminology";
 import { OFFER_BLOCKS } from "./content/offerLetterBlocks";
 import { NDA_BLOCKS } from "./content/ndaBlocks";
 import { HANDBOOK_BLOCKS } from "./content/handbookBlocks";
@@ -80,7 +81,7 @@ function val(config: TemplateData["config"], id: string): string {
 }
 
 // One Section-1 category showing ONLY the selected options + their sub-fields.
-function Category({ cat, config }: { cat: ConfigCategory; config: TemplateData["config"] }) {
+function Category({ cat, config, t = (x: string) => x }: { cat: ConfigCategory; config: TemplateData["config"]; t?: (s: string) => string }) {
   const rows: React.ReactNode[] = [];
 
   if (cat.kind === "fields" && cat.fields) {
@@ -89,7 +90,7 @@ function Category({ cat, config }: { cat: ConfigCategory; config: TemplateData["
       if (!v) continue;
       rows.push(
         <div className="od-field" key={f.id}>
-          <span className="od-lbl">{f.label}: </span>
+          <span className="od-lbl">{t(f.label)}: </span>
           <span className="od-val">{f.type === "date" ? fmtDate(v) : v}</span>
         </div>
       );
@@ -100,15 +101,15 @@ function Category({ cat, config }: { cat: ConfigCategory; config: TemplateData["
     const sel = val(config, cat.id);
     const opt = cat.options.find((o) => o.id === sel);
     if (opt) {
-      rows.push(<div className="od-check" key={opt.id}><Check /><span>{opt.label}</span></div>);
+      rows.push(<div className="od-check" key={opt.id}><Check /><span>{t(opt.label)}</span></div>);
       for (const f of opt.fields ?? []) {
         const v = val(config, f.id);
         if (!v) continue;
         rows.push(
-          <div className="od-note" key={f.id}>{f.label}: {f.prefix ? `${f.prefix} ` : ""}{f.type === "date" ? fmtDate(v) : v}</div>
+          <div className="od-note" key={f.id}>{t(f.label)}: {f.prefix ? `${f.prefix} ` : ""}{f.type === "date" ? fmtDate(v) : v}</div>
         );
       }
-      if (opt.docNote) rows.push(<div className="od-note" key={`${opt.id}-note`}>{opt.docNote}</div>);
+      if (opt.docNote) rows.push(<div className="od-note" key={`${opt.id}-note`}>{t(opt.docNote)}</div>);
     }
   }
 
@@ -121,10 +122,10 @@ function Category({ cat, config }: { cat: ConfigCategory; config: TemplateData["
     const sel = (config[cat.id] as string[]) ?? [];
     for (const opt of cat.options) {
       if (!sel.includes(opt.id)) continue;
-      rows.push(<div className="od-check" key={opt.id}><Check /><span>{opt.label}</span></div>);
+      rows.push(<div className="od-check" key={opt.id}><Check /><span>{t(opt.label)}</span></div>);
       for (const f of opt.fields ?? []) {
         const v = val(config, f.id);
-        if (v) rows.push(<div className="od-note" key={f.id}>{f.label}: {v}</div>);
+        if (v) rows.push(<div className="od-note" key={f.id}>{t(f.label)}: {v}</div>);
       }
     }
   }
@@ -133,7 +134,7 @@ function Category({ cat, config }: { cat: ConfigCategory; config: TemplateData["
 
   return (
     <div className={cat.pageBreakBefore ? "od-category od-break-before" : "od-category"}>
-      <div className="od-cat">{cat.letter}. {cat.title}</div>
+      <div className="od-cat">{cat.letter}. {t(cat.title)}</div>
       {rows}
     </div>
   );
@@ -148,6 +149,9 @@ export function buildOfferLetterBlocks(data: TemplateData): React.ReactNode[] {
   // made in the builder.
   const isFullTime = data.employmentType === "full_time";
   const engagementLabel = isFullTime ? "Full-Time Employment" : "Internship";
+  // Rewrites the authored internship wording to employment wording for a direct
+  // full-time hire. Identity function for interns.
+  const T = termsFor(data.employmentType);
 
   return [
     <h1 className="od-title" key="title">{isFullTime ? "EMPLOYMENT OFFER LETTER" : "INTERNSHIP OFFER LETTER"}</h1>,
@@ -160,20 +164,20 @@ export function buildOfferLetterBlocks(data: TemplateData): React.ReactNode[] {
     <div className="od-field" key="engagement"><span className="od-lbl">Engagement Type: </span><span className="od-val">{isFullTime ? "Full-Time Employee" : "Intern"}</span></div>,
     <div className="od-field" key="subject" style={{ marginTop: "18pt" }}><span className="od-lbl">Subject: </span><span>{engagementLabel} Offer{role ? ` – ${role}` : ""}</span></div>,
     <p className="od-p" key="dear" style={{ marginTop: "18pt" }}>Dear {candidate.name?.split(" ")[0] || candidate.name},</p>,
-    <p className="od-p" key="intro1" style={{ marginTop: "10pt" }}>We are pleased to offer you an internship opportunity with {signatory.companyName} (&ldquo;Company&rdquo;), subject to the terms and conditions contained in this Offer Letter, Company policies, applicable compliance requirements, and supporting agreements executed between the Parties.</p>,
-    <p className="od-p" key="intro2" style={{ marginTop: "8pt" }}>The details applicable to your internship engagement are specified below.</p>,
-    <h2 className="od-section od-break-before" key="s1">SECTION 1: INTERNSHIP CONFIGURATION SHEET</h2>,
-    <p className="od-p" key="s1intro">Only the options selected, marked, completed, or approved by the Company shall apply to the Intern. Any option not selected shall be deemed inapplicable. Where any field, option, checkbox, provision, allowance, benefit, entitlement, compensation component, requirement, or designation remains blank, unmarked, unselected, incomplete, or identified as not applicable, no entitlement, expectation, obligation, commitment, guarantee, or interpretation shall arise in relation to such item.</p>,
-    ...schema.map((cat) => <Category key={cat.id} cat={cat} config={config} />),
-    <p className="od-p" key="c1">The Intern acknowledges that only the options selected and completed by the Company shall govern the internship engagement.</p>,
-    <p className="od-p" key="c2">The Intern further acknowledges that compensation structures, work arrangements, reporting structures, shifts, training requirements, verification requirements, project assignments, client assignments, role responsibilities, and internship terms may vary depending upon business requirements, client requirements, operational needs, organizational priorities, and Company policies.</p>,
-    <p className="od-p" key="c3">The Company reserves the right to assign, reassign, rotate, modify, or transfer roles, responsibilities, projects, departments, clients, shifts, reporting structures, work locations, and operational requirements during the internship period based on business needs.</p>,
-    <p className="od-p" key="c4">The sections that follow shall form an integral and binding part of this Internship Offer Letter.</p>,
-    ...renderBlocks(staticSections, "ofs", { breakSections: true }),
+    <p className="od-p" key="intro1" style={{ marginTop: "10pt" }}>We are pleased to offer you {isFullTime ? "full-time employment" : "an internship opportunity"} with {signatory.companyName} (&ldquo;Company&rdquo;), subject to the terms and conditions contained in this Offer Letter, Company policies, applicable compliance requirements, and supporting agreements executed between the Parties.</p>,
+    <p className="od-p" key="intro2" style={{ marginTop: "8pt" }}>{T("The details applicable to your internship engagement are specified below.")}</p>,
+    <h2 className="od-section od-break-before" key="s1">{T("SECTION 1: INTERNSHIP CONFIGURATION SHEET")}</h2>,
+    <p className="od-p" key="s1intro">{T("Only the options selected, marked, completed, or approved by the Company shall apply to the Intern. Any option not selected shall be deemed inapplicable. Where any field, option, checkbox, provision, allowance, benefit, entitlement, compensation component, requirement, or designation remains blank, unmarked, unselected, incomplete, or identified as not applicable, no entitlement, expectation, obligation, commitment, guarantee, or interpretation shall arise in relation to such item.")}</p>,
+    ...schema.map((cat) => <Category key={cat.id} cat={cat} config={config} t={T} />),
+    <p className="od-p" key="c1">{T("The Intern acknowledges that only the options selected and completed by the Company shall govern the internship engagement.")}</p>,
+    <p className="od-p" key="c2">{T("The Intern further acknowledges that compensation structures, work arrangements, reporting structures, shifts, training requirements, verification requirements, project assignments, client assignments, role responsibilities, and internship terms may vary depending upon business requirements, client requirements, operational needs, organizational priorities, and Company policies.")}</p>,
+    <p className="od-p" key="c3">{T("The Company reserves the right to assign, reassign, rotate, modify, or transfer roles, responsibilities, projects, departments, clients, shifts, reporting structures, work locations, and operational requirements during the internship period based on business needs.")}</p>,
+    <p className="od-p" key="c4">{T("The sections that follow shall form an integral and binding part of this Internship Offer Letter.")}</p>,
+    ...renderBlocks(mapBlocks(staticSections, T), "ofs", { breakSections: true }),
     <div className="od-sigwrap od-break-before" key="sig">
       <CompanySignatoryCol signatory={signatory} date={data.offerDate} />
       <div className="od-sigcol">
-        <div className="od-sigcaps">INTERN ACKNOWLEDGEMENT</div>
+        <div className="od-sigcaps">{T("INTERN ACKNOWLEDGEMENT")}</div>
         <div className="od-sigline">{signature?.image_base64 && <img src={signature.image_base64} alt="signature" />}</div>
         <div className="od-sigmeta"><b>Name:</b> {signature?.typed_name || candidate.name}</div>
         <div className="od-sigmeta"><b>Date:</b> {signature?.signed_at ? fmtDate(signature.signed_at) : "______________"}</div>
@@ -181,7 +185,7 @@ export function buildOfferLetterBlocks(data: TemplateData): React.ReactNode[] {
     </div>,
     <div className="od-ack" key="ack">
       <p className="od-p" style={{ marginBottom: 0 }}>
-        I, <b>{signature?.typed_name || candidate.name}</b>, acknowledge that I have read, understood, and agree to comply with the terms and conditions contained in this Offer Letter, the Internship Handbook, applicable Company policies, and supporting agreements applicable to my internship engagement.
+        I, <b>{signature?.typed_name || candidate.name}</b>, {T("acknowledge that I have read, understood, and agree to comply with the terms and conditions contained in this Offer Letter, the Internship Handbook, applicable Company policies, and supporting agreements applicable to my internship engagement.")}
       </p>
     </div>,
   ];
@@ -189,6 +193,7 @@ export function buildOfferLetterBlocks(data: TemplateData): React.ReactNode[] {
 
 export function buildNdaBlocks(data: TemplateData): React.ReactNode[] {
   const { candidate, signatory, signature } = data;
+  const T = termsFor(data.employmentType);
   const body = sliceBlocks(NDA_BLOCKS, "1. PURPOSE", "IN WITNESS WHEREOF");
 
   return [
@@ -200,9 +205,9 @@ export function buildNdaBlocks(data: TemplateData): React.ReactNode[] {
     <div className="od-field" key="rpname"><span className="od-lbl">Name: </span><span className="od-val">{candidate.name}</span></div>,
     <div className="od-field" key="rpemail"><span className="od-lbl">Email: </span><span className="od-val">{candidate.email}</span></div>,
     <div className="od-field" key="rpphone"><span className="od-lbl">Phone: </span><span className="od-val">{candidate.phone || "—"}</span></div>,
-    <p className="od-p" key="rp1" style={{ marginTop: "6pt" }}>Hereinafter referred to as the &ldquo;Receiving Party&rdquo; (which may include an intern, trainee, freelancer, consultant, contractor, or any other engaged individual).</p>,
-    <p className="od-p" key="rp2">The Company and the Intern may individually be referred to as a &ldquo;Party&rdquo; and collectively as the &ldquo;Parties.&rdquo;</p>,
-    ...renderBlocks(body, "nda"),
+    <p className="od-p" key="rp1" style={{ marginTop: "6pt" }}>{T("Hereinafter referred to as the “Receiving Party” (which may include an intern, trainee, freelancer, consultant, contractor, or any other engaged individual).")}</p>,
+    <p className="od-p" key="rp2">{T("The Company and the Intern may individually be referred to as a “Party” and collectively as the “Parties.”")}</p>,
+    ...renderBlocks(mapBlocks(body, T), "nda"),
     <p className="od-p" key="witness" style={{ marginTop: "12pt", fontWeight: 600 }}>IN WITNESS WHEREOF, the Parties have executed this Agreement on the date first written above.</p>,
     <div className="od-sigwrap" key="sig">
       <CompanySignatoryCol signatory={signatory} date={data.offerDate} />
@@ -218,22 +223,23 @@ export function buildNdaBlocks(data: TemplateData): React.ReactNode[] {
 
 export function buildHandbookBlocks(data: TemplateData): React.ReactNode[] {
   const { candidate, signatory, signature } = data;
+  const T = termsFor(data.employmentType);
   const body = sliceBlocks(HANDBOOK_BLOCKS, "CHAPTER 1", "INTERN HANDBOOK ACKNOWLEDGEMENT");
 
   return [
-    <h1 className="od-title" key="title">INTERNSHIP HANDBOOK</h1>,
+    <h1 className="od-title" key="title">{T("INTERNSHIP HANDBOOK")}</h1>,
     <p className="od-subtitle" key="sub">Version 1.0 · Issued By: {signatory.companyName}</p>,
     <div className="od-callout" key="callout">
-      Prepared for: <b>{candidate.name}</b>{candidate.email ? ` (${candidate.email})` : ""}. This Handbook forms an integral part of your internship engagement and should be read together with your Internship Offer Letter and the Non-Disclosure Agreement.
+      Prepared for: <b>{candidate.name}</b>{candidate.email ? ` (${candidate.email})` : ""}. {T("This Handbook forms an integral part of your internship engagement and should be read together with your Internship Offer Letter and the Non-Disclosure Agreement.")}
     </div>,
-    ...renderBlocks(body, "hb", { breakSections: true, skipFirstSectionBreak: true }),
+    ...renderBlocks(mapBlocks(body, T), "hb", { breakSections: true, skipFirstSectionBreak: true }),
     // Acknowledgement + signature (mirrors the format used in Offer Letter and NDA)
-    <h2 className="od-section" key="ack-title">INTERN HANDBOOK ACKNOWLEDGEMENT</h2>,
-    <p className="od-p" key="ack1">I acknowledge that I have received, read, understood, and agree to comply with the provisions contained in this Internship Handbook and any future updates communicated by the Company. I further acknowledge that failure to comply with applicable Company policies, procedures, compliance requirements, or Handbook provisions may result in appropriate corrective, disciplinary, administrative, or internship-related action.</p>,
-    <p className="od-p" key="ack2">I further acknowledge that this Handbook shall be read together with the Internship Offer Letter, Non-Disclosure Agreement (NDA), Company policies, standard operating procedures (SOPs), guidelines, and other applicable Company documents, all of which may collectively govern my internship with the Company.</p>,
+    <h2 className="od-section" key="ack-title">{T("INTERN HANDBOOK ACKNOWLEDGEMENT")}</h2>,
+    <p className="od-p" key="ack1">{T("I acknowledge that I have received, read, understood, and agree to comply with the provisions contained in this Internship Handbook and any future updates communicated by the Company. I further acknowledge that failure to comply with applicable Company policies, procedures, compliance requirements, or Handbook provisions may result in appropriate corrective, disciplinary, administrative, or internship-related action.")}</p>,
+    <p className="od-p" key="ack2">{T("I further acknowledge that this Handbook shall be read together with the Internship Offer Letter, Non-Disclosure Agreement (NDA), Company policies, standard operating procedures (SOPs), guidelines, and other applicable Company documents, all of which may collectively govern my internship with the Company.")}</p>,
     <div className="od-sigwrap" key="sig" style={{ marginTop: "32pt" }}>
       <div className="od-sigcol">
-        <div className="od-sigcaps">INTERN DETAILS</div>
+        <div className="od-sigcaps">{T("INTERN DETAILS")}</div>
         <div className="od-sigmeta" style={{ marginBottom: "4pt" }}>Signature:</div>
         <div className="od-sigline">{signature?.image_base64 && <img src={signature.image_base64} alt="signature" />}</div>
         <div className="od-sigmeta"><b>Name:</b> {signature?.typed_name || candidate.name}</div>
