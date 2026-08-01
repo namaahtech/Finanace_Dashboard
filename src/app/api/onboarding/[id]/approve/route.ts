@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     .eq("id", id);
 
   try {
-    const result = await dispatchOnboarding(id, { req });
+    const result = await dispatchOnboarding(id, { req, actorId: actor.userId });
     await logAudit({
       actorId: actor.userId, action: "onboarding.approve", section: "Onboarding",
       summary: `Approved and sent the onboarding offer to ${packet.candidate_email}`,

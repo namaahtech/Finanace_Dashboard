@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getMailContext, sendRecruitmentMail, greetingHtml, requestDocsHtml } from "@/lib/recruitment-mail";
+import { getMailContext, getMailActor, sendRecruitmentMail, greetingHtml, requestDocsHtml } from "@/lib/recruitment-mail";
+import { getActor } from "@/lib/onboarding/server";
 import { baseUrlFrom } from "@/lib/base-url";
 
 const DOCS = ["profile_photo", "face_photo", "aadhaar", "pan"];
@@ -57,7 +58,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const ctx = await getMailContext();
+    // Send from the signed-in user's mailbox; fall back to whoever the record is
+    // attributed to, then to the company default.
+    const actor = (await getActor()) || (await getMailActor(created_by));
+    const ctx = await getMailContext(actor);
 
     // 1) Greeting email (accept or reject) — same as the automated ATS flow.
     await sendRecruitmentMail(ctx, {

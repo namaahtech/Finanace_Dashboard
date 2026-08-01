@@ -14,6 +14,7 @@ type CandidateInput = {
   candidate_email?: string;
   candidate_phone?: string | null;
   candidate_address?: string | null;
+  employment_type?: string | null;
 };
 
 /** Assemble the data object every document template consumes. */
@@ -27,8 +28,13 @@ export function buildTemplateData(opts: {
 }): TemplateData {
   const c = opts.candidate;
   const dateBase = opts.offerDateISO ? new Date(opts.offerDateISO) : new Date();
+  // Anything other than an explicit 'full_time' is treated as an internship —
+  // that's what every existing packet is, and it's the safer default for a
+  // legal document.
+  const employmentType: "intern" | "full_time" = c.employment_type === "full_time" ? "full_time" : "intern";
   return {
     offerDate: fmtLong(isNaN(dateBase.getTime()) ? new Date() : dateBase),
+    employmentType,
     candidate: {
       name: c.name ?? c.candidate_name ?? "",
       email: c.email ?? c.candidate_email ?? "",

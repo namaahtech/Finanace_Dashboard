@@ -89,9 +89,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (!typed_name?.trim()) return NextResponse.json({ error: "Please type your full name." }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
+  // Narrowed from `select("*")`: the signing POST doesn't need the offer config or
+  // generated PDF URLs, only the identity-proof columns it verifies.
   const { data: packet } = await supabase
     .from("onboarding_packets")
-    .select("*")
+    .select("id, status, token_expires_at, candidate_name, created_by, sign_verify_token, sign_verify_expires_at, sign_otp_verified_at, sign_face_verified_at, sign_verification")
     .eq("sign_token", token)
     .maybeSingle();
 

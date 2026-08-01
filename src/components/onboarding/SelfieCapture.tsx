@@ -4,11 +4,12 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, Camera, RefreshCw, Check, X, RotateCcw, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { loadFaceModels, detectFromImage, assessQuality, type QualityResult } from "@/lib/face-verify-client";
+import { loadFaceModels, detectForQuality, assessQuality, diagnoseNoFace, hintFor, type QualityResult } from "@/lib/face-verify-client";
 import {
   loadFaceLandmarker, detectFrame, makeChallengeSequence, newProgress, stepChallenge,
-  scoreRisk, type Challenge, type ChallengeProgress,
+  scoreRisk, type Challenge, type ChallengeProgress, type FrameSignals,
 } from "@/lib/liveness-client";
+import { compressForDoc, formatBytes } from "@/lib/image-compress-client";
 
 // Live front-camera selfie with enterprise active-liveness: a randomized
 // challenge sequence (blink / turn / smile) proven live via MediaPipe Face
@@ -31,6 +32,12 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
   const [result, setResult] = useState<QualityResult | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [centered, setCentered] = useState(false);
+  // Live framing feedback so the candidate is corrected BEFORE they capture,
+  // instead of being rejected afterwards with no explanation.
+  const [framing, setFraming] = useState<"none" | "far" | "close" | "off" | "ok">("none");
+  const [sizeNote, setSizeNote] = useState<string | null>(null);
+  // Last live tracker reading — used to explain a failed capture.
+  const lastSignalsRef = useRef<FrameSignals | null>(null);
 
   // Liveness challenge sequence
   const [challenges, setChallenges] = useState<Challenge[]>([]);
@@ -49,9 +56,11 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
     streamRef.current = null;
   }, []);
 
-  // Preload both models (MediaPipe liveness + face-api embedding/quality).
+  // Preload both models. The enrolment selfie never compares identities, so the
+  // 6.4 MB face-recognition net is skipped entirely — only the ~550 KB detector +
+  // landmark nets are fetched, which is the single biggest load-time saving here.
   useEffect(() => {
-    Promise.allSettled([loadFaceLandmarker(), loadFaceModels()]).then(() => setModelsReady(true));
+    Promise.allSettled([loadFaceLandmarker(), loadFaceModels({ recognition: false })]).then(() => setModelsReady(true));
   }, []);
 
   function resetChallenges() {
@@ -110,12 +119,18 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
       lastRun = now;
       tsRef.current = Math.max(tsRef.current + 1, Math.round(now));
       const s = detectFrame(v, tsRef.current);
+      lastSignalsRef.current = s;
 
-      // Centering (single face, centered, large enough)
+      // Framing. The upper bound is 0.58 (was 0.85): a face wider than ~60% of the
+      // frame is exactly where the capture detector starts failing, so we now push
+      // the candidate back BEFORE they capture rather than rejecting them after.
       if (s.present && s.faceCount === 1 && s.box) {
         const cx = s.box.x + s.box.width / 2, cy = s.box.y + s.box.height / 2;
-        setCentered(cx > 0.34 && cx < 0.66 && cy > 0.24 && cy < 0.74 && s.box.width > 0.24 && s.box.width < 0.85);
-      } else setCentered(false);
+        const inFrame = cx > 0.34 && cx < 0.66 && cy > 0.24 && cy < 0.74;
+        const good = inFrame && s.box.width >= 0.24 && s.box.width <= 0.58;
+        setFraming(!inFrame ? "off" : s.box.width < 0.24 ? "far" : s.box.width > 0.58 ? "close" : "ok");
+        setCentered(good);
+      } else { setCentered(false); setFraming("none"); }
 
       // Only advance challenges when a single face is present.
       if (doneRef.current || !s.present || s.faceCount !== 1) return;
@@ -135,17 +150,30 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
   async function capture() {
     const v = videoRef.current;
     if (!v || !v.videoWidth) return;
-    setBusy(true); setResult(null);
+    setBusy(true); setResult(null); setSizeNote(null);
     try {
       const canvas = document.createElement("canvas");
       canvas.width = v.videoWidth; canvas.height = v.videoHeight;
       canvas.getContext("2d")!.drawImage(v, 0, 0);
-      const { faces, result: det } = await detectFromImage(canvas);
+
+      // Quality-only detection — no 128-D descriptor, so the heavy recognition
+      // net is never touched on this page.
+      const { faces, result: det } = await detectForQuality(canvas);
       if (!det) {
-        setResult({ pass: false, sharpness: 0, checks: [{ key: "face", label: "A face is clearly visible", pass: false }] });
+        // Explain WHY, using the live tracker's last box (it usually still sees the
+        // face) plus exposure/blur, instead of the old bare "no face" rejection.
+        const d = diagnoseNoFace(canvas, lastSignalsRef.current?.box ?? null);
+        setResult({
+          pass: false,
+          sharpness: 0,
+          reason: d.reason,
+          hint: d.hint,
+          checks: [{ key: d.key, label: d.reason, pass: false, hint: d.hint }],
+        });
         setBusy(false);
         return;
       }
+
       const q = assessQuality(canvas, det, faces);
       // Weighted risk score (liveness already passed to reach here).
       const noSun = (q.checks.find((c) => c.key === "noglasses")?.pass ?? true) && (q.checks.find((c) => c.key === "nomask")?.pass ?? true);
@@ -158,28 +186,64 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
         identityMatch: null, // registration selfie has no prior reference
       });
       const finalPass = q.pass && risk.pass;
-      setResult({ pass: finalPass, sharpness: q.sharpness, checks: [...q.checks, { key: "risk", label: `Security score ${risk.score}/${risk.max}`, pass: risk.pass }] });
-      canvas.toBlob((blob) => {
-        if (blob && finalPass) { fileRef.current = new File([blob], `selfie_${Date.now()}.jpg`, { type: "image/jpeg" }); setPreview(URL.createObjectURL(blob)); }
-        setBusy(false);
+      const riskHint = hintFor("face").hint;
+      setResult({
+        pass: finalPass,
+        sharpness: q.sharpness,
+        reason: q.reason,
+        hint: q.hint,
+        checks: [...q.checks, { key: "risk", label: `Security score ${risk.score}/${risk.max}`, pass: risk.pass, hint: riskHint }],
+      });
+
+      if (!finalPass) { setBusy(false); return; }
+
+      // Compress before it ever leaves the device — the file is stored inline in
+      // the database, so a raw 1280×720 frame would bloat the row by ~33% again
+      // once base64-encoded.
+      canvas.toBlob(async (blob) => {
+        try {
+          if (!blob) { setBusy(false); return; }
+          const raw = new File([blob], `selfie_${Date.now()}.jpg`, { type: "image/jpeg" });
+          const { file, bytes, originalBytes, width, height } = await compressForDoc(raw, "face_photo");
+          fileRef.current = file;
+          setPreview(URL.createObjectURL(file));
+          setSizeNote(`${width}×${height} · ${formatBytes(bytes)}${originalBytes > bytes ? ` (from ${formatBytes(originalBytes)})` : ""}`);
+        } finally {
+          setBusy(false);
+        }
       }, "image/jpeg", 0.92);
     } catch {
       setBusy(false);
-      setResult({ pass: false, sharpness: 0, checks: [{ key: "err", label: "Could not analyse the photo — please retake", pass: false }] });
+      setResult({
+        pass: false,
+        sharpness: 0,
+        reason: "We couldn't analyse that photo",
+        hint: "Please tap Capture again — if it keeps happening, reload the page and retry.",
+        checks: [{ key: "err", label: "Could not analyse the photo — please retake", pass: false }],
+      });
     }
   }
 
   function useIt() { if (fileRef.current) { stop(); onCapture(fileRef.current); } }
   function retake() {
-    setResult(null);
+    setResult(null); setSizeNote(null);
     if (preview) URL.revokeObjectURL(preview);
     setPreview(null); fileRef.current = null;
     resetChallenges();
   }
 
   const activeChallenge = challenges[chIdx];
+  // Specific, actionable framing guidance — "move back" instead of a generic
+  // "center your face" that gives the candidate nothing to act on.
+  const FRAMING_GUIDE: Record<typeof framing, string> = {
+    none:  "Position your face inside the oval",
+    off:   "Center your face in the oval",
+    far:   "Move a little closer to the camera",
+    close: "Move back a little — you're too close",
+    ok:    "",
+  };
   const guide = !centered
-    ? "Center your face in the oval"
+    ? FRAMING_GUIDE[framing] || "Center your face in the oval"
     : !liveDone && activeChallenge
       ? (activeChallenge.type === "blink" ? `${activeChallenge.label} (${chCount}/${activeChallenge.target})` : activeChallenge.label)
       : "Liveness confirmed — capture now";
@@ -249,22 +313,36 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
 
               {result && (
                 <div className={cn("space-y-1 rounded-lg border p-3", result.pass ? "border-emerald-500/30 bg-emerald-500/5" : "border-rose-500/30 bg-rose-500/5")}>
-                  <p className={cn("mb-1 text-xs font-semibold", result.pass ? "text-emerald-600" : "text-rose-600")}>
-                    {result.pass ? "Verified — all checks passed" : "Please fix the highlighted items"}
-                  </p>
+                  {result.pass ? (
+                    <p className="mb-1 text-xs font-semibold text-emerald-600">Verified — all checks passed</p>
+                  ) : (
+                    // Lead with the single reason it failed and how to fix it; the
+                    // full checklist stays below for detail.
+                    <div className="mb-2">
+                      <p className="text-xs font-semibold text-rose-600">{result.reason || "Please fix the highlighted items"}</p>
+                      {result.hint && <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{result.hint}</p>}
+                    </div>
+                  )}
                   {result.checks.map((c) => (
                     <div key={c.key} className="flex items-center gap-1.5 text-[11px]">
                       {c.pass ? <Check size={12} className="flex-shrink-0 text-emerald-500" /> : <X size={12} className="flex-shrink-0 text-rose-500" />}
                       <span className={c.pass ? "text-muted-foreground" : "text-rose-600"}>{c.label}</span>
                     </div>
                   ))}
+                  {result.pass && sizeNote && (
+                    <p className="pt-1 text-[10px] text-muted-foreground">Optimised for upload · {sizeNote}</p>
+                  )}
                 </div>
               )}
 
               {!preview ? (
                 <Button className="w-full" onClick={capture} disabled={busy || !modelsReady || !!camErr || !centered || !liveDone}>
                   {busy ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}{" "}
-                  {!modelsReady ? "Loading verification…" : !centered ? "Center your face…" : !liveDone ? "Follow the prompts…" : "Capture"}
+                  {!modelsReady
+                    ? "Loading verification…"
+                    : !centered
+                      ? (framing === "close" ? "Move back a little…" : framing === "far" ? "Move closer…" : "Center your face…")
+                      : !liveDone ? "Follow the prompts…" : "Capture"}
                 </Button>
               ) : result?.pass ? (
                 <Button className="w-full" onClick={useIt}><Check size={15} /> Use this photo</Button>

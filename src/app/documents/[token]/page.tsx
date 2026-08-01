@@ -12,6 +12,9 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { validatePhotoLocally } from "@/lib/photo-validate-client";
 import { SelfieCapture } from "@/components/onboarding/SelfieCapture";
+import { compressForDoc, formatBytes } from "@/lib/image-compress-client";
+import { warmFaceModels } from "@/lib/face-verify-client";
+import { loadFaceLandmarker } from "@/lib/liveness-client";
 
 // Face images that get on-device quality/anti-spoof checks after selection.
 const PHOTO_DOCS = new Set(["face_photo", "profile_photo"]);
@@ -60,6 +63,8 @@ export default function DocumentsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [photoChecks, setPhotoChecks] = useState<Record<string, PhotoCheck>>({});
+  const [sizes, setSizes] = useState<Record<string, string>>({});
+  const [optimising, setOptimising] = useState<Record<string, boolean>>({});
 
   // Crop modal state
   const [cropModal, setCropModal] = useState<{ docType: string; rawFile: File } | null>(null);
@@ -87,23 +92,54 @@ export default function DocumentsPage() {
     })();
   }, [token]);
 
+  // Begin fetching the face/liveness models the moment the page opens, while the
+  // candidate is still reading and picking their ID documents — so the selfie step
+  // opens instantly instead of stalling on a multi-MB download at that moment.
+  useEffect(() => {
+    warmFaceModels({ recognition: false });
+    loadFaceLandmarker().catch(() => { /* best-effort warm-up */ });
+  }, []);
+
   async function validatePhoto(docType: string, file: File) {
     setPhotoChecks((p) => ({ ...p, [docType]: { loading: true, result: null } }));
     const result = await validatePhotoLocally(file);
     setPhotoChecks((p) => ({ ...p, [docType]: { loading: false, result } }));
   }
 
-  function pickFile(docType: string, file: File | null) {
+  async function pickFile(docType: string, file: File | null, opts: { optimised?: boolean } = {}) {
     setErr(null);
     if (!file) return;
-    setFiles((p) => ({ ...p, [docType]: file }));
-    if (file.type.startsWith("image/")) {
-      setPreviews((p) => ({ ...p, [docType]: URL.createObjectURL(file) }));
+
+    // Shrink before anything else. Files are stored inline in the database (and
+    // base64 adds ~33% on top), so a raw phone photo must never reach the server.
+    // The live selfie arrives already optimised from SelfieCapture.
+    let finalFile = file;
+    if (!opts.optimised && file.type.startsWith("image/")) {
+      setOptimising((p) => ({ ...p, [docType]: true }));
+      try {
+        const out = await compressForDoc(file, docType);
+        finalFile = out.file;
+        setSizes((p) => ({
+          ...p,
+          [docType]: `${formatBytes(out.bytes)}${out.compressed && out.originalBytes > out.bytes ? ` · reduced from ${formatBytes(out.originalBytes)}` : ""}`,
+        }));
+      } catch {
+        setSizes((p) => ({ ...p, [docType]: formatBytes(file.size) }));
+      } finally {
+        setOptimising((p) => { const n = { ...p }; delete n[docType]; return n; });
+      }
+    } else {
+      setSizes((p) => ({ ...p, [docType]: formatBytes(finalFile.size) }));
+    }
+
+    setFiles((p) => ({ ...p, [docType]: finalFile }));
+    if (finalFile.type.startsWith("image/")) {
+      setPreviews((p) => ({ ...p, [docType]: URL.createObjectURL(finalFile) }));
     } else {
       setPreviews((p) => { const n = { ...p }; delete n[docType]; return n; });
     }
     if (PHOTO_DOCS.has(docType)) {
-      if (file.type.startsWith("image/")) validatePhoto(docType, file);
+      if (finalFile.type.startsWith("image/")) validatePhoto(docType, finalFile);
       else setPhotoChecks((p) => ({ ...p, [docType]: { loading: false, result: { ok: true, pass: false, reason: "Please upload an image (not a PDF) for your photo.", checks: [] } } }));
     }
   }
@@ -111,11 +147,13 @@ export default function DocumentsPage() {
   function clearFile(docType: string) {
     setFiles((p) => { const n = { ...p }; delete n[docType]; return n; });
     setPreviews((p) => { const n = { ...p }; delete n[docType]; return n; });
+    setSizes((p) => { const n = { ...p }; delete n[docType]; return n; });
     if (PHOTO_DOCS.has(docType)) setPhotoChecks((p) => { const n = { ...p }; delete n[docType]; return n; });
   }
 
   async function submit() {
     setErr(null);
+    if (Object.keys(optimising).length) return setErr("Please wait — your files are still being optimised.");
     const missing = requiredDocs.find((d) => !files[d]);
     if (missing) return setErr(`Please upload your ${labels[missing] || missing}.`);
     for (const d of requiredDocs) {
@@ -163,7 +201,7 @@ export default function DocumentsPage() {
       {/* Live front-camera selfie for the face photo (with on-device CV checks) */}
       {selfieOpen && (
         <SelfieCapture
-          onCapture={(file) => { pickFile("face_photo", file); setSelfieOpen(false); }}
+          onCapture={(file) => { pickFile("face_photo", file, { optimised: true }); setSelfieOpen(false); }}
           onCancel={() => setSelfieOpen(false)}
         />
       )}
@@ -294,7 +332,9 @@ export default function DocumentsPage() {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium text-foreground">{file.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB · {docType === "face_photo" ? "live selfie" : "cropped"}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {sizes[docType] || `${Math.round(file.size / 1024)} KB`} · {docType === "face_photo" ? "live selfie" : "cropped"}
+                        </p>
                         {docType === "profile_photo" && <p className="text-[10px] text-primary">Used as your display picture</p>}
                       </div>
                       <div className="flex items-center gap-2">
@@ -334,6 +374,12 @@ export default function DocumentsPage() {
                     </div>
                   )}
 
+                  {optimising[docType] && (
+                    <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                      <Loader2 size={14} className="animate-spin text-primary" /> Optimising your file for upload…
+                    </div>
+                  )}
+
                   {PHOTO_DOCS.has(docType) && file && <PhotoChecklist state={photoChecks[docType] || { loading: false, result: null }} />}
                 </CardContent>
               </Card>
@@ -362,7 +408,11 @@ export default function DocumentsPage() {
           </p>
           <Button
             onClick={submit}
-            disabled={submitting || requiredDocs.some((d) => PHOTO_DOCS.has(d) && (photoChecks[d]?.loading || (photoChecks[d]?.result?.ok === true && photoChecks[d]?.result?.pass === false)))}
+            disabled={
+              submitting ||
+              Object.keys(optimising).length > 0 ||
+              requiredDocs.some((d) => PHOTO_DOCS.has(d) && (photoChecks[d]?.loading || (photoChecks[d]?.result?.ok === true && photoChecks[d]?.result?.pass === false)))
+            }
             className="sm:min-w-[170px]"
           >
             {submitting ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}

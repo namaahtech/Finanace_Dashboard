@@ -45,7 +45,9 @@ export async function POST(req: Request) {
       .single();
     if (error) throw error;
 
-    const ctx = await getMailContext();
+    // Send from the signed-in user's own mailbox, not admin@.
+    const actor = await getActor();
+    const ctx = await getMailContext(actor);
     const link = `${baseUrlFrom(req)}/documents/${token}`;
     await sendRecruitmentMail(ctx, {
       to: app.applicant_email,
@@ -53,7 +55,6 @@ export async function POST(req: Request) {
       html: requestDocsHtml(app.applicant_name, ctx.companyName, link, DOCS),
     });
 
-    const actor = await getActor();
     await logAudit({
       actorId: actor?.userId ?? created_by ?? null,
       action: "recruitment.request_documents", section: "Recruitment",

@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -41,8 +42,12 @@ interface FormState {
   candidate_email: string;
   candidate_phone: string;
   candidate_address: string;
+  /** 'intern' (default) or 'full_time' — decides how they appear in the panel. */
+  employment_type: EmploymentType;
   config: OnboardingConfig;
 }
+
+type EmploymentType = "intern" | "full_time";
 
 function parseUA(ua: string): { os: string; browser: string; mobile: boolean } {
   const mobile = /iPhone|iPad|iPod|Android|Mobile/i.test(ua);
@@ -130,6 +135,8 @@ export default function OnboardingBuilderPage() {
           candidate_email: json.packet.candidate_email ?? "",
           candidate_phone: json.packet.candidate_phone ?? "",
           candidate_address: json.packet.candidate_address ?? "",
+          // Defaults to intern until migration 121 is applied (column absent → undefined).
+          employment_type: (json.packet.employment_type as EmploymentType) ?? "intern",
           config: json.packet.config ?? {},
         };
         setForm(loaded);
@@ -558,6 +565,26 @@ export default function OnboardingBuilderPage() {
                       <Label className="text-xs text-muted-foreground">Address</Label>
                       <Input value={form.candidate_address} onChange={(e) => updateForm({ ...form, candidate_address: e.target.value })} className="text-sm" />
                     </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Engagement Type</Label>
+                      <Select
+                        value={form.employment_type}
+                        onValueChange={(v) => updateForm({ ...form, employment_type: v as EmploymentType })}
+                      >
+                        <SelectTrigger className="text-sm">
+                          <SelectValue placeholder="Select engagement type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="intern">Intern</SelectItem>
+                          <SelectItem value="full_time">Full-Time</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        {form.employment_type === "full_time"
+                          ? "Hired directly as full-time — appears under Full-Time, with no conversion step."
+                          : "Appears under Intern, and can be converted to full-time later."}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -653,6 +680,8 @@ export default function OnboardingBuilderPage() {
           name: packet.candidate_name,
           email: packet.candidate_email,
           designation: typeof packet.config?.position === "string" ? packet.config.position : "",
+          // Prefill only — HR picks the actual role, employment type and salary
+          // structure in the Add Employee dialog itself.
           role: "intern",
           employment_type: "internship",
           salary_structure: "stipend",

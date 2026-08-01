@@ -5,7 +5,7 @@ import { zohoGet, zohoPost } from "@/lib/zoho-mail";
 import { generateAndStorePdfs, downloadPdf } from "./pdf";
 import { buildTemplateData } from "./templateData";
 import { loadSettings, resolveSchema } from "./server";
-import { onboardingEmailHtml, onboardingFinalEmailHtml } from "./email";
+import { onboardingEmailHtml, onboardingFinalEmailHtml, engagementWords } from "./email";
 import { baseUrlFrom } from "@/lib/base-url";
 
 interface ZohoAttachment { storeName: string; attachmentName: string; attachmentPath: string; }
@@ -29,26 +29,70 @@ async function uploadZohoAttachment(
   return { storeName: d.storeName, attachmentName: d.attachmentName || filename, attachmentPath: d.attachmentPath };
 }
 
-interface Sender { accountId: string; fromAddress: string; viaAdmin: boolean; }
+interface Sender { accountId: string; fromAddress: string; viaAdmin: boolean; displayName?: string | null; }
 
-/** Resolve the sending mailbox: the form creator's professional Zoho mailbox, else the admin mailbox. */
+/** Every address a Zoho account object can be known by, lower-cased. */
+function accountAddresses(a: any): string[] {
+  const out: string[] = [];
+  if (a?.primaryEmailAddress) out.push(String(a.primaryEmailAddress));
+  if (a?.mailboxAddress) out.push(String(a.mailboxAddress));
+  if (Array.isArray(a?.emailAddress)) for (const e of a.emailAddress) if (e?.mailId) out.push(String(e.mailId));
+  if (Array.isArray(a?.sendMailDetails)) for (const s of a.sendMailDetails) if (s?.fromAddress) out.push(String(s.fromAddress));
+  return out.map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+/**
+ * Resolve the sending mailbox: the packet creator's professional Zoho mailbox,
+ * else the admin mailbox.
+ *
+ * This used to require BOTH `zoho_account_id` and `zoho_email` to be stored on the
+ * employee row. Most users have neither (they're only populated by Zoho
+ * provisioning), so in practice every offer letter went out from admin@ even
+ * though it was created by an HR user. We now additionally look the creator up in
+ * the live Zoho account list by their login address, and by
+ * <local-part>@ZOHO_MAIL_DOMAIN — so talent@namaah.io resolves to their real
+ * talent@mail.namaah.io mailbox.
+ */
 async function resolveSender(
   token: string,
-  creator: { zoho_email: string | null; zoho_account_id: string | null } | null
+  creator: { email?: string | null; zoho_email: string | null; zoho_account_id: string | null } | null
 ): Promise<Sender> {
   if (creator?.zoho_account_id && creator?.zoho_email) {
     return { accountId: String(creator.zoho_account_id), fromAddress: creator.zoho_email, viaAdmin: false };
   }
-  // Fallback to the admin/default mailbox.
+
   const supabase = getSupabaseAdmin();
   const { data: config } = await supabase.from("zoho_config").select("admin_account_id").maybeSingle();
-  let accountId: string | null = config?.admin_account_id ? String(config.admin_account_id) : null;
+  const adminAccountId: string | null = config?.admin_account_id ? String(config.admin_account_id) : null;
+  let accountId: string | null = null;
   let fromAddress: string | null = null;
+  let viaAdmin = true;
+
   try {
     const accts = await zohoGet(token, "/accounts");
     const list: any[] = accts?.data || [];
+
+    // Try to match the creator to a real mailbox before falling back.
+    if (creator) {
+      const domain = (process.env.ZOHO_MAIL_DOMAIN || "").trim().toLowerCase();
+      const wanted = [
+        creator.zoho_email,
+        creator.email,
+        domain && creator.email ? `${creator.email.split("@")[0]}@${domain}` : null,
+      ]
+        .filter(Boolean)
+        .map((s) => String(s).trim().toLowerCase());
+
+      for (const want of wanted) {
+        const hit = list.find((a) => accountAddresses(a).includes(want));
+        if (hit) {
+          return { accountId: String(hit.accountId), fromAddress: want, viaAdmin: false };
+        }
+      }
+    }
+
     const target =
-      (accountId && list.find((a) => String(a.accountId) === accountId)) ||
+      (adminAccountId && list.find((a) => String(a.accountId) === adminAccountId)) ||
       list.find((a) => a.isDefaultAccount || a.isPrimary) ||
       list[0];
     if (target) {
@@ -57,8 +101,9 @@ async function resolveSender(
         (Array.isArray(target.emailAddress) ? target.emailAddress[0]?.mailId : null);
     }
   } catch { /* ignore */ }
+
   if (!accountId || !fromAddress) throw new Error("Could not resolve a Zoho sender mailbox.");
-  return { accountId, fromAddress, viaAdmin: true };
+  return { accountId, fromAddress, viaAdmin };
 }
 
 /**
@@ -68,7 +113,9 @@ async function resolveSender(
  */
 export async function dispatchOnboarding(
   packetId: string,
-  opts: { final?: boolean; req?: Request } = {}
+  // `actorId` = the signed-in employee performing the send. Omit it for the
+  // candidate-triggered final dispatch, which has no session.
+  opts: { final?: boolean; req?: Request; actorId?: string | null } = {}
 ): Promise<{ ok: true; messageId?: string; from: string }> {
   const final = !!opts.final;
   const supabase = getSupabaseAdmin();
@@ -129,16 +176,22 @@ export async function dispatchOnboarding(
   const token = await getZohoToken();
   if (!token) throw new Error("Zoho Mail is not connected. Configure it in Mail Config.");
 
+  // Whose mailbox this goes out from. The person PERFORMING the send wins — if an
+  // HR user approves and sends, the candidate hears from that HR user. We fall back
+  // to the packet's creator, which is what the candidate-triggered final dispatch
+  // uses (no session exists at that point).
+  const senderEmployeeId = opts.actorId || packet.created_by;
   let creator: { name: string | null; email: string | null; zoho_email: string | null; zoho_account_id: string | null } | null = null;
-  if (packet.created_by) {
+  if (senderEmployeeId) {
     const { data: emp } = await supabase
       .from("employees")
       .select("name, email, zoho_email, zoho_account_id")
-      .eq("id", packet.created_by)
+      .eq("id", senderEmployeeId)
       .maybeSingle();
     creator = (emp as any) ?? null;
   }
   const sender = await resolveSender(token, creator);
+  sender.displayName = creator?.name ?? null;
 
   // 3. Attach the signed PDFs — ONLY on the final send. The offer send carries no
   //    attachments (link-only). Download from Storage + upload to Zoho in parallel.
@@ -159,18 +212,26 @@ export async function dispatchOnboarding(
 
   // 4. Compose + send.
   const signUrl = `${baseUrlFrom(opts.req)}/sign/${signToken}`;
+  // Engagement type chosen in the builder drives the wording throughout. Anything
+  // other than an explicit 'full_time' (including a packet created before the
+  // column existed) is treated as an internship.
+  const employmentType: "intern" | "full_time" = packet.employment_type === "full_time" ? "full_time" : "intern";
+  const words = engagementWords(employmentType);
+
   let content = final
     ? onboardingFinalEmailHtml({
         candidateName: packet.candidate_name,
         companyName: signatory.companyName,
-        senderName: creator?.name || signatory.name,
+        senderName: sender.displayName || creator?.name || signatory.name,
+        employmentType,
       })
     : onboardingEmailHtml({
         candidateName: packet.candidate_name,
         signUrl,
         companyName: signatory.companyName,
-        senderName: creator?.name || signatory.name,
+        senderName: sender.displayName || creator?.name || signatory.name,
         role: typeof packet.config?.position === "string" ? packet.config.position : undefined,
+        employmentType,
       });
   if (sender.viaAdmin && creator?.name) {
     content =
@@ -182,8 +243,8 @@ export async function dispatchOnboarding(
     fromAddress: sender.fromAddress,
     toAddress: packet.candidate_email,
     subject: final
-      ? `Your Signed Internship Offer & Documents — ${signatory.companyName}`
-      : `Your Internship Offer — Action Required to Accept`,
+      ? `${words.subjectSigned} — ${signatory.companyName}`
+      : `${words.subjectOffer} — Action Required to Accept`,
     content,
     mailFormat: "html",
   };

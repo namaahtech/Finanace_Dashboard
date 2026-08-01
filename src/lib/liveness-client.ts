@@ -1,7 +1,8 @@
 // Client-side active-liveness engine on MediaPipe Face Landmarker (478 landmarks
-// + blendshapes + iris), self-hosted from /public/mediapipe (offline, all-device,
-// no CDN/CSP dependency). Drives randomized challenge sequences (blink / turn /
-// smile) that a printed photo or replayed video cannot satisfy on demand.
+// + blendshapes + iris). Both the model and the WASM runtime are self-hosted from
+// /public/mediapipe (all-device, no hard CDN dependency — jsDelivr is only a
+// fallback). Drives randomized challenge sequences (blink / gaze) that a printed
+// photo or replayed video cannot satisfy on demand.
 //
 // Identity embedding + pixel quality still come from face-api (see
 // face-verify-client.ts); this module owns landmarks, head pose and liveness.
@@ -40,9 +41,16 @@ export async function loadFaceLandmarker(): Promise<void> {
   if (loading) return loading;
   loading = (async () => {
     const vision = await getVision();
-    // WASM from the pinned MediaPipe CDN (no CSP configured, so this is allowed);
-    // the model itself is self-hosted under /public for control + integrity.
-    const fileset = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm");
+    // WASM runtime is self-hosted under /public/mediapipe/wasm (copied from
+    // node_modules — see scripts/copy-mediapipe-wasm.mjs) so it is served from our
+    // own origin: one less third-party round trip, and it still works when a CDN
+    // is slow or blocked on mobile networks. jsDelivr stays as a fallback only.
+    let fileset: any;
+    try {
+      fileset = await vision.FilesetResolver.forVisionTasks("/mediapipe/wasm");
+    } catch {
+      fileset = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm");
+    }
     const opts = (delegate: "GPU" | "CPU") => ({
       baseOptions: { modelAssetPath: "/mediapipe/face_landmarker.task", delegate },
       runningMode: "VIDEO" as const,

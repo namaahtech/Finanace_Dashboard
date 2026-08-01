@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { readStoredFile } from "@/lib/file-storage";
 
 // Serve a single uploaded candidate document inline (opens in a new browser tab).
 // The bytes live as a base64 data URL on the linked mail_file_shares row.
@@ -18,16 +19,15 @@ export async function GET(req: NextRequest) {
 
   const { data: share } = await supabase
     .from("mail_file_shares")
-    .select("storage_url")
+    .select("storage_path, storage_url, file_type")
     .eq("id", doc.file_share_id)
     .maybeSingle();
 
-  const dataUrl = share?.storage_url || "";
-  const m = dataUrl.match(/^data:([^;]+);base64,([\s\S]*)$/);
-  if (!m) return NextResponse.json({ error: "File unavailable" }, { status: 404 });
+  const file = await readStoredFile(share);
+  if (!file) return NextResponse.json({ error: "File unavailable" }, { status: 404 });
 
-  const contentType = m[1] || doc.file_type || "application/octet-stream";
-  const buffer = Buffer.from(m[2], "base64");
+  const contentType = file.contentType || doc.file_type || "application/octet-stream";
+  const buffer = file.buffer;
 
   // HTTP headers are Latin-1 only — strip non-ASCII (e.g. the em dash in the
   // stored name) for the plain filename, and use RFC 5987 for the real one.
@@ -39,7 +39,9 @@ export async function GET(req: NextRequest) {
     headers: {
       "Content-Type": contentType,
       "Content-Disposition": `inline; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
-      "Cache-Control": "private, no-store",
+      // Document thumbnails are re-rendered on every visit to the tracker; an
+      // hour of private caching stops each one being pulled from storage again.
+      "Cache-Control": "private, max-age=3600",
     },
   });
 }

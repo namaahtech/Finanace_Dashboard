@@ -120,6 +120,8 @@ export interface OnboardingSettings {
 // Everything a document template needs to render.
 export interface TemplateData {
   offerDate: string;             // e.g. "24 June 2026"
+  /** Whether this offer is for an internship or a direct full-time hire. */
+  employmentType: "intern" | "full_time";
   candidate: {
     name: string;
     email: string;

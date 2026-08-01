@@ -1,26 +1,55 @@
 // Professional onboarding emails (inline-CSS HTML for broad email-client support).
 
+export type EmploymentType = "intern" | "full_time";
+
+// Wording that changes with the engagement type chosen in the onboarding builder,
+// so a full-time hire is never told they've been offered an internship.
+//
+// NOTE: `handbook` deliberately tracks the ACTUAL document attached. The handbook
+// PDF is still the internship handbook, so we call it a "Company Handbook" for
+// full-time hires rather than claiming a document that doesn't exist yet.
+export function engagementWords(type: EmploymentType) {
+  const fullTime = type === "full_time";
+  return {
+    fullTime,
+    /** Small caps label under the company name. */
+    kicker: fullTime ? "Employment Onboarding" : "Internship Onboarding",
+    /** "…extend an X" */
+    offerPhrase: fullTime ? "a full-time employment offer" : "an internship offer",
+    /** Name of the offer document. Matches the preview/PDF title. */
+    offerDoc: fullTime ? "Employment Offer Letter" : "Internship Offer Letter",
+    handbook: fullTime ? "Company Handbook" : "Internship Handbook",
+    /** Email subject fragment. */
+    subjectOffer: fullTime ? "Your Full-Time Employment Offer" : "Your Internship Offer",
+    subjectSigned: fullTime ? "Your Signed Employment Offer & Documents" : "Your Signed Internship Offer & Documents",
+    /** "Thank you for signing your X offer." */
+    signedNoun: fullTime ? "employment" : "internship",
+  };
+}
+
 // Final email — sent after the candidate e-signs AND the onboarder accepts.
 // Carries the fully counter-signed PDFs (no signing link).
 export function onboardingFinalEmailHtml(opts: {
   candidateName: string;
   companyName: string;
   senderName: string;
+  employmentType?: EmploymentType;
 }): string {
   const firstName = opts.candidateName?.split(" ")[0] || opts.candidateName || "there";
+  const w = engagementWords(opts.employmentType ?? "intern");
   return `
 <div style="background:#f4f5f7;padding:32px 0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;color:#1f2937;">
   <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb;">
     <div style="border-top:4px solid #111827;padding:24px 32px 20px;background:#ffffff;">
       <p style="margin:0;color:#111827;font-size:18px;font-weight:700;letter-spacing:.2px;">${opts.companyName}</p>
-      <p style="margin:4px 0 0;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:.06em;">Onboarding Complete</p>
+      <p style="margin:4px 0 0;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:.06em;">${w.fullTime ? "Employment Onboarding Complete" : "Onboarding Complete"}</p>
     </div>
     <div style="padding:32px;">
       <p style="margin:0 0 16px;font-size:15px;">Dear ${firstName},</p>
       <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#374151;">
-        Thank you for signing your internship offer. Your onboarding has now been reviewed and confirmed by ${opts.companyName}.
+        Thank you for signing your ${w.signedNoun} offer. Your onboarding has now been reviewed and confirmed by ${opts.companyName}.
         Please find your <strong>fully signed Offer Letter</strong>, <strong>Non-Disclosure Agreement</strong>, and
-        <strong>Internship Handbook</strong> attached for your records.
+        <strong>${w.handbook}</strong> attached for your records.
       </p>
       <p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#374151;">
         Welcome aboard — we look forward to working with you!
@@ -46,22 +75,24 @@ export function onboardingEmailHtml(opts: {
   companyName: string;
   senderName: string;
   role?: string;
+  employmentType?: EmploymentType;
 }): string {
   const firstName = opts.candidateName?.split(" ")[0] || opts.candidateName || "there";
   const roleLine = opts.role ? ` for the position of <strong>${opts.role}</strong>` : "";
+  const w = engagementWords(opts.employmentType ?? "intern");
   return `
 <div style="background:#f4f5f7;padding:32px 0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;color:#1f2937;">
   <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb;">
     <div style="border-top:4px solid #111827;padding:24px 32px 20px;background:#ffffff;">
       <p style="margin:0;color:#111827;font-size:18px;font-weight:700;letter-spacing:.2px;">${opts.companyName}</p>
-      <p style="margin:4px 0 0;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:.06em;">Internship Onboarding</p>
+      <p style="margin:4px 0 0;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:.06em;">${w.kicker}</p>
     </div>
     <div style="padding:32px;">
       <p style="margin:0 0 16px;font-size:15px;">Dear ${firstName},</p>
       <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#374151;">
-        Congratulations! We are pleased to extend an internship offer${roleLine} at <strong>${opts.companyName}</strong>.
-        Your <strong>Internship Offer Letter</strong>, <strong>Non-Disclosure Agreement</strong>, and
-        <strong>Internship Handbook</strong> are ready for you to review securely online.
+        Congratulations! We are pleased to extend ${w.offerPhrase}${roleLine} at <strong>${opts.companyName}</strong>.
+        Your <strong>${w.offerDoc}</strong>, <strong>Non-Disclosure Agreement</strong>, and
+        <strong>${w.handbook}</strong> are ready for you to review securely online.
       </p>
       <p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#374151;">
         To accept your offer, please open the secure link below to read all three documents and complete your electronic signature. Your fully signed copies will be emailed to you the moment the offer is countersigned.

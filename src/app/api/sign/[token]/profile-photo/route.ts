@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { readStoredFile } from "@/lib/file-storage";
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -35,15 +36,19 @@ export async function GET(_req: Request, { params }: Ctx) {
 
   const { data: share } = await supabase
     .from("mail_file_shares")
-    .select("storage_url")
+    .select("storage_path, storage_url, file_type")
     .eq("id", doc.file_share_id)
     .maybeSingle();
 
-  const m = (share?.storage_url || "").match(/^data:([^;]+);base64,([\s\S]*)$/);
-  if (!m) return NextResponse.json({ error: "Unavailable" }, { status: 404 });
+  const file = await readStoredFile(share);
+  if (!file) return NextResponse.json({ error: "Unavailable" }, { status: 404 });
 
-  const buffer = Buffer.from(m[2], "base64");
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: { "Content-Type": m[1] || "image/jpeg", "Cache-Control": "private, no-store" },
+  return new NextResponse(new Uint8Array(file.buffer), {
+    headers: {
+      "Content-Type": file.contentType || "image/jpeg",
+      // Private + short-lived: the candidate's own browser re-reads this during a
+      // retry, so caching it avoids pulling the image out of storage every time.
+      "Cache-Control": "private, max-age=300",
+    },
   });
 }

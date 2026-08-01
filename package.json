@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx src/scripts/seed.ts",
-    "bridge": "node scripts/bridge.js"
+    "bridge": "node scripts/bridge.js",
+    "copy:mediapipe": "node scripts/copy-mediapipe-wasm.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

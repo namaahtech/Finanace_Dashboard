@@ -23,7 +23,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Candidate has already uploaded their documents." }, { status: 400 });
     }
 
-    const ctx = await getMailContext();
+    // Send from the signed-in user's own mailbox, not admin@.
+    const actor = await getActor();
+    const ctx = await getMailContext(actor);
     const link = `${baseUrlFrom(req)}/documents/${r.token}`;
     await sendRecruitmentMail(ctx, {
       to: r.candidate_email,
@@ -36,7 +38,6 @@ export async function POST(req: Request) {
       .update({ last_reminded_at: new Date().toISOString(), reminder_count: (r.reminder_count || 0) + 1 })
       .eq("id", r.id);
 
-    const actor = await getActor();
     await logAudit({
       actorId: actor?.userId ?? null,
       action: "recruitment.remind_documents", section: "Recruitment",
