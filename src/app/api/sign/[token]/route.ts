@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { loadSettings, resolveSchema } from "@/lib/onboarding/server";
+import { loadSettings, resolveSchemaFor } from "@/lib/onboarding/server";
 import { buildTemplateData } from "@/lib/onboarding/templateData";
 import { dispatchOnboarding } from "@/lib/onboarding/dispatch";
 import { logAudit } from "@/lib/audit";
@@ -25,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   if (!packet) return NextResponse.json({ error: "This signing link is invalid." }, { status: 404 });
 
   const settings = await loadSettings();
-  const schema = resolveSchema(settings);
+  const schema = resolveSchemaFor(settings, packet.employment_type);
   const signatory = {
     name: settings?.signatory_name ?? "Rahul Bharath",
     designation: settings?.signatory_designation ?? "Founder, Executive Chairman & Managing Director",

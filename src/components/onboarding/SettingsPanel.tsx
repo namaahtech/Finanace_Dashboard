@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { SchemaEditor } from "@/components/onboarding/SchemaEditor";
 import { AssetUploadModal } from "@/components/onboarding/AssetUploadModal";
 import type { ConfigCategory } from "@/lib/onboarding/types";
@@ -98,6 +99,11 @@ export function OnboardingSettingsPanel({ onBack }: { onBack: () => void }) {
   });
   const [schema, setSchema] = useState<ConfigCategory[]>([]);
   const [defaultSchema, setDefaultSchema] = useState<ConfigCategory[]>([]);
+  // Full-time hires get their own configuration sheet. Until an admin customises
+  // it, the API returns a copy of the intern sheet with employment wording.
+  const [schemaFT, setSchemaFT] = useState<ConfigCategory[]>([]);
+  const [defaultSchemaFT, setDefaultSchemaFT] = useState<ConfigCategory[]>([]);
+  const [sheetTab, setSheetTab] = useState<"intern" | "full_time">("intern");
 
   useEffect(() => {
     (async () => {
@@ -107,6 +113,8 @@ export function OnboardingSettingsPanel({ onBack }: { onBack: () => void }) {
         setSettings(json.settings);
         setSchema(json.schema);
         setDefaultSchema(json.defaultSchema);
+        setSchemaFT(json.schemaFullTime ?? json.schema);
+        setDefaultSchemaFT(json.defaultSchemaFullTime ?? json.defaultSchema);
       } catch {
         toast.error("Failed to load settings");
       } finally {
@@ -121,7 +129,7 @@ export function OnboardingSettingsPanel({ onBack }: { onBack: () => void }) {
       const res = await fetch("/api/onboarding/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...settings, config_schema: schema }),
+        body: JSON.stringify({ ...settings, config_schema: schema, config_schema_full_time: schemaFT }),
       });
       if (!res.ok) { const j = await res.json(); throw new Error(j.error); }
       toast.success("Settings saved");
@@ -133,16 +141,20 @@ export function OnboardingSettingsPanel({ onBack }: { onBack: () => void }) {
   }
 
   async function resetSchema() {
-    if (!confirm("Reset the configuration sheet to the built-in default?")) return;
-    setSchema(defaultSchema);
+    const isFT = sheetTab === "full_time";
+    const label = isFT ? "full-time" : "intern";
+    if (!confirm(`Reset the ${label} configuration sheet to the built-in default?`)) return;
+    if (isFT) setSchemaFT(defaultSchemaFT); else setSchema(defaultSchema);
     try {
       const res = await fetch("/api/onboarding/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...settings, config_schema: null }),
+        body: JSON.stringify(
+          isFT ? { ...settings, config_schema_full_time: null } : { ...settings, config_schema: null }
+        ),
       });
       if (!res.ok) { const j = await res.json(); throw new Error(j.error); }
-      toast.success("Configuration sheet reset to default");
+      toast.success(`${isFT ? "Full-time" : "Intern"} configuration sheet reset to default`);
     } catch (e: any) {
       toast.error(e.message || "Failed to reset");
     }
@@ -267,7 +279,41 @@ export function OnboardingSettingsPanel({ onBack }: { onBack: () => void }) {
           <p className="text-xs text-muted-foreground -mt-1">
             Add or edit questions, checklist points, and per-question type (radio / checkbox / description / fields). New questions auto-letter (A, B, C…). These drive the onboarding form and render into the Offer Letter.
           </p>
-          <SchemaEditor value={schema} onChange={setSchema} />
+
+          {/* One sheet per engagement type. The builder picks whichever matches the
+              Engagement Type chosen for that candidate. */}
+          <div className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5">
+            {([
+              { key: "intern", label: "Intern" },
+              { key: "full_time", label: "Full-Time" },
+            ] as const).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setSheetTab(t.key)}
+                className={cn(
+                  "rounded-md px-3.5 py-1.5 text-xs font-medium transition-colors",
+                  sheetTab === t.key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {sheetTab === "full_time"
+              ? "Used when a candidate's Engagement Type is set to Full-Time. Starts as a copy of the intern sheet with employment wording — edit it freely; the two are saved independently."
+              : "Used when a candidate's Engagement Type is set to Intern."}
+          </p>
+
+          {sheetTab === "full_time" ? (
+            <SchemaEditor value={schemaFT} onChange={setSchemaFT} />
+          ) : (
+            <SchemaEditor value={schema} onChange={setSchema} />
+          )}
         </CardContent>
       </Card>
 

@@ -1,6 +1,7 @@
 import { getApiUserId } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { DEFAULT_SCHEMA } from "./schema";
+import { termsFor } from "@/components/onboarding/templates/terminology";
 import type { ConfigCategory, OnboardingSettings } from "./types";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -73,10 +74,45 @@ export async function loadSettings(): Promise<OnboardingSettings | null> {
   return (data as OnboardingSettings) ?? null;
 }
 
-/** The effective A–K schema: settings override if present, else the built-in default. */
+/** The effective A–K schema for INTERN offers: settings override if present, else the built-in default. */
 export function resolveSchema(settings: OnboardingSettings | null): ConfigCategory[] {
   const s = settings?.config_schema;
   return Array.isArray(s) && s.length ? (s as ConfigCategory[]) : DEFAULT_SCHEMA;
+}
+
+/**
+ * Full-time starting point derived from the intern sheet: same structure, same
+ * questions, employment wording. Used until an admin customises the full-time
+ * sheet in Settings, so the panel is never empty and the two stay in step.
+ */
+export function deriveFullTimeSchema(base: ConfigCategory[]): ConfigCategory[] {
+  const T = termsFor("full_time");
+  return base.map((cat) => ({
+    ...cat,
+    title: T(cat.title),
+    note: cat.note ? T(cat.note) : cat.note,
+    fields: cat.fields?.map((f) => ({ ...f, label: T(f.label) })),
+    options: cat.options?.map((o) => ({
+      ...o,
+      label: T(o.label),
+      docNote: o.docNote ? T(o.docNote) : o.docNote,
+      fields: o.fields?.map((f) => ({ ...f, label: T(f.label) })),
+    })),
+  }));
+}
+
+/**
+ * The schema that applies to a given packet. Full-time hires use their own sheet
+ * when one has been saved; otherwise they get the derived one above.
+ */
+export function resolveSchemaFor(
+  settings: OnboardingSettings | null,
+  employmentType: "intern" | "full_time" | null | undefined
+): ConfigCategory[] {
+  const intern = resolveSchema(settings);
+  if (employmentType !== "full_time") return intern;
+  const ft = settings?.config_schema_full_time;
+  return Array.isArray(ft) && ft.length ? (ft as ConfigCategory[]) : deriveFullTimeSchema(intern);
 }
 
 /** Absolute base URL for magic links (env override → request origin fallback handled by caller). */

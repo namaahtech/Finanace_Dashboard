@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getActor, isAdmin, canEditSchema, loadSettings, resolveSchema } from "@/lib/onboarding/server";
+import { getActor, isAdmin, canEditSchema, loadSettings, resolveSchemaFor } from "@/lib/onboarding/server";
 import { logAudit } from "@/lib/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -27,11 +27,17 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   }
 
   const settings = await loadSettings();
-  const schema = resolveSchema(settings);
+  // Both sheets are returned so the builder can switch instantly when HR changes
+  // the Engagement Type dropdown, without a refetch.
+  const schema = resolveSchemaFor(settings, packet.employment_type);
+  const schemaIntern = resolveSchemaFor(settings, "intern");
+  const schemaFullTime = resolveSchemaFor(settings, "full_time");
 
   return NextResponse.json({
     packet,
     schema,
+    schemaIntern,
+    schemaFullTime,
     // camelCase to match TemplateData.signatory consumed by the document templates
     settings: {
       name: settings?.signatory_name ?? "Rahul Bharath",

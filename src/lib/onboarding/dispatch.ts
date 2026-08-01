@@ -4,7 +4,7 @@ import { ZOHO_API, getZohoToken } from "@/lib/zoho-auth";
 import { zohoGet, zohoPost } from "@/lib/zoho-mail";
 import { generateAndStorePdfs, downloadPdf } from "./pdf";
 import { buildTemplateData } from "./templateData";
-import { loadSettings, resolveSchema } from "./server";
+import { loadSettings, resolveSchemaFor } from "./server";
 import { onboardingEmailHtml, onboardingFinalEmailHtml, engagementWords } from "./email";
 import { baseUrlFrom } from "@/lib/base-url";
 
@@ -126,7 +126,7 @@ export async function dispatchOnboarding(
   if (final && !packet.signature) throw new Error("Candidate has not signed yet.");
 
   const settings = await loadSettings();
-  const schema = resolveSchema(settings);
+  const schema = resolveSchemaFor(settings, packet.employment_type);
   const signatory = {
     name: settings?.signatory_name ?? "Rahul Bharath",
     designation: settings?.signatory_designation ?? "Founder, Executive Chairman & Managing Director",
@@ -193,13 +193,20 @@ export async function dispatchOnboarding(
   const sender = await resolveSender(token, creator);
   sender.displayName = creator?.name ?? null;
 
+  // Engagement type chosen in the builder drives the wording throughout. Anything
+  // other than an explicit 'full_time' (including a packet created before the
+  // column existed) is treated as an internship.
+  const employmentType: "intern" | "full_time" = packet.employment_type === "full_time" ? "full_time" : "intern";
+  const words = engagementWords(employmentType);
+
   // 3. Attach the signed PDFs — ONLY on the final send. The offer send carries no
   //    attachments (link-only). Download from Storage + upload to Zoho in parallel.
   const files = final
     ? ([
         { name: `Offer Letter - ${packet.candidate_name}.pdf`, path: paths.offer },
         { name: `NDA - ${packet.candidate_name}.pdf`, path: paths.nda },
-        { name: `Internship Handbook.pdf`, path: paths.handbook },
+        // Matches the title rendered inside the PDF itself.
+        { name: `${words.handbook}.pdf`, path: paths.handbook },
       ].filter((f) => f.path) as { name: string; path: string }[])
     : [];
 
@@ -212,12 +219,6 @@ export async function dispatchOnboarding(
 
   // 4. Compose + send.
   const signUrl = `${baseUrlFrom(opts.req)}/sign/${signToken}`;
-  // Engagement type chosen in the builder drives the wording throughout. Anything
-  // other than an explicit 'full_time' (including a packet created before the
-  // column existed) is treated as an internship.
-  const employmentType: "intern" | "full_time" = packet.employment_type === "full_time" ? "full_time" : "intern";
-  const words = engagementWords(employmentType);
-
   let content = final
     ? onboardingFinalEmailHtml({
         candidateName: packet.candidate_name,
