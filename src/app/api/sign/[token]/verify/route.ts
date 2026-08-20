@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { logAudit } from "@/lib/audit";
 import { encryptTemplate, decryptTemplate, euclidean, cosine, biometricKeyConfigured, FACE_MATCH_MAX_DISTANCE } from "@/lib/crypto/biometric";
 import { faceMatchWorkerConfigured, matchViaWorker } from "@/lib/face-match-worker";
+import { FACE_VERIFY_MODE, isStrictVerify } from "@/lib/face-verify-mode";
 import { readStoredFileAsDataUrl } from "@/lib/file-storage";
 
 type Ctx = { params: Promise<{ token: string }> };
@@ -78,15 +79,27 @@ export async function POST(req: Request, { params }: Ctx) {
       return NextResponse.json({ error: "otp_required", message: "Please verify your email again." }, { status: 403 });
     }
 
-    const refPresent = ev.refPresent !== false; // default: a reference photo exists
+    // Which gate the client ran. The server trusts its own configuration, not the
+    // client's claim, so a browser can't opt itself out of strict mode.
+    const strict = isStrictVerify();
+    const refPresent = strict && ev.refPresent !== false;
     const livenessPass = ev.livenessPass === true;
     const qualityPass = ev.qualityPass === true;
 
-    // Liveness + quality are asserted by the client (they depend on the live camera
-    // stream, which only exists in the browser). The server refuses to mint a token
-    // unless they're green.
-    if (!livenessPass || !qualityPass) {
-      return NextResponse.json({ error: "biometric_failed", message: "Face verification did not pass. Please try again." }, { status: 403 });
+    if (strict) {
+      // Liveness + quality are asserted by the client (they depend on the live camera
+      // stream, which only exists in the browser). The server refuses to mint a token
+      // unless they're green.
+      if (!livenessPass || !qualityPass) {
+        return NextResponse.json({ error: "biometric_failed", message: "Face verification did not pass. Please try again." }, { status: 403 });
+      }
+    } else {
+      // Presence mode: the only camera requirement is a usable photo of one person.
+      // No liveness challenge and no identity match are performed — see
+      // lib/face-verify-mode.ts for what still protects this flow.
+      if (!qualityPass) {
+        return NextResponse.json({ error: "biometric_failed", message: "We couldn't get a clear photo. Please try again." }, { status: 403 });
+      }
     }
 
     // ── Server-side face verification ───────────────────────────────────────────
@@ -146,10 +159,15 @@ export async function POST(req: Request, { params }: Ctx) {
     const now = new Date();
     const proof = crypto.randomBytes(24).toString("hex");
     const verification = {
-      liveness_pass: livenessPass,
+      // Explicitly records WHICH gate ran. In "presence" mode no liveness challenge
+      // and no identity match were performed; the nulls below say so rather than
+      // implying a check that never happened.
+      mode: FACE_VERIFY_MODE,
+      liveness_pass: strict ? livenessPass : null,
       quality_pass: qualityPass,
       ref_present: refPresent,
       face_matched: refPresent ? faceMatched : null,
+      single_face: ev.singleFace === true,
       face_match_source: faceMatchSource,
       similarity,
       risk_score: typeof ev.riskScore === "number" ? ev.riskScore : null,
@@ -178,7 +196,9 @@ export async function POST(req: Request, { params }: Ctx) {
     await logAudit({
       actorId: null, actorName: packet.candidate_name, actorRole: "candidate",
       action: "esign.identity_verified", section: "E-Sign",
-      summary: `${packet.candidate_name} passed identity verification (liveness${refPresent ? " + face match" : ""}) before signing`,
+      summary: strict
+        ? `${packet.candidate_name} passed identity verification (liveness${refPresent ? " + face match" : ""}) before signing`
+        : `${packet.candidate_name} completed live photo capture (presence check only — no liveness or face match) before signing`,
       targetType: "onboarding_packet", targetId: packet.id,
     });
 

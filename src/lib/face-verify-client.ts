@@ -357,7 +357,17 @@ function colorDist(a: RStat, b: RStat): number {
  * frontal + size are reliable; plain-background + glasses/mask/hat are heuristic
  * (cheek-skin reference vs region colour/texture).
  */
-export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, faceCount: number): QualityResult {
+export function assessQuality(
+  canvas: HTMLCanvasElement,
+  result: FaceResult,
+  faceCount: number,
+  // "presence" keeps only the checks that decide whether the photo is USABLE —
+  // one person, framed well, in focus. The appearance/anti-spoof checks
+  // (eyes-open, mask, glasses, plain background) are skipped so ordinary
+  // candidates aren't blocked. See lib/face-verify-mode.ts.
+  opts: { mode?: "presence" | "strict" } = {}
+): QualityResult {
+  const strict = opts.mode !== "presence";
   const W = canvas.width, H = canvas.height;
   const data = canvas.getContext("2d")!.getImageData(0, 0, W, H).data;
   const { x: fx, y: fy, width: fw, height: fh } = result.box;
@@ -412,16 +422,24 @@ export function assessQuality(canvas: HTMLCanvasElement, result: FaceResult, fac
   // cluttered backgrounds only.
   const plainBg   = bgSpread < 44;
 
-  const checks: QualityCheck[] = [
+  // Usability checks — applied in both modes.
+  const baseChecks = [
     { key: "single",    label: "Only one person in frame",         pass: single },
-    { key: "eyes",      label: "Eyes open, looking at camera",     pass: earOpen && frontal },
     { key: "size",      label: "Face close enough to the camera",  pass: sizeOk },
     { key: "toobig",    label: "Face not too close to the camera", pass: notTooBig },
     { key: "sharp",     label: "Photo is sharp (not blurry)",      pass: sharp },
-    { key: "nomask",    label: "Face uncovered — no mask",         pass: noMask },
-    { key: "noglasses", label: "Nothing on the face — no glasses", pass: noGlasses },
-    { key: "plainbg",   label: "Plain single-colour background",   pass: plainBg },
-  ].map((c) => ({ ...c, hint: hintFor(c.key).hint }));
+  ];
+  // Appearance / anti-spoof checks — strict mode only.
+  const strictChecks = strict
+    ? [
+        { key: "eyes",      label: "Eyes open, looking at camera",     pass: earOpen && frontal },
+        { key: "nomask",    label: "Face uncovered — no mask",         pass: noMask },
+        { key: "noglasses", label: "Nothing on the face — no glasses", pass: noGlasses },
+        { key: "plainbg",   label: "Plain single-colour background",   pass: plainBg },
+      ]
+    : [];
+
+  const checks: QualityCheck[] = [...baseChecks, ...strictChecks].map((c) => ({ ...c, hint: hintFor(c.key).hint }));
 
   const failed = checks.find((c) => !c.pass);
   const headline = failed ? hintFor(failed.key) : null;
