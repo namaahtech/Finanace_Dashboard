@@ -17,6 +17,7 @@ import {
   scoreRisk, type Challenge, type ChallengeProgress, type FrameSignals,
 } from "@/lib/liveness-client";
 import { computeDeviceFingerprint } from "@/lib/device-fingerprint";
+import { FACE_VERIFY_MODE, isStrictVerify } from "@/lib/face-verify-mode";
 import type { TemplateData } from "@/lib/onboarding/types";
 
 type SignState = "ready" | "invalid" | "expired" | "signed" | "error";
@@ -306,11 +307,12 @@ export default function SignPage() {
       rafRef.current = null;
       return;
     }
-    const seq = makeChallengeSequence();
+    const seq = isStrictVerify() ? makeChallengeSequence() : [];
     challengesRef.current = seq; setChallenges(seq);
     idxRef.current = 0; setChIdx(0);
     progRef.current = newProgress(); setChCount(0);
-    doneRef.current = false; setLiveDone(false);
+    // Presence mode: nothing to complete, so capture is unlocked immediately.
+    doneRef.current = !isStrictVerify(); setLiveDone(!isStrictVerify());
 
     let lastRun = 0;
     const tick = () => {
@@ -331,7 +333,7 @@ export default function SignPage() {
         setFraming(!inFrame ? "off" : s.box.width < 0.24 ? "far" : s.box.width > 0.58 ? "close" : "ok");
         setCentered(inFrame && s.box.width >= 0.24 && s.box.width <= 0.58);
       } else { setCentered(false); setFraming("none"); }
-      if (doneRef.current || !s.present || s.faceCount !== 1) return;
+      if (!isStrictVerify() || doneRef.current || !s.present || s.faceCount !== 1) return;
       const ch = challengesRef.current[idxRef.current];
       if (!ch) return;
       const p = stepChallenge(ch, s, progRef.current);
@@ -396,25 +398,31 @@ export default function SignPage() {
 
       // Full quality/anti-spoof suite (single, frontal, size, sharp, no
       // mask/glasses/hat, plain background) — same checks as the KYC selfie.
-      const q = assessQuality(canvas, result, faces);
+      const q = assessQuality(canvas, result, faces, { mode: FACE_VERIFY_MODE });
       const qChecks = q.checks.map((c) => ({ label: c.label, pass: c.pass }));
       const noSun = (q.checks.find((c) => c.key === "noglasses")?.pass ?? true) && (q.checks.find((c) => c.key === "nomask")?.pass ?? true);
-      const hasRef = !(refMissing || !refDescRef.current);
+      // Presence mode: no identity comparison at all — a single, clear face is
+      // enough to continue. `hasRef` stays false so nothing downstream gates on it.
+      const strict = isStrictVerify();
+      const hasRef = strict && !(refMissing || !refDescRef.current);
       const verdict = hasRef ? verifyAgainst(refDescRef.current!, result, canvas.width * canvas.height, faces) : null;
 
-      // Weighted risk score (liveness already completed to reach here).
-      const risk = scoreRisk({
-        faceDetected: true,
-        qualityPass: q.pass,
-        noSunglassesMask: noSun,
-        eyesVisible: q.checks.find((c) => c.key === "eyes")?.pass ?? true,
-        livenessPass: doneRef.current,
-        identityMatch: hasRef ? !!verdict?.pass : null,
-      });
+      let pass = q.pass;
+      const checks = hasRef && verdict ? [verdict.checks[0], ...qChecks] : [...qChecks];
+      let risk: ReturnType<typeof scoreRisk> | null = null;
 
-      const checks = hasRef && verdict ? [verdict.checks[0], ...qChecks] : qChecks;
-      checks.push({ label: `Security score ${risk.score}/${risk.max}`, pass: risk.pass });
-      const pass = risk.pass && q.pass && (!hasRef || !!verdict?.pass);
+      if (strict) {
+        risk = scoreRisk({
+          faceDetected: true,
+          qualityPass: q.pass,
+          noSunglassesMask: noSun,
+          eyesVisible: q.checks.find((c) => c.key === "eyes")?.pass ?? true,
+          livenessPass: doneRef.current,
+          identityMatch: hasRef ? !!verdict?.pass : null,
+        });
+        checks.push({ label: `Security score ${risk.score}/${risk.max}`, pass: risk.pass });
+        pass = risk.pass && q.pass && (!hasRef || !!verdict?.pass);
+      }
 
       // Lead with the actual blocker: a photo-quality problem is fixable advice,
       // an identity mismatch is a different conversation entirely.
@@ -434,14 +442,20 @@ export default function SignPage() {
         // Record the evidence server-side and obtain the single-use proof token the
         // sign POST requires. Only advance to signing once we actually hold it.
         try {
+          // The evidence must describe what was ACTUALLY checked. In presence mode
+          // no liveness challenge and no identity comparison ran, so those are
+          // reported as null rather than "passed" — an audit trail that overstates
+          // its own checks is worse than no audit trail.
           const evidence = {
-            livenessPass: doneRef.current,
+            mode: FACE_VERIFY_MODE,
+            livenessPass: strict ? doneRef.current : null,
             qualityPass: q.pass,
+            singleFace: faces === 1,
             refPresent: hasRef,
             faceMatched: hasRef ? !!verdict?.pass : null,
             similarity: verdict?.similarity ?? null,
-            riskScore: risk.score,
-            riskMax: risk.max,
+            riskScore: risk?.score ?? null,
+            riskMax: risk?.max ?? null,
             deviceFingerprint: deviceFpRef.current,
             checks,
           };

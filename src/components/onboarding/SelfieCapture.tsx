@@ -10,6 +10,7 @@ import {
   scoreRisk, type Challenge, type ChallengeProgress, type FrameSignals,
 } from "@/lib/liveness-client";
 import { compressForDoc, formatBytes } from "@/lib/image-compress-client";
+import { FACE_VERIFY_MODE, isStrictVerify } from "@/lib/face-verify-mode";
 
 // Live front-camera selfie with enterprise active-liveness: a randomized
 // challenge sequence (blink / turn / smile) proven live via MediaPipe Face
@@ -64,6 +65,15 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
   }, []);
 
   function resetChallenges() {
+    if (!isStrictVerify()) {
+      // Presence mode: no blink/gaze steps. Capture unlocks on framing alone.
+      challengesRef.current = [];
+      setChallenges([]);
+      idxRef.current = 0; setChIdx(0);
+      progRef.current = newProgress(); setChCount(0);
+      doneRef.current = true; setLiveDone(true);
+      return;
+    }
     const seq = makeChallengeSequence();
     challengesRef.current = seq;
     setChallenges(seq);
@@ -132,8 +142,8 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
         setCentered(good);
       } else { setCentered(false); setFraming("none"); }
 
-      // Only advance challenges when a single face is present.
-      if (doneRef.current || !s.present || s.faceCount !== 1) return;
+      // Only advance challenges when a single face is present (strict mode only).
+      if (!isStrictVerify() || doneRef.current || !s.present || s.faceCount !== 1) return;
       const seq = challengesRef.current;
       const ch = seq[idxRef.current];
       if (!ch) return;
@@ -174,25 +184,34 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
         return;
       }
 
-      const q = assessQuality(canvas, det, faces);
-      // Weighted risk score (liveness already passed to reach here).
-      const noSun = (q.checks.find((c) => c.key === "noglasses")?.pass ?? true) && (q.checks.find((c) => c.key === "nomask")?.pass ?? true);
-      const risk = scoreRisk({
-        faceDetected: true,
-        qualityPass: q.pass,
-        noSunglassesMask: noSun,
-        eyesVisible: q.checks.find((c) => c.key === "eyes")?.pass ?? true,
-        livenessPass: doneRef.current,
-        identityMatch: null, // registration selfie has no prior reference
-      });
-      const finalPass = q.pass && risk.pass;
-      const riskHint = hintFor("face").hint;
+      const q = assessQuality(canvas, det, faces, { mode: FACE_VERIFY_MODE });
+
+      // In presence mode the photo passes on its own merits — one person, framed,
+      // in focus. No risk score is computed or shown, because no liveness or
+      // anti-spoof check ran and displaying a "security score" would misrepresent
+      // what was actually verified.
+      let finalPass = q.pass;
+      const checks = [...q.checks];
+      if (isStrictVerify()) {
+        const noSun = (q.checks.find((c) => c.key === "noglasses")?.pass ?? true) && (q.checks.find((c) => c.key === "nomask")?.pass ?? true);
+        const risk = scoreRisk({
+          faceDetected: true,
+          qualityPass: q.pass,
+          noSunglassesMask: noSun,
+          eyesVisible: q.checks.find((c) => c.key === "eyes")?.pass ?? true,
+          livenessPass: doneRef.current,
+          identityMatch: null, // registration selfie has no prior reference
+        });
+        finalPass = q.pass && risk.pass;
+        checks.push({ key: "risk", label: `Security score ${risk.score}/${risk.max}`, pass: risk.pass, hint: hintFor("face").hint });
+      }
+
       setResult({
         pass: finalPass,
         sharpness: q.sharpness,
         reason: q.reason,
         hint: q.hint,
-        checks: [...q.checks, { key: "risk", label: `Security score ${risk.score}/${risk.max}`, pass: risk.pass, hint: riskHint }],
+        checks,
       });
 
       if (!finalPass) { setBusy(false); return; }
@@ -246,13 +265,13 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
     ? FRAMING_GUIDE[framing] || "Center your face in the oval"
     : !liveDone && activeChallenge
       ? (activeChallenge.type === "blink" ? `${activeChallenge.label} (${chCount}/${activeChallenge.target})` : activeChallenge.label)
-      : "Liveness confirmed — capture now";
+      : isStrictVerify() ? "Liveness confirmed — capture now" : "Looking good — tap Capture";
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
       <div className="w-full max-w-md rounded-2xl border border-border bg-background shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <h3 className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck size={15} /> Live face verification</h3>
+          <h3 className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck size={15} /> {isStrictVerify() ? "Live face verification" : "Live photo capture"}</h3>
           <button onClick={onCancel} className="rounded p-1 hover:bg-muted"><X size={16} /></button>
         </div>
 
@@ -260,8 +279,9 @@ export function SelfieCapture({ onCapture, onCancel }: { onCapture: (file: File)
           {!camStarted ? (
             <>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                We'll verify a <strong>live</strong> photo of your face. Please <strong>remove glasses, mask, and any cap/hat</strong>,
-                face the camera in good light with a plain background, then follow the on-screen prompts.
+                {isStrictVerify()
+                  ? <>We&apos;ll verify a <strong>live</strong> photo of your face. Please <strong>remove glasses, mask, and any cap/hat</strong>, face the camera in good light with a plain background, then follow the on-screen prompts.</>
+                  : <>We&apos;ll take a <strong>live</strong> photo of your face. Make sure you&apos;re the <strong>only person in frame</strong>, in good light, then tap Capture.</>}
               </p>
               <Button className="w-full" onClick={() => { setCamErr(null); setCamStarted(true); }}>
                 <Camera size={15} /> Enable camera
