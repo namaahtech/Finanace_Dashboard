@@ -78,6 +78,7 @@ const SECTIONS = [
       { key: "my_dashboard",       label: "Employee Dashboard",           desc: "/dashboard — personal home for staff" },
       { key: "projects",           label: "Projects",                     desc: "Project Kanban, tasks, delegation" },
       { key: "employees",          label: "Employees (User Management)",  desc: "Add, edit, view all staff profiles" },
+      { key: "employee_delete",    label: "Employees — Permanent Delete", desc: "Permanently remove & archive a joined employee; disables their company mailbox + sends notice" },
       { key: "shift_management",   label: "Shift Management",             desc: "Create shifts, assign employees" },
       { key: "teams",              label: "Teams",                        desc: "Department and sub-team management" },
       { key: "org_chart",          label: "Org Chart",                    desc: "Full company hierarchy visualization" },
@@ -107,6 +108,7 @@ const SECTIONS = [
       { key: "onboarding",    label: "Onboarding",                     desc: "Offer letter builder, approval workflow, e-sign dispatch" },
       { key: "onboarding_builder", label: "Onboarding — Form Builder",  desc: "Full-depth edit: add/edit questions, options, types & structure" },
       { key: "onboarding_manual",  label: "Onboarding — Manual Entry",   desc: "Add a candidate manually (bypasses the interview pipeline) in Start New Onboarding" },
+      { key: "candidate_revoke",   label: "Onboarding — Revoke Offer",   desc: "Revoke a mailed offer for a candidate who didn't join (48h window; admin can override). Archives the record + sends notice." },
     ],
   },
   {

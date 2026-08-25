@@ -18,6 +18,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { validateName, validateEmail, validatePhone } from "@/lib/validation";
 import { Badge } from "@/components/ui/BadgeLegacy";
 import { Button } from "@/components/ui/ButtonLegacy";
 import { supabase } from "@/lib/supabase";
@@ -51,6 +52,7 @@ export default function CareerPortal() {
     location: "",
     resume: null as File | null,
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     fetchClusters();
@@ -81,6 +83,14 @@ export default function CareerPortal() {
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCluster || !formData.resume) return;
+
+    const errs = {
+      name: validateName(formData.name),
+      email: validateEmail(formData.email),
+      phone: validatePhone(formData.phone, true),
+    };
+    setFormErrors(errs);
+    if (Object.values(errs).some(Boolean)) return;
 
     setFormLoading(true);
     try {
@@ -386,37 +396,44 @@ export default function CareerPortal() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Full Name</label>
-                        <input 
+                        <input
                           required
                           value={formData.name}
-                          onChange={e => setFormData({...formData, name: e.target.value})}
+                          onChange={e => { setFormData({...formData, name: e.target.value}); setFormErrors(p => ({ ...p, name: null })); }}
+                          onBlur={e => setFormErrors(p => ({ ...p, name: validateName(e.target.value) }))}
                           placeholder="Aravind Kumar"
-                          className="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 text-sm font-bold focus:border-theme-primary transition-all outline-none"
+                          className={cn("w-full h-14 bg-white/5 border rounded-2xl px-5 text-sm font-bold focus:border-theme-primary transition-all outline-none", formErrors.name ? "border-rose-500" : "border-white/10")}
                         />
+                        {formErrors.name && <p className="text-[11px] font-bold text-rose-400">{formErrors.name}</p>}
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Email Address</label>
-                        <input 
+                        <input
                           required
                           type="email"
                           value={formData.email}
-                          onChange={e => setFormData({...formData, email: e.target.value})}
+                          onChange={e => { setFormData({...formData, email: e.target.value}); setFormErrors(p => ({ ...p, email: null })); }}
+                          onBlur={e => setFormErrors(p => ({ ...p, email: validateEmail(e.target.value) }))}
                           placeholder="aravind@example.com"
-                          className="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 text-sm font-bold focus:border-theme-primary transition-all outline-none"
+                          className={cn("w-full h-14 bg-white/5 border rounded-2xl px-5 text-sm font-bold focus:border-theme-primary transition-all outline-none", formErrors.email ? "border-rose-500" : "border-white/10")}
                         />
+                        {formErrors.email && <p className="text-[11px] font-bold text-rose-400">{formErrors.email}</p>}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Phone Number</label>
-                        <input 
+                        <input
                           required
+                          inputMode="tel"
                           value={formData.phone}
-                          onChange={e => setFormData({...formData, phone: e.target.value})}
+                          onChange={e => { setFormData({...formData, phone: e.target.value}); setFormErrors(p => ({ ...p, phone: null })); }}
+                          onBlur={e => setFormErrors(p => ({ ...p, phone: validatePhone(e.target.value, true) }))}
                           placeholder="+91 98765 43210"
-                          className="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 text-sm font-bold focus:border-theme-primary transition-all outline-none"
+                          className={cn("w-full h-14 bg-white/5 border rounded-2xl px-5 text-sm font-bold focus:border-theme-primary transition-all outline-none", formErrors.phone ? "border-rose-500" : "border-white/10")}
                         />
+                        {formErrors.phone && <p className="text-[11px] font-bold text-rose-400">{formErrors.phone}</p>}
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Current Location</label>

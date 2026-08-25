@@ -28,6 +28,7 @@ import { SchemaEditor } from "@/components/onboarding/SchemaEditor";
 import { DocumentPreview } from "@/components/onboarding/DocumentPreview";
 import { buildTemplateData } from "@/lib/onboarding/templateData";
 import { STATUS_META, type ConfigCategory, type OnboardingConfig, type OnboardingPacket, type OnboardingStatus } from "@/lib/onboarding/types";
+import { validateName, validateEmail, validatePhone, validateAddress } from "@/lib/validation";
 
 const CANDIDATE_DOC_LABELS: Record<string, string> = {
   profile_photo: "Profile Photo (for ID Card)",
@@ -79,6 +80,7 @@ export default function OnboardingBuilderPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [form, setForm] = useState<FormState | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
   const [previewForm, setPreviewForm] = useState<FormState | null>(null);
   const [candidateDocs, setCandidateDocs] = useState<any[] | null>(null);
 
@@ -187,7 +189,20 @@ export default function OnboardingBuilderPage() {
     return () => { supabase.removeChannel(ch); };
   }, [id, user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const validateCandidate = useCallback((f: FormState) => {
+    const errs = {
+      candidate_name: validateName(f.candidate_name),
+      candidate_email: validateEmail(f.candidate_email),
+      candidate_phone: validatePhone(f.candidate_phone),
+      candidate_address: validateAddress(f.candidate_address),
+    };
+    setFieldErrors(errs);
+    return Object.values(errs).find(Boolean) ?? null;
+  }, []);
+
   const doSave = useCallback(async (f: FormState, silent = true) => {
+    const invalid = validateCandidate(f);
+    if (invalid) { if (!silent) toast.error(invalid); throw new Error(invalid); }
     setSaving(true);
     try {
       const res = await fetch(`/api/onboarding/${id}`, {
@@ -221,7 +236,7 @@ export default function OnboardingBuilderPage() {
   const updatePreview = async () => {
     if (!form) return;
     setPreviewForm(form);
-    await doSave(form, false);
+    try { await doSave(form, false); } catch { /* validation/save errors already surfaced via toast */ }
   };
 
   async function action(path: string, body?: any, label?: string) {
@@ -561,7 +576,14 @@ export default function OnboardingBuilderPage() {
                   <div className="grid sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Full Name</Label>
-                      <Input value={form.candidate_name} onChange={(e) => updateForm({ ...form, candidate_name: e.target.value })} className="text-sm" />
+                      <Input
+                        value={form.candidate_name}
+                        onChange={(e) => { updateForm({ ...form, candidate_name: e.target.value }); setFieldErrors((p) => ({ ...p, candidate_name: null })); }}
+                        onBlur={(e) => setFieldErrors((p) => ({ ...p, candidate_name: validateName(e.target.value) }))}
+                        className={cn("text-sm", fieldErrors.candidate_name && "border-rose-500 focus-visible:ring-rose-500")}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Enter the full legal name only — no nicknames, initials, or short forms.</p>
+                      {fieldErrors.candidate_name && <p className="text-[11px] text-rose-500">{fieldErrors.candidate_name}</p>}
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -581,11 +603,25 @@ export default function OnboardingBuilderPage() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Phone</Label>
-                      <Input value={form.candidate_phone} onChange={(e) => updateForm({ ...form, candidate_phone: e.target.value })} className="text-sm" />
+                      <Input
+                        inputMode="tel"
+                        value={form.candidate_phone}
+                        onChange={(e) => { updateForm({ ...form, candidate_phone: e.target.value }); setFieldErrors((p) => ({ ...p, candidate_phone: null })); }}
+                        onBlur={(e) => setFieldErrors((p) => ({ ...p, candidate_phone: validatePhone(e.target.value) }))}
+                        placeholder="10-digit mobile"
+                        className={cn("text-sm", fieldErrors.candidate_phone && "border-rose-500 focus-visible:ring-rose-500")}
+                      />
+                      {fieldErrors.candidate_phone && <p className="text-[11px] text-rose-500">{fieldErrors.candidate_phone}</p>}
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Address</Label>
-                      <Input value={form.candidate_address} onChange={(e) => updateForm({ ...form, candidate_address: e.target.value })} className="text-sm" />
+                      <Input
+                        value={form.candidate_address}
+                        onChange={(e) => { updateForm({ ...form, candidate_address: e.target.value }); setFieldErrors((p) => ({ ...p, candidate_address: null })); }}
+                        onBlur={(e) => setFieldErrors((p) => ({ ...p, candidate_address: validateAddress(e.target.value) }))}
+                        className={cn("text-sm", fieldErrors.candidate_address && "border-rose-500 focus-visible:ring-rose-500")}
+                      />
+                      {fieldErrors.candidate_address && <p className="text-[11px] text-rose-500">{fieldErrors.candidate_address}</p>}
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Engagement Type</Label>

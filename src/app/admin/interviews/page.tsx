@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { validateName, validateEmail, validatePhone } from "@/lib/validation";
 
 /* ─── Realtime Logic ─────────────────────────────────────────────────────── */
 function useInterviewsRealtime(onUpdate: () => void) {
@@ -127,14 +128,22 @@ function ManualEntryModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [decision, setDecision] = useState<"accepted" | "rejected">("accepted");
   const [reqDocs, setReqDocs] = useState(true);
   const [sending, setSending] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   // Reject can't request documents; Accept defaults to requesting them.
   useEffect(() => { setReqDocs(decision === "accepted"); }, [decision]);
 
-  const reset = () => { setName(""); setEmail(""); setPhone(""); setDecision("accepted"); setReqDocs(true); };
+  const reset = () => { setName(""); setEmail(""); setPhone(""); setDecision("accepted"); setReqDocs(true); setErrors({}); };
 
   const send = async () => {
-    if (!name.trim() || !email.trim()) { toast.error("Name and email are required"); return; }
+    const errs = {
+      name: validateName(name),
+      email: validateEmail(email),
+      phone: validatePhone(phone),
+    };
+    setErrors(errs);
+    const firstErr = Object.values(errs).find(Boolean);
+    if (firstErr) { toast.error(firstErr); return; }
     setSending(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -175,15 +184,39 @@ function ManualEntryModal({ open, onClose }: { open: boolean; onClose: () => voi
         <div className="space-y-3 py-2">
           <div className="space-y-1.5">
             <Label className="text-xs">Full name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Candidate name" />
+            <Input
+              value={name}
+              onChange={(e) => { setName(e.target.value); setErrors((p) => ({ ...p, name: null })); }}
+              onBlur={(e) => setErrors((p) => ({ ...p, name: validateName(e.target.value) }))}
+              placeholder="Candidate name"
+              className={cn(errors.name && "border-rose-500 focus-visible:ring-rose-500")}
+            />
+            <p className="text-[10px] text-muted-foreground">Full legal name only — no nicknames, initials, or short forms.</p>
+            {errors.name && <p className="text-[11px] text-rose-500">{errors.name}</p>}
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Email</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="candidate@email.com" />
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setErrors((p) => ({ ...p, email: null })); }}
+              onBlur={(e) => setErrors((p) => ({ ...p, email: validateEmail(e.target.value) }))}
+              placeholder="candidate@email.com"
+              className={cn(errors.email && "border-rose-500 focus-visible:ring-rose-500")}
+            />
+            {errors.email && <p className="text-[11px] text-rose-500">{errors.email}</p>}
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Contact number</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+            <Input
+              inputMode="tel"
+              value={phone}
+              onChange={(e) => { setPhone(e.target.value); setErrors((p) => ({ ...p, phone: null })); }}
+              onBlur={(e) => setErrors((p) => ({ ...p, phone: validatePhone(e.target.value) }))}
+              placeholder="10-digit mobile (optional)"
+              className={cn(errors.phone && "border-rose-500 focus-visible:ring-rose-500")}
+            />
+            {errors.phone && <p className="text-[11px] text-rose-500">{errors.phone}</p>}
           </div>
 
           <div className="space-y-1.5">

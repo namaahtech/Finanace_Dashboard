@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   FileSignature, Plus, Settings, Search, Loader2, Trash2,
-  Clock, CheckCircle2, Send, PenTool, Users, ChevronRight, UserPlus, Briefcase, BadgeCheck,
+  Clock, CheckCircle2, Send, PenTool, Users, ChevronRight, UserPlus, Briefcase, BadgeCheck, Ban,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { STATUS_META, type OnboardingStatus } from "@/lib/onboarding/types";
+import { validateName, validateEmail, validatePhone, validateAddress } from "@/lib/validation";
 import { OnboardingSettingsPanel } from "@/components/onboarding/SettingsPanel";
 
 interface PacketRow {
@@ -119,14 +120,21 @@ const isIntern = (p: PacketRow) => isOnboarded(p) && !isFullTime(p);
 
 // Filters receive the whole packet, not just the status, because intern vs
 // full-time is decided by the conversion timestamp rather than the status column.
+const isRevoked = (p: PacketRow) => p.status === "revoked";
+// Revoke is available for a MAILED offer (candidate never joined). Pre-mail drafts
+// are deleted, not revoked.
+const isMailed = (p: PacketRow) => ["sent", "viewed", "signed", "completed"].includes(p.status);
+
 const FILTERS: { key: string; label: string; match: (p: PacketRow) => boolean }[] = [
-  { key: "all", label: "All", match: () => true },
+  // Active filters exclude revoked records — those live in Archive.
+  { key: "all", label: "All", match: (p) => !isRevoked(p) },
   { key: "draft", label: "Drafts", match: (p) => p.status === "draft" || p.status === "changes_requested" },
   { key: "pending", label: "Pending", match: (p) => p.status === "pending_approval" },
   { key: "sent", label: "Sent / Viewed", match: (p) => p.status === "approved" || p.status === "sent" || p.status === "viewed" },
   { key: "signed", label: "Signed", match: (p) => isOnboarded(p) },
   { key: "intern", label: "Intern", match: isIntern },
   { key: "fulltime", label: "Full-Time", match: isFullTime },
+  { key: "archive", label: "Archive", match: isRevoked },
 ];
 
 export default function OnboardingHubPage() {
@@ -136,6 +144,9 @@ export default function OnboardingHubPage() {
   const isAdmin = user?.role === "admin";
   // Manual Entry is admin-only by default; admins can grant it to a role in /admin/permissions.
   const canManual = isAdmin || (permissions?.onboarding_manual?.can_view ?? false);
+  // Revoke a mailed offer (candidate didn't join). Default admin + hr; toggleable.
+  const canRevoke = isAdmin || (permissions?.candidate_revoke?.can_delete ?? false);
+  const [revoking, setRevoking] = useState<string | null>(null);
 
   const [packets, setPackets] = useState<PacketRow[]>([]);
   const [claimed, setClaimed] = useState<ClaimedRow[]>([]);
@@ -155,6 +166,7 @@ export default function OnboardingHubPage() {
   // Manual entry form
   const emptyManual = { candidate_name: "", candidate_email: "", candidate_phone: "", candidate_address: "" };
   const [manual, setManual] = useState(emptyManual);
+  const [manualErrors, setManualErrors] = useState<Record<string, string | null>>({});
   const [creatingManual, setCreatingManual] = useState(false);
 
   // Workspace-wide: candidates that already have an onboarding packet — keyed by
@@ -206,6 +218,7 @@ export default function OnboardingHubPage() {
     setPickerOpen(true);
     setPickerMode("interview");
     setManual(emptyManual);
+    setManualErrors({});
     setPickerLoading(true);
     // Prefetch the onboarding detail page bundle so navigation is instant once we have the ID.
     if (packets.length > 0) router.prefetch(`/admin/onboarding/${packets[0].id}`);
@@ -251,8 +264,15 @@ export default function OnboardingHubPage() {
   }
 
   async function startManual() {
-    if (!manual.candidate_name.trim()) return toast.error("Candidate name is required");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(manual.candidate_email.trim())) return toast.error("A valid candidate email is required");
+    const errs = {
+      candidate_name: validateName(manual.candidate_name),
+      candidate_email: validateEmail(manual.candidate_email),
+      candidate_phone: validatePhone(manual.candidate_phone),
+      candidate_address: validateAddress(manual.candidate_address),
+    };
+    setManualErrors(errs);
+    const firstErr = Object.values(errs).find(Boolean);
+    if (firstErr) return toast.error(firstErr);
     setCreatingManual(true);
     setPickerOpen(false); // close immediately
     const tid = toast.loading(`Creating onboarding for ${manual.candidate_name.trim()}…`);
@@ -307,6 +327,35 @@ export default function OnboardingHubPage() {
       setPickerOpen(true); // re-open so user can retry
     } finally {
       setCreatingFor(null);
+    }
+  }
+
+  async function revokePacket(p: PacketRow, e: React.MouseEvent) {
+    e.stopPropagation();
+    const hrs = p.sent_at ? Math.floor((Date.now() - new Date(p.sent_at).getTime()) / 3_600_000) : null;
+    const lapsed = hrs !== null && hrs > 48;
+    const warn = lapsed && !isAdmin
+      ? "The 48-hour window has passed — only an admin can revoke this. Continue anyway?"
+      : lapsed
+        ? `The 48-hour window has passed (offer mailed ${hrs}h ago). Revoke as admin override?`
+        : `Revoke ${p.candidate_name}'s offer? They will be emailed a withdrawal notice and the record moves to Archive.`;
+    if (!confirm(warn)) return;
+    const reason = window.prompt("Reason for revoking (optional — included in the email):", "") ?? null;
+    setRevoking(p.id);
+    try {
+      const res = await fetch(`/api/onboarding/${p.id}/revoke`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to revoke");
+      toast.success(json.mailSent ? "Offer revoked — candidate notified" : `Offer revoked${json.mailError ? " (email failed to send)" : ""}`);
+      fetchPackets();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to revoke");
+    } finally {
+      setRevoking(null);
     }
   }
 
@@ -529,6 +578,16 @@ export default function OnboardingHubPage() {
                           <Trash2 size={14} />
                         </button>
                       )}
+                      {canRevoke && isMailed(p) && (
+                        <button
+                          onClick={(e) => revokePacket(p, e)}
+                          disabled={revoking === p.id}
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
+                          title="Revoke offer — candidate did not join"
+                        >
+                          {revoking === p.id ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
+                        </button>
+                      )}
                       <ChevronRight size={16} className="text-muted-foreground shrink-0" />
                     </CardContent>
                   </Card>
@@ -654,38 +713,48 @@ export default function OnboardingHubPage() {
                   <Label className="text-xs text-muted-foreground">Full Name <span className="text-rose-500">*</span></Label>
                   <Input
                     value={manual.candidate_name}
-                    onChange={(e) => setManual({ ...manual, candidate_name: e.target.value })}
+                    onChange={(e) => { setManual({ ...manual, candidate_name: e.target.value }); setManualErrors((p) => ({ ...p, candidate_name: null })); }}
+                    onBlur={(e) => setManualErrors((p) => ({ ...p, candidate_name: validateName(e.target.value) }))}
                     placeholder="e.g. Aditya Sharma"
-                    className="text-sm"
+                    className={cn("text-sm", manualErrors.candidate_name && "border-rose-500 focus-visible:ring-rose-500")}
                   />
+                  <p className="text-[10px] text-muted-foreground">Enter the full legal name only — no nicknames, initials, or short forms.</p>
+                  {manualErrors.candidate_name && <p className="text-[11px] text-rose-500">{manualErrors.candidate_name}</p>}
                 </div>
                 <div className="space-y-1 sm:col-span-2">
                   <Label className="text-xs text-muted-foreground">Email <span className="text-rose-500">*</span></Label>
                   <Input
                     type="email"
                     value={manual.candidate_email}
-                    onChange={(e) => setManual({ ...manual, candidate_email: e.target.value })}
+                    onChange={(e) => { setManual({ ...manual, candidate_email: e.target.value }); setManualErrors((p) => ({ ...p, candidate_email: null })); }}
+                    onBlur={(e) => setManualErrors((p) => ({ ...p, candidate_email: validateEmail(e.target.value) }))}
                     placeholder="candidate@example.com"
-                    className="text-sm"
+                    className={cn("text-sm", manualErrors.candidate_email && "border-rose-500 focus-visible:ring-rose-500")}
                   />
+                  {manualErrors.candidate_email && <p className="text-[11px] text-rose-500">{manualErrors.candidate_email}</p>}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Phone</Label>
                   <Input
+                    inputMode="tel"
                     value={manual.candidate_phone}
-                    onChange={(e) => setManual({ ...manual, candidate_phone: e.target.value })}
-                    placeholder="Optional"
-                    className="text-sm"
+                    onChange={(e) => { setManual({ ...manual, candidate_phone: e.target.value }); setManualErrors((p) => ({ ...p, candidate_phone: null })); }}
+                    onBlur={(e) => setManualErrors((p) => ({ ...p, candidate_phone: validatePhone(e.target.value) }))}
+                    placeholder="10-digit mobile"
+                    className={cn("text-sm", manualErrors.candidate_phone && "border-rose-500 focus-visible:ring-rose-500")}
                   />
+                  {manualErrors.candidate_phone && <p className="text-[11px] text-rose-500">{manualErrors.candidate_phone}</p>}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Address</Label>
                   <Input
                     value={manual.candidate_address}
-                    onChange={(e) => setManual({ ...manual, candidate_address: e.target.value })}
+                    onChange={(e) => { setManual({ ...manual, candidate_address: e.target.value }); setManualErrors((p) => ({ ...p, candidate_address: null })); }}
+                    onBlur={(e) => setManualErrors((p) => ({ ...p, candidate_address: validateAddress(e.target.value) }))}
                     placeholder="Optional"
-                    className="text-sm"
+                    className={cn("text-sm", manualErrors.candidate_address && "border-rose-500 focus-visible:ring-rose-500")}
                   />
+                  {manualErrors.candidate_address && <p className="text-[11px] text-rose-500">{manualErrors.candidate_address}</p>}
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground">

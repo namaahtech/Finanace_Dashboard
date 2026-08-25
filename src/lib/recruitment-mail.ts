@@ -388,6 +388,46 @@ export function otpEmailHtml(code: string, companyName: string): string {
   return shell(companyName, inner);
 }
 
+/**
+ * Offer-revoked notice — sent to a candidate whose offer was mailed but who did
+ * not join, when HR/admin revokes it within the window. Professional, no-blame.
+ */
+export function offerRevokedHtml(name: string, companyName: string, reason?: string | null): string {
+  const n = esc(name);
+  const co = esc(companyName);
+  const note = reason?.trim()
+    ? `<p style="margin:0 0 16px;padding:12px 16px;background:#f8fafc;border-left:3px solid #cbd5e1;color:#374151;white-space:pre-wrap;">${esc(reason.trim())}</p>`
+    : "";
+  const inner = `
+    <p style="margin:0 0 16px;">Dear ${n},</p>
+    <p style="margin:0 0 16px;">We are writing regarding the offer previously extended to you by ${co}. As we did not receive confirmation of your joining, the offer and the associated onboarding have now been <strong>withdrawn</strong>, and your onboarding record has been closed.</p>
+    ${note}
+    <p style="margin:0 0 16px;">If this was unexpected or you believe it to be in error, please reply to this email at the earliest and our team will be glad to assist.</p>
+    <p style="margin:0;">We thank you for your time and wish you the very best in your future endeavours.</p>
+    ${signoff("Human Resources", companyName)}`;
+  return shell(companyName, inner);
+}
+
+/**
+ * Employee-removed notice — sent when a joined employee is permanently removed
+ * (archived) from the system. Company mailbox access is disabled.
+ */
+export function employeeRemovedHtml(name: string, companyName: string, reason?: string | null): string {
+  const n = esc(name);
+  const co = esc(companyName);
+  const note = reason?.trim()
+    ? `<p style="margin:0 0 16px;padding:12px 16px;background:#f8fafc;border-left:3px solid #cbd5e1;color:#374151;white-space:pre-wrap;">${esc(reason.trim())}</p>`
+    : "";
+  const inner = `
+    <p style="margin:0 0 16px;">Dear ${n},</p>
+    <p style="margin:0 0 16px;">This is to formally confirm that your association with ${co} has been concluded, and your access to company systems — including your company mailbox — has been deactivated with immediate effect.</p>
+    ${note}
+    <p style="margin:0 0 16px;">Please ensure you have retained any personal information from your company accounts, as access can no longer be provided. Should you have any pending queries regarding dues or documents, kindly reply to this email.</p>
+    <p style="margin:0;">We thank you for your time with us and wish you well ahead.</p>
+    ${signoff("Human Resources", companyName)}`;
+  return shell(companyName, inner);
+}
+
 /** Email sent back to HR with the candidate's submitted documents attached. */
 export function hrReturnHtml(opts: {
   name: string; email: string; phone?: string | null; message?: string | null; docs: string[]; companyName: string;

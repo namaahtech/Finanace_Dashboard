@@ -233,22 +233,6 @@ function RowMenu({ user, onRefresh, onEdit, setDeleteConfirm, canEdit, canDelete
     }
   }
 
-  async function startOffboarding() {
-    if (!confirm(`Start 7-day offboarding for ${user.name}? They will lose access after 7 days.`)) return;
-    setActing(true);
-    try {
-      const res = await fetch(`/api/employees/${user.id}/offboard`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "Admin initiated offboarding" }),
-      });
-      const data = await res.json();
-      (res.ok ? toast.success : toast.error)(data.message || "Offboarding started.");
-      if (res.ok) onRefresh();
-    } catch { toast.error("Failed to start offboarding."); }
-    finally { setActing(false); }
-  }
-
   return (
     <>
       <DropdownMenu>
@@ -316,9 +300,11 @@ function RowMenu({ user, onRefresh, onEdit, setDeleteConfirm, canEdit, canDelete
             <>
               <DropdownMenuSeparator />
               {user.isActive && (
-                <DropdownMenuItem onClick={startOffboarding} className="text-orange-600 dark:text-orange-400 focus:text-orange-600 dark:focus:text-orange-400">
-                  <LogOut />
-                  Begin Offboarding
+                <DropdownMenuItem asChild className="text-orange-600 dark:text-orange-400 focus:text-orange-600 dark:focus:text-orange-400">
+                  <a href={`/admin/users/${user.id}/offboard`}>
+                    <LogOut />
+                    Offboard Employee
+                  </a>
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={() => setDeleteConfirm(user)} className="text-destructive focus:text-destructive">
@@ -725,13 +711,25 @@ export default function AdminUsersPage() {
     if (!deleteConfirm) return;
     setSubmitting(true);
     try {
-      await axios.delete(`/api/users/${deleteConfirm.id}`);
-      toast.success(`Account for "${deleteConfirm.name}" has been decommissioned.`);
+      // Permanent delete = soft-archive + disable the company mailbox + notice email.
+      // (Not a hard row delete — the record is recoverable by IT, mailbox is disabled.)
+      const res = await fetch(`/api/employees/${deleteConfirm.id}/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete");
+      toast.success(
+        data.mailSent
+          ? `"${deleteConfirm.name}" removed & archived — notice emailed, mailbox disabled.`
+          : `"${deleteConfirm.name}" removed & archived${data.mailError ? " (notice email failed)" : ""}.`,
+      );
       setDeleteConfirm(null);
       await load();
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || err.message;
-      
+
       // Plain English linkage detection
       if (errorMsg.includes("attendance_logs")) {
         toast.error("Cannot Delete: Employee has Attendance records. You must clear their logs first.");
@@ -1583,8 +1581,14 @@ export default function AdminUsersPage() {
                     <Trash2 size={20} />
                  </div>
                  <div className="flex flex-col">
-                    <p className="text-sm font-semibold text-theme-fg tracking-tight">Delete <span className="text-rose-500 font-bold">"{deleteConfirm.name}"</span>?</p>
-                    <p className="text-xs text-theme-muted mt-0.5">This action cannot be undone.</p>
+                    <p className="text-sm font-semibold text-theme-fg tracking-tight">Permanently delete <span className="text-rose-500 font-bold">"{deleteConfirm.name}"</span>?</p>
+                    {deleteConfirm.zoho_email ? (
+                      <p className="text-xs text-rose-500 mt-0.5 max-w-[320px]">
+                        Their company mailbox <span className="font-semibold">{deleteConfirm.zoho_email}</span> will be disabled and cannot be reclaimed. The record is archived and a notice is emailed.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-theme-muted mt-0.5">Archived, panel access revoked, and a notice is emailed. This cannot be undone.</p>
+                    )}
                  </div>
               </div>
               

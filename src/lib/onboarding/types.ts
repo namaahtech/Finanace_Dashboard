@@ -10,7 +10,8 @@ export type OnboardingStatus =
   | "sent"
   | "viewed"
   | "signed"
-  | "completed";
+  | "completed"
+  | "revoked";
 
 // A free-text sub-field attached to a config option (e.g. stipend amount).
 export interface ConfigField {
@@ -152,4 +153,12 @@ export const STATUS_META: Record<OnboardingStatus, { label: string; className: s
   viewed:            { label: "Viewed",            className: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/20" },
   signed:            { label: "Signed",            className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
   completed:         { label: "Completed",         className: "bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border-emerald-600/30" },
+  revoked:           { label: "Revoked",           className: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20" },
 };
+
+// Add the revocation trail to the packet shape (populated by the revoke route).
+export interface OnboardingRevocation {
+  revoked_at: string | null;
+  revoked_by: string | null;
+  revoke_reason: string | null;
+}
