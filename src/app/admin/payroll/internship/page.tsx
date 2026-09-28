@@ -721,7 +721,7 @@ export default function InternshipStipendPage() {
                       </TableCell>
                       <TableCell className="text-xs font-mono text-muted-foreground">{i.upi_id ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(i.stipend_amount)}</TableCell>
-                      <TableCell className="text-xs tabular-nums">{dayjs(i.joining_date).format("DD MMM YYYY")}</TableCell>
+                      <TableCell className="text-xs tabular-nums">{i.joining_date ? dayjs(i.joining_date).format("DD MMM YYYY") : "—"}</TableCell>
                       <TableCell className="text-xs tabular-nums">{dayjs(i.starting_date).format("DD MMM YYYY")}</TableCell>
                       <TableCell className="text-xs tabular-nums">{dayjs(i.billing_date).format("DD MMM YYYY")}</TableCell>
                       <TableCell className="text-right text-xs tabular-nums text-muted-foreground">{bufferDays(i.joining_date, i.starting_date)}d</TableCell>

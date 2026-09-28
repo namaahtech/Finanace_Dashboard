@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/ButtonLegacy";
 import { Badge } from "@/components/ui/BadgeLegacy";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/layout/AuthProvider";
+import { MyLearningBoard } from "@/components/academy/MyLearningBoard";
 
 export default function TrainingAcademyPage() {
   const { user } = useAuth();
@@ -142,7 +143,10 @@ export default function TrainingAcademyPage() {
       }
     >
       <div className="space-y-8">
-        
+
+        {/* My Learning — assigned courses in priority order (hidden when none) */}
+        <MyLearningBoard />
+
         {/* Featured Section */}
         <div className="relative h-[300px] rounded-3xl overflow-hidden group">
           <img 

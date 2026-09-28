@@ -78,6 +78,9 @@ export default function RecruitmentHubPage() {
   const canCreate = permissions?.recruitment?.can_create ?? false;
 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  // Emails of existing staff — used to keep internal accounts (e.g. an admin who
+  // once applied, or test rows) out of the candidate pipeline.
+  const [staffEmails, setStaffEmails] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Candidate | null>(null);
@@ -87,6 +90,17 @@ export default function RecruitmentHubPage() {
 
   useEffect(() => {
     fetchCandidates();
+    // Load current staff emails once so we can exclude them from the pipeline.
+    (async () => {
+      // Every address a staff member is known by — login, personal and company
+      // mailbox — so someone who applied from a personal address is still caught.
+      const { data } = await supabase.from("employees").select("email, personal_email, zoho_email");
+      const all = new Set<string>();
+      for (const e of (data || []) as any[]) {
+        for (const a of [e.email, e.personal_email, e.zoho_email]) if (a) all.add(String(a).toLowerCase());
+      }
+      setStaffEmails(all);
+    })();
     const channel = supabase
       .channel("recruitment-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "applications" }, fetchCandidates)
@@ -198,20 +212,24 @@ export default function RecruitmentHubPage() {
     }
   }
 
-  const filtered = candidates.filter(c =>
+  // The real pipeline excludes anyone who is already staff (admins, employees,
+  // test rows) — used for both the stat cards and the searchable list.
+  const pipeline = candidates.filter(c => !staffEmails.has((c.email || "").toLowerCase()));
+
+  const filtered = pipeline.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.role.toLowerCase().includes(search.toLowerCase())
   );
 
-  const avgScore = candidates.length > 0
-    ? Math.round(candidates.reduce((a, b) => a + b.score, 0) / candidates.length)
+  const avgScore = pipeline.length > 0
+    ? Math.round(pipeline.reduce((a, b) => a + b.score, 0) / pipeline.length)
     : 0;
 
   const stats = [
-    { label: "Total pipeline", value: candidates.length, icon: Users, color: "text-sky-500" },
+    { label: "Total pipeline", value: pipeline.length, icon: Users, color: "text-sky-500" },
     { label: "Avg match score", value: `${avgScore}%`, icon: Star, color: "text-amber-500" },
-    { label: "Pending scan", value: candidates.filter(c => c.status === 'pending').length, icon: Clock, color: "text-zinc-500" },
-    { label: "Hired today", value: candidates.filter(c => c.decision === 'accepted').length, icon: CheckCircle2, color: "text-emerald-500" },
+    { label: "Pending scan", value: pipeline.filter(c => c.status === 'pending').length, icon: Clock, color: "text-zinc-500" },
+    { label: "Hired today", value: pipeline.filter(c => c.decision === 'accepted').length, icon: CheckCircle2, color: "text-emerald-500" },
   ];
 
   return (

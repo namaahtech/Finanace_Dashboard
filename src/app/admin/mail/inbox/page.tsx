@@ -5,7 +5,7 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useToast } from "@/components/ui/ToastLegacy";
-import { cn } from "@/lib/utils";
+import { cn, htmlToText } from "@/lib/utils";
 import Link from "next/link";
 import {
   Inbox, Send, FileText, Star, StarOff, Trash2, RefreshCw, Search,
@@ -1020,7 +1020,7 @@ export default function InboxPage() {
                       {msg.subject || "(no subject)"}
                     </p>
                     <div className="flex items-center gap-1.5">
-                      <p className="text-[10px] text-theme-muted truncate flex-1">{msg.ai_summary || msg.preview}</p>
+                      <p className="text-[10px] text-theme-muted truncate flex-1">{msg.ai_summary || htmlToText(msg.preview)}</p>
                       <AICategoryBadge category={msg.ai_category || "GENERAL"} />
                       <MailScopeBadge msg={msg} />
                       {msg.has_attachment && <Paperclip size={9} className="text-theme-muted flex-shrink-0" />}
@@ -1118,7 +1118,7 @@ export default function InboxPage() {
                             </span>
                             {!isExpanded && (
                               <span className="text-[10px] text-theme-muted truncate flex-1 pr-4 max-w-md">
-                                — {msg.preview || "No preview"}
+                                — {htmlToText(msg.preview) || "No preview"}
                               </span>
                             )}
                             {isExpanded && (
@@ -1155,7 +1155,7 @@ export default function InboxPage() {
                                 />
                               ) : (
                                 <p className="text-sm text-theme-fg leading-relaxed whitespace-pre-wrap">
-                                  {msg.preview || "No content available."}
+                                  {htmlToText(msg.preview) || "No content available."}
                                 </p>
                               )}
                             </div>

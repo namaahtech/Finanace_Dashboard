@@ -115,6 +115,32 @@ export function resolveSchemaFor(
   return Array.isArray(ft) && ft.length ? (ft as ConfigCategory[]) : deriveFullTimeSchema(intern);
 }
 
+/**
+ * Find the employee record created from a candidate.
+ *
+ * The candidate's address can live in either column: `/api/users` stores it in
+ * `personal_email`, and `email` becomes the company address once a mailbox is
+ * provisioned. Matching `email` alone misses anyone who got a company mailbox.
+ * Two plain queries rather than `.or()` so an address containing a comma can't
+ * break the PostgREST filter syntax.
+ */
+export async function findEmployeeForCandidate(
+  candidateEmail: string | null | undefined
+): Promise<{ id: string; name: string; email: string | null; employment_type: string | null; designation: string | null; department: string | null } | null> {
+  const addr = (candidateEmail || "").trim();
+  if (!addr) return null;
+  // ilike is used for case-insensitivity, but `_` and `%` are wildcards in it —
+  // escape them so "a_b@x.com" can't also match "axb@x.com".
+  const pattern = addr.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const supabase = getSupabaseAdmin();
+  const cols = "id, name, email, employment_type, designation, department";
+  for (const col of ["personal_email", "email"] as const) {
+    const { data } = await supabase.from("employees").select(cols).ilike(col, pattern).limit(1).maybeSingle();
+    if (data) return data as any;
+  }
+  return null;
+}
+
 /** Absolute base URL for magic links (env override → request origin fallback handled by caller). */
 export function appBaseUrl(): string {
   return (

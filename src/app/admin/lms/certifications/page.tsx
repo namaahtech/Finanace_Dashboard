@@ -6,7 +6,7 @@ import {
   Award, Search, Download, Eye, Plus, Calendar,
   ShieldCheck, Zap, Loader2, X, Check, User,
   Star, RefreshCw, Copy, AlertCircle, Palette,
-  Trophy, ChevronRight, BadgeCheck, Hash, Filter
+  Trophy, ChevronRight, BadgeCheck, Hash, Filter, Share2, Edit3
 } from "lucide-react";
 import { Button } from "@/components/ui/ButtonLegacy";
 import { Badge } from "@/components/ui/BadgeLegacy";
@@ -31,6 +31,7 @@ interface CertRecord {
   avatarColor: string;
   course: string;
   date: string;
+  issuedAt: string;
   hash: string;
   employeeId: string;
   courseId: string;
@@ -218,6 +219,56 @@ export default function CertificationsManagerPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [showGrant, setShowGrant] = useState(false);
+  const [sharingId, setSharingId] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState<{ cert: CertRecord; value: string } | null>(null);
+  const [savingDate, setSavingDate] = useState(false);
+
+  // datetime-local expects "YYYY-MM-DDTHH:mm" in local time.
+  const toLocalInput = (iso: string) => {
+    const d = new Date(iso); const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  const fmtIssued = (iso: string) =>
+    new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  async function saveIssuedAt() {
+    if (!editDate) return;
+    setSavingDate(true);
+    try {
+      const iso = new Date(editDate.value).toISOString();
+      const { error } = await supabase.from("lms_certifications").update({ issued_at: iso }).eq("id", editDate.cert.id);
+      if (error) throw error;
+      showToast("Issue date updated", "success");
+      setEditDate(null);
+      fetchCerts(true);
+    } catch (e: any) {
+      showToast(e.message || "Failed to update date", "error");
+    } finally {
+      setSavingDate(false);
+    }
+  }
+
+  // Email the certificate PDF to the recipient's company or personal address.
+  async function shareCert(cert: CertRecord) {
+    const toCompany = window.confirm(
+      `Share "${cert.employee}"'s certificate by email?\n\nOK = send to their COMPANY mail\nCancel = send to their PERSONAL mail`,
+    );
+    setSharingId(cert.id);
+    try {
+      const res = await fetch(`/api/lms/certificates/${cert.id}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: toCompany ? "company" : "personal" }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to share");
+      showToast(`Certificate emailed to ${json.to}`, "success");
+    } catch (e: any) {
+      showToast(e.message || "Failed to share certificate", "error");
+    } finally {
+      setSharingId(null);
+    }
+  }
 
   const [stats, setStats] = useState({
     total: 0, verified: 0, pending: 0, recipients: 0,
@@ -242,6 +293,7 @@ export default function CertificationsManagerPage() {
           avatarColor: avatarColor(name),
           course: (c.lms_courses as any)?.title || "Unknown",
           date: c.issue_date,
+          issuedAt: (c as any).issued_at || (c as any).created_at || c.issue_date,
           hash: c.certificate_number,
           employeeId: (c.employees as any)?.id || "",
           courseId: (c.lms_courses as any)?.id || "",
@@ -535,7 +587,16 @@ export default function CertificationsManagerPage() {
                               <span className="text-theme-muted">{cert.course}</span>
                             </div>
                           </td>
-                          <td className="px-5 py-3 text-theme-muted text-xs">{fmtDate(cert.date)}</td>
+                          <td className="px-5 py-3 text-xs">
+                            <button
+                              onClick={() => setEditDate({ cert, value: toLocalInput(cert.issuedAt) })}
+                              title="Edit issue date & time"
+                              className="group/d inline-flex items-center gap-1.5 text-theme-muted hover:text-theme-fg"
+                            >
+                              <Calendar size={11} /> {fmtIssued(cert.issuedAt)}
+                              <Edit3 size={9} className="opacity-0 group-hover/d:opacity-100" />
+                            </button>
+                          </td>
                           <td className="px-5 py-3">
                             <Badge variant="success" className="text-[10px] flex items-center gap-1 w-fit">
                               <ShieldCheck size={9} /> Verified
@@ -553,11 +614,18 @@ export default function CertificationsManagerPage() {
                           </td>
                           <td className="px-5 py-3 text-right">
                             <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-sky-500 hover:bg-sky-500/10">
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-sky-500 hover:bg-sky-500/10"
+                                onClick={() => window.open(`/api/lms/certificates/${cert.id}/pdf`, "_blank")}>
                                 <Eye size={12} className="mr-1" /> View
                               </Button>
-                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-emerald-500 hover:bg-emerald-500/10">
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-emerald-500 hover:bg-emerald-500/10"
+                                onClick={() => window.open(`/api/lms/certificates/${cert.id}/pdf?download=1`, "_blank")}>
                                 <Download size={12} className="mr-1" /> PDF
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-violet-500 hover:bg-violet-500/10"
+                                disabled={sharingId === cert.id}
+                                onClick={() => shareCert(cert)}>
+                                {sharingId === cert.id ? <Loader2 size={12} className="mr-1 animate-spin" /> : <Share2 size={12} className="mr-1" />} Share
                               </Button>
                             </div>
                           </td>
@@ -713,6 +781,29 @@ export default function CertificationsManagerPage() {
           />
         )}
       </AnimatePresence>
+
+      {editDate && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={() => setEditDate(null)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative w-full max-w-sm rounded-2xl border border-theme-border bg-theme-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-theme-fg flex items-center gap-2"><Calendar size={15} /> Edit Issue Date &amp; Time</h3>
+            <p className="mt-1 text-xs text-theme-muted">{editDate.cert.employee} · {editDate.cert.course}</p>
+            <input
+              type="datetime-local"
+              value={editDate.value}
+              onChange={(e) => setEditDate({ ...editDate, value: e.target.value })}
+              className="mt-4 w-full rounded-lg border border-theme-border bg-theme-page px-3 py-2 text-sm text-theme-fg focus:outline-none focus:ring-1 focus:ring-theme-primary"
+            />
+            <p className="mt-1.5 text-[11px] text-theme-muted">This date &amp; time appears on the certificate PDF.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setEditDate(null)} className="px-4">Cancel</Button>
+              <Button onClick={saveIssuedAt} disabled={savingDate} className="px-5">
+                {savingDate ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Check size={14} className="mr-1.5" />} Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

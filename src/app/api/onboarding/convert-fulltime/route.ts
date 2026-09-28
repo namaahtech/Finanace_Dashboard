@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getActor } from "@/lib/onboarding/server";
+import { getActor, findEmployeeForCandidate } from "@/lib/onboarding/server";
 import { getMailContext, sendRecruitmentMail, fullTimeConversionHtml } from "@/lib/recruitment-mail";
 import { logAudit } from "@/lib/audit";
 
@@ -66,12 +66,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "This person has already been converted to full-time." }, { status: 409 });
     }
 
-    // Locate their employee record by email (case-insensitive).
-    const { data: employee } = await supabase
-      .from("employees")
-      .select("id, name, email, employment_type, designation, department")
-      .ilike("email", packet.candidate_email)
-      .maybeSingle();
+    // Matches personal_email as well as email: once a company mailbox is created
+    // the employee's `email` is the company address, so an `email`-only lookup
+    // reported "no employee record" for exactly the people most likely to convert.
+    const employee = await findEmployeeForCandidate(packet.candidate_email);
 
     if (!employee) {
       return NextResponse.json(

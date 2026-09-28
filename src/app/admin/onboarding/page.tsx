@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   FileSignature, Plus, Settings, Search, Loader2, Trash2,
-  Clock, CheckCircle2, Send, PenTool, Users, ChevronRight, UserPlus, Briefcase, BadgeCheck, Ban,
+  Clock, CheckCircle2, Send, PenTool, Users, ChevronRight, UserPlus, Briefcase, BadgeCheck, Hourglass, Ban,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,7 @@ function StatusHistory({ p }: { p: PacketRow }) {
     { label: "Approved", at: p.approved_at },
     { label: "Sent", at: p.sent_at },
     { label: "Viewed", at: p.viewed_at },
-    { label: "Signed", at: p.signed_at },
+    { label: "Signed by Candidate", at: p.signed_at },
     { label: "Completed", at: p.status === "completed" ? p.updated_at : null },
     // Only shown once it has actually happened — an empty "Converted" row on every
     // intern would read as a step they're missing rather than an optional one.
@@ -130,8 +130,9 @@ const FILTERS: { key: string; label: string; match: (p: PacketRow) => boolean }[
   { key: "all", label: "All", match: (p) => !isRevoked(p) },
   { key: "draft", label: "Drafts", match: (p) => p.status === "draft" || p.status === "changes_requested" },
   { key: "pending", label: "Pending", match: (p) => p.status === "pending_approval" },
-  { key: "sent", label: "Sent / Viewed", match: (p) => p.status === "approved" || p.status === "sent" || p.status === "viewed" },
-  { key: "signed", label: "Signed", match: (p) => isOnboarded(p) },
+  { key: "sent", label: "Awaiting Signature", match: (p) => p.status === "approved" || p.status === "sent" || p.status === "viewed" },
+  { key: "awaiting_acceptance", label: "Awaiting Acceptance", match: (p) => p.status === "signed" },
+  { key: "completed", label: "Completed", match: (p) => p.status === "completed" },
   { key: "intern", label: "Intern", match: isIntern },
   { key: "fulltime", label: "Full-Time", match: isFullTime },
   { key: "archive", label: "Archive", match: isRevoked },
@@ -383,8 +384,9 @@ export default function OnboardingHubPage() {
   const stats = [
     { key: "draft",    label: "In progress",      value: packets.filter((p) => ["draft", "changes_requested"].includes(p.status)).length, icon: PenTool,      color: "text-zinc-500" },
     { key: "pending",  label: "Pending approval", value: packets.filter((p) => p.status === "pending_approval").length,                    icon: Clock,        color: "text-amber-500" },
-    { key: "sent",     label: "Sent",             value: packets.filter((p) => ["approved", "sent", "viewed"].includes(p.status)).length,  icon: Send,         color: "text-violet-500" },
-    { key: "signed",   label: "Signed",           value: packets.filter(isOnboarded).length,                                               icon: CheckCircle2, color: "text-emerald-500" },
+    { key: "sent",                label: "Awaiting Signature",  value: packets.filter((p) => ["approved", "sent", "viewed"].includes(p.status)).length, icon: Send,         color: "text-violet-500" },
+    { key: "awaiting_acceptance", label: "Awaiting Acceptance", value: packets.filter((p) => p.status === "signed").length,                                icon: Hourglass,    color: "text-teal-500" },
+    { key: "completed",           label: "Completed",           value: packets.filter((p) => p.status === "completed").length,                             icon: CheckCircle2, color: "text-emerald-500" },
     { key: "intern",   label: "Intern",           value: packets.filter(isIntern).length,                                                  icon: Users,        color: "text-sky-500" },
     { key: "fulltime", label: "Full-Time",        value: packets.filter(isFullTime).length,                                                icon: Briefcase,    color: "text-indigo-500" },
   ];
@@ -418,9 +420,9 @@ export default function OnboardingHubPage() {
       ) : (
         <div className="space-y-5">
           {/* Stats */}
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-7">
             {loading
-              ? [...Array(6)].map((_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)
+              ? [...Array(7)].map((_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)
               : stats.map((s) => (
                   <Card
                     key={s.key}

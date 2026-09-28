@@ -449,6 +449,29 @@ export default function AdminLMSPage() {
     }
   };
 
+  // ─── Course row actions (view / edit / delete) ───────────────────────────────
+  const viewCourse = (course: any) => {
+    // The player loads a course by id regardless of publish status, so an admin
+    // can preview a draft too.
+    window.location.href = `/dashboard/academy/${course.id}`;
+  };
+  const editCourse = (course: any) => {
+    window.location.href = `/admin/lms/courses/${course.id}`;
+  };
+  const deleteCourse = async (course: any) => {
+    if (!confirm(`Delete "${course.title}"?\n\nThis permanently removes its modules, lessons, enrollments and certificates. This cannot be undone.`)) return;
+    try {
+      const { error } = await supabase.from("lms_courses").delete().eq("id", course.id);
+      if (error) throw error;
+      // Optimistic remove; the realtime subscription also refreshes the board.
+      setCourses((prev) => prev.filter((c) => c.id !== course.id));
+      showToast(`"${course.title}" deleted`, "success");
+      fetchLMSData(true);
+    } catch (e: any) {
+      showToast(e.message || "Failed to delete course", "error");
+    }
+  };
+
   // ─── Filtered Courses ────────────────────────────────────────────────────────
 
   const filteredCourses = courses.filter(
@@ -801,18 +824,19 @@ export default function AdminLMSPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Preview course" onClick={() => viewCourse(course)}>
                               <Eye size={14} />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0 text-sky-500"
-                              onClick={() => (window.location.href = "/admin/lms/courses")}
+                              title="Edit course"
+                              onClick={() => editCourse(course)}
                             >
                               <Edit3 size={14} />
                             </Button>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-rose-500">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-rose-500" title="Delete course" onClick={() => deleteCourse(course)}>
                               <Trash2 size={14} />
                             </Button>
                           </div>

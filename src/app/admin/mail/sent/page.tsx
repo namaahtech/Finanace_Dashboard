@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/layout/AuthProvider";
-import { cn } from "@/lib/utils";
+import { cn, htmlToText } from "@/lib/utils";
 import Link from "next/link";
 import { Send, Search, Loader2, PenLine, Paperclip, X, MailOpen } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
@@ -144,7 +144,7 @@ export default function SentPage() {
                 </div>
                 <p className="text-[11px] font-medium text-theme-muted truncate mb-0.5">{m.subject || "(no subject)"}</p>
                 <div className="flex items-center gap-1">
-                  <p className="text-[10px] text-theme-muted truncate flex-1">{m.preview}</p>
+                  <p className="text-[10px] text-theme-muted truncate flex-1">{htmlToText(m.preview)}</p>
                   {m.has_attachment && <Paperclip size={9} className="text-theme-muted" />}
                 </div>
               </div>
@@ -181,7 +181,7 @@ export default function SentPage() {
                   />
                 ) : (
                   <p className="text-sm text-theme-fg leading-relaxed whitespace-pre-wrap">
-                    {selected.preview || "No content available."}
+                    {htmlToText(selected.preview) || "No content available."}
                   </p>
                 )}
               </div>

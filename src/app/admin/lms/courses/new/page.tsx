@@ -44,7 +44,11 @@ export default function NewCoursePage() {
     category: "Engineering",
     description: "",
     level: "beginner",
-    thumbnail_url: ""
+    thumbnail_url: "",
+    // Assignment model (see L&D architecture spec). Optional = self-enroll only.
+    assignment_type: "optional" as "optional" | "mandatory" | "department_required",
+    target_department: "",
+    deadline_days: "" as string,
   });
 
   const [modules, setModules] = useState<any[]>([
@@ -71,15 +75,34 @@ export default function NewCoursePage() {
     }));
   };
 
-  const saveCourse = async () => {
+  const saveCourse = async (status: "draft" | "published") => {
+    if (!courseData.title.trim()) { toast.error("Course title is required."); return; }
+    if (courseData.assignment_type === "department_required" && !courseData.target_department.trim()) {
+      toast.error("Pick a target department for a department-required course."); return;
+    }
     setLoading(true);
     try {
-      const slug = courseData.title.toLowerCase().replace(/ /g, '-');
-      
-      // 1. Create Course
+      // Slug must be unique — suffix a short timestamp to avoid collisions.
+      const slug = `${courseData.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now().toString(36)}`;
+      const deadlineDays = courseData.assignment_type === "optional" || !courseData.deadline_days
+        ? null : parseInt(courseData.deadline_days, 10) || null;
+
+      // 1. Create Course. Publishing (and mandatory/department type) triggers the
+      //    data-layer auto-assignment; a draft stays invisible to employees.
       const { data: course, error: cErr } = await supabase
         .from('lms_courses')
-        .insert([{ ...courseData, slug, status: 'published' }])
+        .insert([{
+          title: courseData.title,
+          category: courseData.category,
+          description: courseData.description,
+          level: courseData.level,
+          thumbnail_url: courseData.thumbnail_url,
+          assignment_type: courseData.assignment_type,
+          target_department: courseData.assignment_type === "department_required" ? courseData.target_department.trim() : null,
+          deadline_days: deadlineDays,
+          slug,
+          status,
+        }])
         .select()
         .single();
 
@@ -107,7 +130,7 @@ export default function NewCoursePage() {
         }
       }
 
-      toast.success("Course published successfully!");
+      toast.success(status === "published" ? "Course published successfully!" : "Draft saved.");
       window.location.href = '/admin/lms';
     } catch (err: any) {
       toast.error(err.message);
@@ -129,13 +152,23 @@ export default function NewCoursePage() {
               Next Step
             </Button>
           ) : (
-            <Button 
-              className="bg-emerald-500 hover:bg-emerald-600 text-black font-bold" 
-              onClick={saveCourse}
-              disabled={loading}
-            >
-              {loading ? "Publishing..." : "Publish Course"}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                className="font-bold"
+                onClick={() => saveCourse("draft")}
+                disabled={loading}
+              >
+                <Save size={14} className="mr-1.5" /> Save as Draft
+              </Button>
+              <Button
+                className="bg-emerald-500 hover:bg-emerald-600 text-black font-bold"
+                onClick={() => saveCourse("published")}
+                disabled={loading}
+              >
+                {loading ? "Saving..." : "Publish Course"}
+              </Button>
+            </>
           )}
         </div>
       }
@@ -281,7 +314,53 @@ export default function NewCoursePage() {
                 </div>
                 <div>
                   <h3 className="text-2xl font-black text-theme-fg mb-2">Ready to Launch?</h3>
-                  <p className="text-theme-muted text-sm max-w-sm mx-auto">Your course curriculum is structured. Once you publish, it will be immediately available to all assigned employees.</p>
+                  <p className="text-theme-muted text-sm max-w-sm mx-auto">Choose how this course reaches employees. Publishing applies the assignment rule automatically; a draft stays visible only to admins.</p>
+                </div>
+
+                {/* Assignment model */}
+                <div className="mx-auto max-w-md space-y-4 text-left">
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-theme-muted tracking-widest block mb-2">Assignment</label>
+                    <Select
+                      value={courseData.assignment_type}
+                      onValueChange={(v) => setCourseData({ ...courseData, assignment_type: v as typeof courseData.assignment_type })}
+                    >
+                      <SelectTrigger className="w-full h-12"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="optional">Optional — self-enroll, no deadline</SelectItem>
+                        <SelectItem value="mandatory">Mandatory — auto-assigned to everyone</SelectItem>
+                        <SelectItem value="department_required">Department — auto-assigned by department</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {courseData.assignment_type === "department_required" && (
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-theme-muted tracking-widest block mb-2">Target Department</label>
+                      <input
+                        value={courseData.target_department}
+                        onChange={(e) => setCourseData({ ...courseData, target_department: e.target.value })}
+                        placeholder="e.g. Systems & Engineering"
+                        className="w-full bg-theme-page border border-theme-border rounded-xl h-12 px-4 text-sm font-bold text-theme-fg focus:outline-none focus:ring-1 focus:ring-theme-primary"
+                      />
+                      <p className="mt-1 text-[10px] text-theme-muted">Must match the employees&apos; department field exactly.</p>
+                    </div>
+                  )}
+
+                  {courseData.assignment_type !== "optional" && (
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-theme-muted tracking-widest block mb-2">Deadline (days from assignment)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={courseData.deadline_days}
+                        onChange={(e) => setCourseData({ ...courseData, deadline_days: e.target.value })}
+                        placeholder="e.g. 14 — leave blank for no deadline"
+                        className="w-full bg-theme-page border border-theme-border rounded-xl h-12 px-4 text-sm font-bold text-theme-fg focus:outline-none focus:ring-1 focus:ring-theme-primary"
+                      />
+                      <p className="mt-1 text-[10px] text-theme-muted">Reminders fire at 7 / 3 / 1 days before the deadline, with manager escalation if overdue.</p>
+                    </div>
+                  )}
                 </div>
                 <div className="flex justify-center gap-8 text-left max-w-md mx-auto">
                   <div className="space-y-1">

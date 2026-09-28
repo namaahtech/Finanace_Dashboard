@@ -29,6 +29,16 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Apply the saved UI text-size before first paint (no flash). The whole
+            app is rem-based, so the root font-size scales every screen. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var v=localStorage.getItem('nexus-font-px');if(v){var n=parseInt(v,10);if(n>=10&&n<=24){document.documentElement.style.fontSize=n+'px';}}}catch(e){}})();",
+          }}
+        />
+      </head>
       <body className={inter.className} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <TooltipProvider delayDuration={200}>

@@ -88,6 +88,9 @@ export default function OnboardingBuilderPage() {
 
   // Full-depth form-builder editing (gated by onboarding_builder permission)
   const [canEditSchema, setCanEditSchema] = useState(false);
+  // Onboarding → Employees handoff: who may do it, and whether it's already done.
+  const [canAddEmployee, setCanAddEmployee] = useState(false);
+  const [linkedEmployee, setLinkedEmployee] = useState<{ id: string; name: string } | null>(null);
   const [editSchema, setEditSchema] = useState(false);
   const [schemaDraft, setSchemaDraft] = useState<ConfigCategory[]>([]);
   // Both configuration sheets, so switching Engagement Type is instant.
@@ -146,6 +149,8 @@ export default function OnboardingBuilderPage() {
       setIsAdmin(json.isAdmin);
       setIsOwner(json.isOwner);
       setCanEditSchema(!!json.canEditSchema);
+      setCanAddEmployee(!!json.canAddEmployee);
+      setLinkedEmployee(json.linkedEmployee ?? null);
       setRequireApproval(json.requireApproval ?? true);
       if (resyncForm || !form) {
         const loaded: FormState = {
@@ -359,7 +364,7 @@ export default function OnboardingBuilderPage() {
     { label: "Approved", at: packet.approved_at, icon: ShieldCheck },
     { label: "Sent", at: packet.sent_at, icon: Mail },
     { label: "Viewed", at: packet.viewed_at, icon: Clock },
-    { label: "Signed", at: packet.signed_at, icon: CheckCircle2 },
+    { label: "Signed by Candidate", at: packet.signed_at, icon: CheckCircle2 },
     { label: "Completed", at: packet.status === "completed" ? packet.updated_at : null, icon: ShieldCheck },
   ];
 
@@ -458,10 +463,21 @@ export default function OnboardingBuilderPage() {
                     </div>
                   </div>
                 ))}
-                {isAdmin && status === "completed" && (
-                  <Button variant="outline" size="sm" onClick={openAddEmployee} className="ml-auto">
-                    <UserPlus size={13} /> Add Employee
-                  </Button>
+                {/* Handoff. Anyone with the Employees create right can do it (HR
+                    included, not only admin); once done it becomes a settled state
+                    so the same person can't be added twice. */}
+                {status === "completed" && (
+                  linkedEmployee ? (
+                    <Button asChild variant="outline" size="sm" className="ml-auto border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-400">
+                      <a href="/admin/users" title={`Open ${linkedEmployee.name} in Employees`}>
+                        <CheckCircle2 size={13} /> Added to Employees
+                      </a>
+                    </Button>
+                  ) : canAddEmployee ? (
+                    <Button variant="outline" size="sm" onClick={openAddEmployee} className="ml-auto">
+                      <UserPlus size={13} /> Add Employee
+                    </Button>
+                  ) : null
                 )}
               </div>
               {packet.signature && (packet.signature.ip || packet.signature.user_agent) && (() => {
@@ -744,7 +760,15 @@ export default function OnboardingBuilderPage() {
           employment_type: "internship",
           salary_structure: "stipend",
         }}
-        onSuccess={() => toast.success(`${packet.candidate_name} added as an employee`)}
+        onSuccess={async () => {
+          // Record the handoff on the packet, then refresh so the button flips to
+          // "Added to Employees".
+          const res = await fetch(`/api/onboarding/${id}/link-employee`, { method: "POST" });
+          const json = await res.json().catch(() => ({}));
+          if (res.ok) toast.success(`${packet.candidate_name} added to Employees`);
+          else toast.warning(json.error || `${packet.candidate_name} was added, but the handoff wasn't recorded.`);
+          load(false);
+        }}
       />
 
       {/* Request changes dialog */}
