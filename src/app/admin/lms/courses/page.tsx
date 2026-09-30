@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/BadgeLegacy";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastLegacy";
 import { cn } from "@/lib/utils";
+import { LessonEditor } from "@/components/lms/LessonEditor";
 import {
   Select,
   SelectContent,
@@ -189,6 +190,7 @@ export default function ManageCoursesPage() {
 
   // Builder state
   const [modules, setModules] = useState<DBModule[]>([]);
+  const [editingLesson, setEditingLesson] = useState<{ id: string; type: LessonType } | null>(null);
   const [loadingModules, setLoadingModules] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -881,6 +883,8 @@ export default function ManageCoursesPage() {
                                                   variant="ghost"
                                                   size="sm"
                                                   className="h-8 w-8 p-0 hover:bg-theme-primary/10 hover:text-theme-primary"
+                                                  title="Edit content"
+                                                  onClick={() => setEditingLesson({ id: les.id, type: les.lesson_type })}
                                                 >
                                                   <Edit3 size={13} />
                                                 </Button>
@@ -943,6 +947,15 @@ export default function ManageCoursesPage() {
           </>
         )}
       </div>
+
+      {editingLesson && (
+        <LessonEditor
+          lessonId={editingLesson.id}
+          lessonType={editingLesson.type}
+          onClose={() => setEditingLesson(null)}
+          onSaved={() => fetchModules(selectedCourse!.id)}
+        />
+      )}
     </DashboardShell>
   );
 }

@@ -23,6 +23,8 @@ import { Badge } from "@/components/ui/BadgeLegacy";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
+import { LessonContent } from "@/components/lms/LessonContent";
 import { useAuth, getDashboardForRole, type Role } from "@/components/layout/AuthProvider";
 
 export default function CoursePlayerPage() {
@@ -44,6 +46,10 @@ export default function CoursePlayerPage() {
   const [enrollment, setEnrollment] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+  const [marking, setMarking] = useState(false);
+  const [reminders, setReminders] = useState<string[]>([]);
+  const [gateOk, setGateOk] = useState(false);
 
   const fetchCourseContent = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -86,6 +92,21 @@ export default function CoursePlayerPage() {
       setCourse(courseData);
       setEnrollment(enrollData);
 
+      // Which lessons this learner has already completed (drives the checkmarks
+      // + progress; the DB trigger recomputes % and auto-issues the certificate).
+      const { data: prog } = await supabase
+        .from('lms_lesson_progress')
+        .select('lesson_id')
+        .eq('employee_id', user.id);
+      setCompletedIds(new Set((prog || []).map((p: any) => p.lesson_id)));
+
+      // Which deadline reminders have already fired (for the mandatory-detail log).
+      if (enrollData?.id) {
+        const { data: rem } = await supabase
+          .from('lms_reminders').select('kind').eq('enrollment_id', enrollData.id);
+        setReminders((rem || []).map((r: any) => r.kind));
+      }
+
       // Set first lesson as active if none set
       if (!activeLesson && courseData.lms_modules?.[0]?.lms_lessons?.[0]) {
         setActiveLesson(courseData.lms_modules[0].lms_lessons[0]);
@@ -109,6 +130,45 @@ export default function CoursePlayerPage() {
       supabase.removeChannel(channel);
     };
   }, [fetchCourseContent, id, enrollment?.id]);
+
+  // All lessons flattened in curriculum order — used to advance to the next one.
+  const orderedLessons: any[] = (course?.lms_modules || [])
+    .slice()
+    .sort((a: any, b: any) => a.order_index - b.order_index)
+    .flatMap((m: any) => (m.lms_lessons || []).slice().sort((a: any, b: any) => a.order_index - b.order_index));
+
+  const goTo = (delta: number) => {
+    const idx = orderedLessons.findIndex((l) => l.id === activeLesson?.id);
+    const next = orderedLessons[idx + delta];
+    if (next) setActiveLesson(next);
+  };
+
+  async function markComplete() {
+    if (!activeLesson || !user?.id || marking) return;
+    setMarking(true);
+    try {
+      // Upsert lesson completion — the DB trigger recomputes enrollment progress
+      // and auto-issues the certificate when the last lesson lands.
+      const { error } = await supabase
+        .from('lms_lesson_progress')
+        .upsert({ lesson_id: activeLesson.id, employee_id: user.id }, { onConflict: 'lesson_id,employee_id' });
+      if (error) throw error;
+      setCompletedIds((prev) => new Set(prev).add(activeLesson.id));
+      const idx = orderedLessons.findIndex((l) => l.id === activeLesson.id);
+      const isLast = idx === orderedLessons.length - 1;
+      if (!isLast) goTo(1);
+      await fetchCourseContent(true); // refresh % (and certificate state) from the trigger
+      toast.success(isLast ? "Course complete — certificate issued!" : "Lesson completed");
+    } catch (e: any) {
+      toast.error(e.message || "Couldn't mark complete");
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  const activeDone = activeLesson ? completedIds.has(activeLesson.id) : false;
+  const activeIdx = orderedLessons.findIndex((l) => l.id === activeLesson?.id);
+  const isComplete = (enrollment?.progress_percent || 0) >= 100;
 
   if (loading && !course) {
     return (
@@ -155,73 +215,98 @@ export default function CoursePlayerPage() {
               <span className="text-[10px] font-bold text-zinc-500">{enrollment?.progress_percent || 0}%</span>
             </div>
           </div>
-          <Button 
-            disabled={(enrollment?.progress_percent || 0) < 100}
-            size="sm" 
-            className="bg-emerald-500 hover:bg-emerald-600 text-black font-black text-[10px] uppercase px-4 h-9"
+          <Button
+            disabled={!isComplete}
+            onClick={() => router.push('/dashboard/academy/certificates')}
+            size="sm"
+            className="bg-emerald-500 hover:bg-emerald-600 text-black font-black text-[10px] uppercase px-4 h-9 disabled:opacity-50"
           >
-            Claim Certificate
+            <Award size={13} className="mr-1.5" /> {isComplete ? "View Certificate" : "Certificate Locked"}
           </Button>
         </div>
       </header>
 
+      {/* Mandatory / department deadline banner — countdown, due date, and the
+          reminder log (what's fired vs still scheduled) so "mandatory" feels real. */}
+      {enrollment?.due_date && !isComplete && (() => {
+        const dLeft = Math.ceil((new Date(enrollment.due_date).getTime() - Date.now()) / 86_400_000);
+        const overdue = dLeft < 0;
+        const REM = [{ k: "due_7d", label: "7 days" }, { k: "due_3d", label: "3 days" }, { k: "due_1d", label: "1 day" }];
+        return (
+          <div className={cn("border-b px-6 py-3 flex flex-wrap items-center gap-x-6 gap-y-2", overdue ? "bg-rose-500/10 border-rose-500/30" : "bg-amber-500/10 border-amber-500/30")}>
+            <div className="flex items-center gap-2">
+              <Clock size={15} className={overdue ? "text-rose-400" : "text-amber-400"} />
+              <span className="text-xs font-bold text-white">
+                {overdue ? `${Math.abs(dLeft)} day(s) overdue` : dLeft === 0 ? "Due today" : `${dLeft} day(s) left`}
+              </span>
+              <span className="text-[11px] text-zinc-400">· due {new Date(enrollment.due_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Reminders</span>
+              {REM.map((r) => (
+                <span key={r.k} className={cn("text-[10px] font-semibold", reminders.includes(r.k) ? "text-emerald-400" : "text-zinc-500")}>
+                  {reminders.includes(r.k) ? "✓" : "○"} {r.label}
+                </span>
+              ))}
+            </div>
+            {overdue && <span className="text-[11px] text-rose-400 font-semibold">Escalates to your manager</span>}
+          </div>
+        );
+      })()}
+
       <div className="flex-1 flex overflow-hidden">
-        
+
         {/* Main Player Area */}
         <div className="flex-1 overflow-y-auto bg-zinc-950 flex flex-col">
-          {/* Video Player */}
-          <div className="aspect-video w-full bg-zinc-900 relative group overflow-hidden">
-            {activeLesson?.video_url ? (
-              <iframe 
-                src={activeLesson.video_url}
-                className="absolute inset-0 w-full h-full border-none"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            ) : (
-              <>
-                <img 
-                  src={course.thumbnail_url || "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2070&auto=format&fit=crop"}
-                  className="w-full h-full object-cover opacity-40 blur-sm scale-105"
-                />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="relative group/play cursor-pointer">
-                    <div className="absolute inset-0 bg-theme-primary rounded-full blur-2xl opacity-20 group-hover/play:opacity-40 transition-opacity" />
-                    <div className="h-20 w-20 rounded-full bg-theme-primary flex items-center justify-center text-black shadow-2xl relative transition-transform group-hover/play:scale-110">
-                      <Play size={32} fill="currentColor" />
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
+          {/* Lesson header */}
+          <div className="max-w-3xl mx-auto pt-8 px-8 w-full space-y-3">
+            <Badge className="bg-theme-primary/10 text-theme-primary border-theme-primary/20 uppercase">{activeLesson?.lesson_type || "lesson"}</Badge>
+            <h2 className="text-3xl font-black">{activeLesson?.title}</h2>
+            <div className="flex items-center gap-6 text-zinc-500 text-xs font-bold uppercase tracking-widest">
+              <span className="flex items-center gap-2"><Clock size={14} /> {activeLesson?.duration_minutes || 0} Mins</span>
+            </div>
           </div>
 
-          {/* Lesson Content */}
-          <div className="max-w-3xl mx-auto py-12 px-8 w-full space-y-8">
-            <div className="space-y-4">
-              <Badge className="bg-theme-primary/10 text-theme-primary border-theme-primary/20">Lesson {activeLesson?.order_index || 1}</Badge>
-              <h2 className="text-4xl font-black">{activeLesson?.title}</h2>
-              <div className="flex items-center gap-6 text-zinc-500 text-xs font-bold uppercase tracking-widest">
-                <span className="flex items-center gap-2"><Clock size={14} /> {activeLesson?.duration_minutes || 0} Mins</span>
-              </div>
+          {/* Enforced lesson content (video no-skip / read-all / quiz / assignment) */}
+          {activeLesson && user?.id && (
+            <div className="w-full">
+              <LessonContent
+                lesson={activeLesson}
+                employeeId={user.id}
+                alreadyDone={activeDone}
+                onGateChange={setGateOk}
+              />
             </div>
+          )}
 
-            <div className="prose prose-invert max-w-none text-zinc-400 leading-relaxed">
-              {activeLesson?.content ? (
-                <div dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
-              ) : (
-                <p className="text-lg text-zinc-300">Watch the video above to complete this lesson. Use the sidebar to navigate through modules.</p>
-              )}
-            </div>
-
-            {/* Interaction Buttons */}
-            <div className="flex items-center justify-between pt-12 border-t border-white/5">
-              <Button variant="ghost" className="text-zinc-500 hover:text-white flex items-center gap-2">
+          {/* Interaction Buttons */}
+          <div className="max-w-3xl mx-auto px-8 w-full">
+            <div className="flex items-center justify-between gap-4 py-10 border-t border-white/5">
+              <Button
+                variant="ghost"
+                onClick={() => goTo(-1)}
+                disabled={activeIdx <= 0}
+                className="text-zinc-500 hover:text-white flex items-center gap-2 disabled:opacity-40"
+              >
                 <ChevronLeft size={18} /> Previous
               </Button>
-              <Button className="bg-white text-black hover:bg-zinc-200 font-black px-8 py-6 rounded-2xl flex items-center gap-2">
-                Mark as Complete <ChevronRight size={18} />
-              </Button>
+              <div className="flex flex-col items-end gap-1">
+                <Button
+                  onClick={markComplete}
+                  disabled={marking || activeDone || !gateOk}
+                  className={cn(
+                    "font-black px-8 py-6 rounded-2xl flex items-center gap-2",
+                    activeDone ? "bg-emerald-500/20 text-emerald-400" : "bg-white text-black hover:bg-zinc-200",
+                  )}
+                >
+                  {marking ? <><Loader2 size={16} className="animate-spin" /> Saving…</>
+                    : activeDone ? <><CheckCircle2 size={18} /> Completed</>
+                    : <>Mark complete &amp; continue <ChevronRight size={18} /></>}
+                </Button>
+                {!activeDone && !gateOk && (
+                  <span className="text-[11px] text-zinc-500">Finish this {activeLesson?.lesson_type === "quiz" ? "quiz" : "lesson"} to continue</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -257,9 +342,13 @@ export default function CoursePlayerPage() {
                       
                       <div className={cn(
                         "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                        les.id === activeLesson?.id ? "bg-theme-primary/20 text-theme-primary shadow-lg shadow-theme-primary/10" : "bg-zinc-800 text-zinc-500 group-hover:bg-zinc-700"
+                        completedIds.has(les.id) ? "bg-emerald-500/15 text-emerald-400"
+                          : les.id === activeLesson?.id ? "bg-theme-primary/20 text-theme-primary shadow-lg shadow-theme-primary/10"
+                          : "bg-zinc-800 text-zinc-500 group-hover:bg-zinc-700"
                       )}>
-                        <Play size={14} fill={les.id === activeLesson?.id ? "currentColor" : "none"} />
+                        {completedIds.has(les.id)
+                          ? <CheckCircle2 size={14} />
+                          : <Play size={14} fill={les.id === activeLesson?.id ? "currentColor" : "none"} />}
                       </div>
 
                       <div className="flex-1 min-w-0">

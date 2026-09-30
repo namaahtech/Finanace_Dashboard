@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getActor, isAdmin, canEditSchema, loadSettings, resolveSchemaFor } from "@/lib/onboarding/server";
+import { getActor, isAdmin, canEditSchema, loadSettings, resolveSchemaFor, findEmployeeForCandidate } from "@/lib/onboarding/server";
+import { requireModule } from "@/lib/authz";
 import { logAudit } from "@/lib/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -33,7 +34,27 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   const schemaIntern = resolveSchemaFor(settings, "intern");
   const schemaFullTime = resolveSchemaFor(settings, "full_time");
 
+  // Handoff state. "Add Employee" follows the Employees module's create right
+  // (the same gate /api/users enforces), so HR can hand over, not only admin.
+  // `linkedEmployee` comes from the stored link when migration 124 is applied,
+  // and otherwise from an address lookup — which also catches people who were
+  // added before the link existed, so nobody gets created twice.
+  const canAddEmployee = (await requireModule("employees", "can_create")).ok;
+  let linkedEmployee: { id: string; name: string } | null = null;
+  if (packet.status === "completed") {
+    if (packet.employee_id) {
+      const { data: e } = await supabase.from("employees").select("id, name").eq("id", packet.employee_id).maybeSingle();
+      linkedEmployee = e ?? null;
+    }
+    if (!linkedEmployee) {
+      const found = await findEmployeeForCandidate(packet.candidate_email);
+      linkedEmployee = found ? { id: found.id, name: found.name } : null;
+    }
+  }
+
   return NextResponse.json({
+    canAddEmployee,
+    linkedEmployee,
     packet,
     schema,
     schemaIntern,

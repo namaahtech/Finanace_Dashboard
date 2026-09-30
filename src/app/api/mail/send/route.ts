@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { zohoPost, zohoGet } from "@/lib/zoho-mail";
 import { getZohoToken } from "@/lib/zoho-auth";
+import { htmlToText } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseAdmin();
@@ -313,7 +314,7 @@ export async function POST(req: NextRequest) {
       from_name:       fromName || "Namaah",
       to_address:      recipientEmails,
       cc_address:      ccEmails,
-      preview:         content.slice(0, 150),
+      preview:         htmlToText(content).slice(0, 150),
       body:            bodyForDb,
       received_at:     new Date().toISOString(),
       is_read:         true,
@@ -349,7 +350,7 @@ export async function POST(req: NextRequest) {
             from_name:       fromName || "Namaah",
             to_address:      recipientEmails,
             cc_address:      ccEmails,
-            preview:         content.slice(0, 150),
+            preview:         htmlToText(content).slice(0, 150),
             body:            bodyForDb,
             received_at:     new Date().toISOString(),
             is_read:         false,

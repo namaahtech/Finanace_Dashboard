@@ -13,12 +13,34 @@ export function formatCurrency(amount: number, currency = "INR"): string {
   }).format(amount);
 }
 
-export function formatDate(date: Date | string): string {
-  return new Date(date).toLocaleDateString("en-IN", {
+export function formatDate(date: Date | string | null | undefined): string {
+  // Guard null / empty / invalid dates. Without this a missing value becomes
+  // `new Date(null)` → the Unix epoch, which rendered as "01 Jan 1970".
+  if (date === null || date === undefined || date === "") return "—";
+  const d = new Date(date);
+  if (isNaN(d.getTime()) || d.getTime() === 0) return "—";
+  return d.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
+}
+
+/** Strip HTML tags + collapse whitespace → plain text (for previews/snippets). */
+export function htmlToText(html: string | null | undefined): string {
+  if (!html) return "";
+  return String(html)
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function addDays(date: Date, days: number): Date {

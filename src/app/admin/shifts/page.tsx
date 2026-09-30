@@ -474,12 +474,20 @@ export default function ShiftManagementPage() {
                       <TableCell className="pr-4 text-right">
                         <Select
                           value={emp.shift_id || "none"}
-                          onValueChange={(v) => {
+                          onValueChange={async (v) => {
                             const sid = v === "none" ? null : v;
-                            supabase.from("employees").update({ shift_id: sid }).eq("id", emp.id).then(() => {
-                              toast.success("Shift assignment updated");
-                              loadData();
+                            // Saved through the server: RLS only lets `admin` update
+                            // employees from the browser, so an HR user's change used
+                            // to update 0 rows silently while still toasting success.
+                            const res = await fetch("/api/shifts/assign", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ employee_id: emp.id, shift_id: sid }),
                             });
+                            const json = await res.json().catch(() => ({}));
+                            if (!res.ok) { toast.error(json.error || "Couldn't update shift."); return; }
+                            toast.success(sid ? "Shift assignment updated" : "Assignment removed");
+                            loadData();
                           }}
                         >
                           <SelectTrigger className="h-8 text-xs ml-auto w-[170px]"><SelectValue placeholder="Change shift..." /></SelectTrigger>

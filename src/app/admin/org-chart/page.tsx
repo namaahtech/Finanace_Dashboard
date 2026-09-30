@@ -4,7 +4,7 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { supabase } from "@/lib/supabase";
 import {
   Building2, Crown, Users, ShieldCheck,
-  ZoomIn, ZoomOut, Maximize2, ChevronDown, ChevronRight,
+  ZoomIn, ZoomOut, Maximize2, Maximize, Minimize, ChevronDown, ChevronRight,
   Minus, Plus,
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -183,6 +183,7 @@ export default function OrgChartPage() {
   const [loading, setLoading]     = useState(true);
   const [expandedIds, setExpanded] = useState<Set<string>>(new Set(["root_node"]));
   const [zoom, setZoom]           = useState(0.75);
+  const [fullscreen, setFullscreen] = useState(false);
   const scrollRef  = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const drag       = useRef({ x: 0, y: 0, sl: 0, st: 0 });
@@ -305,7 +306,13 @@ export default function OrgChartPage() {
   function centerScroll() {
     if (!scrollRef.current) return;
     const el = scrollRef.current;
-    el.scrollLeft = Math.max(0, (canvasW * zoom - el.clientWidth) / 2);
+    // The chart is scaled with a CSS transform, which does NOT change its layout
+    // box — the scrollable width stays at the natural canvasW at every zoom, and
+    // with transformOrigin "top center" the visible chart sits in its middle.
+    // So centre on the real scroll extent. The old `canvasW * zoom` maths put the
+    // chart off-centre whenever zoom ≠ 1, and read a stale `zoom` when called
+    // from the setTimeout inside fitToScreen/reset.
+    el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
     el.scrollTop = 0;
   }
 
@@ -365,6 +372,19 @@ export default function OrgChartPage() {
     }
   };
 
+  // Exit fullscreen on Escape, and stop the page behind from scrolling.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    // Re-fit into the larger area once the layout has settled.
+    const t = setTimeout(() => fitToScreen(), 120);
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prev; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullscreen]);
+
   return (
     <DashboardShell
       moduleKey="org_chart"
@@ -372,7 +392,12 @@ export default function OrgChartPage() {
       subtitle="Live enterprise hierarchy mapped from your database."
     >
       {/* ── Canvas container with floating overlays ── */}
-      <div className="relative w-full max-w-full overflow-hidden rounded-lg border border-border bg-background">
+      <div className={cn(
+        "relative w-full max-w-full overflow-hidden border border-border bg-background",
+        fullscreen
+          ? "fixed inset-0 z-[70] rounded-none"
+          : "rounded-lg",
+      )}>
       <div
         ref={scrollRef}
         onMouseDown={onMouseDown}
@@ -380,7 +405,10 @@ export default function OrgChartPage() {
         onMouseUp={onMouseUp}
         onMouseMove={onMouseMove}
         onWheel={onWheel}
-        className="relative h-[calc(100dvh-10rem)] w-full max-w-full overflow-auto"
+        className={cn(
+          "relative w-full max-w-full overflow-auto",
+          fullscreen ? "h-[100dvh]" : "h-[calc(100dvh-10rem)]",
+        )}
         style={{
           cursor: "grab",
           backgroundImage: "radial-gradient(circle, var(--border) 1px, transparent 1px)",
@@ -492,6 +520,15 @@ export default function OrgChartPage() {
         </Button>
         <Button variant="outline" size="sm" onClick={reset} className="pointer-events-auto h-8 bg-background/90 shadow-sm backdrop-blur" title="Reset view">
           Reset
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setFullscreen((f) => !f)}
+          className="pointer-events-auto h-8 bg-background/90 shadow-sm backdrop-blur"
+          title={fullscreen ? "Exit full screen (Esc)" : "View full screen"}
+        >
+          {fullscreen ? <><Minimize /> Exit</> : <><Maximize /> Full screen</>}
         </Button>
       </div>
 

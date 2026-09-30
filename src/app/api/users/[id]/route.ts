@@ -136,7 +136,13 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (body.behavioral_weight !== undefined) updates.behavioral_weight = Number(body.behavioral_weight) || 20;
   if (body.kpi_enabled !== undefined) updates.kpi_enabled = Boolean(body.kpi_enabled);
   if (body.enable_salary_linkage !== undefined) updates.enable_salary_linkage = Boolean(body.enable_salary_linkage);
-  if (body.joiningDate !== undefined) updates.joining_date = body.joiningDate;
+  // Only write a real date. The edit form sends back whatever it loaded, so an
+  // empty/null value here used to wipe an employee's joining date during an
+  // unrelated profile edit — which is how rows ended up rendering as the Unix
+  // epoch ("01 Jan 1970"). An empty string would also be rejected by the date column.
+  if (typeof body.joiningDate === "string" && body.joiningDate.trim() && !isNaN(new Date(body.joiningDate).getTime())) {
+    updates.joining_date = body.joiningDate;
+  }
 
   // Snapshot the fields we may change, so the master log can show "from → to".
   const { data: before } = await supabase

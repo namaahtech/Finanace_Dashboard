@@ -170,7 +170,7 @@ export default function StatementPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Joining Date</p>
-                <p className="font-medium tabular-nums">{dayjs(intern.joining_date).format("DD MMM YYYY")}</p>
+                <p className="font-medium tabular-nums">{intern.joining_date ? dayjs(intern.joining_date).format("DD MMM YYYY") : "—"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Starting Date</p>

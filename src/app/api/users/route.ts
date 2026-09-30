@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import nodemailer from "nodemailer";
 import { provisionZohoMailbox, generateTempPassword } from "@/lib/zoho-provisioning";
 import { getActiveToken } from "@/lib/zoho-mail";
-import { getActor } from "@/lib/onboarding/server";
+import { getActor, findEmployeeForCandidate } from "@/lib/onboarding/server";
 import { requireModule } from "@/lib/authz";
 import { logAudit } from "@/lib/audit";
 import { encryptSecret } from "@/lib/crypto/secretbox";
@@ -56,6 +56,20 @@ export async function POST(req: Request) {
     const VALID_ROLES = ["admin", "hr", "accounts", "employee", "intern", "dept_lead", "team_lead"];
     if (!VALID_ROLES.includes(role)) {
       return NextResponse.json({ error: `Invalid role "${role}". Must be one of: ${VALID_ROLES.join(", ")}` }, { status: 400 });
+    }
+
+    // Onboarding handoff: refuse to create the same candidate twice. Scoped to the
+    // onboarding path only, so direct creation (e.g. a genuine re-hire entered by
+    // an admin) is unaffected. Checks both columns — the candidate's address is
+    // stored in personal_email, and `email` becomes the company address later.
+    if (source === "onboarding") {
+      const existing = await findEmployeeForCandidate(email);
+      if (existing) {
+        return NextResponse.json(
+          { error: `${existing.name} is already an employee — this candidate has already been added.` },
+          { status: 409 }
+        );
+      }
     }
 
     // When "Auto-create Zoho Mail" is OFF, NO company address is generated — the

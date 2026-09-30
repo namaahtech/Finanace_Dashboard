@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { TextSizeCard } from "@/components/profile/TextSizeCard";
 import { useAuth } from "@/components/layout/AuthProvider";
 import { useApi } from "@/hooks/useApi";
 import { supabase } from "@/lib/supabase";
@@ -711,6 +712,9 @@ export default function EmployeeProfile() {
                 </Button>
               </Link>
             </div>
+
+            {/* Appearance — per-device UI text size */}
+            <TextSizeCard />
 
             {/* Sales Performance Tracker — only for commission-enabled employees */}
             {employee.commission_enabled && employee.monthly_sales_target && (
